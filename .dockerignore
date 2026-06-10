@@ -1,0 +1,16 @@
+node_modules
+dist
+src
+public
+index.html
+vite.config.js
+.env
+.env.*
+deploy.env.yaml
+*.log
+.git
+.gitignore
+.firebase
+firebase.json
+.firebaserc
+README.md
