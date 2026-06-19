@@ -115,6 +115,36 @@ export function dayDiff(a, b) { return Math.round((parseDate(b) - parseDate(a)) 
 export function addDays(s, n) { const d = parseDate(s); d.setDate(d.getDate()+n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 export function todayISO() { return '2026-05-26' } // fixed "today" for the prototype
 
+// ---------- permissões ----------
+// Papéis por projeto. 'admin' é global (user.isAdmin) e não aparece nesta lista.
+export const PROJECT_ROLES = [
+  { id: 'full', label: 'Edição total' },
+  { id: 'view', label: 'Só exibição' },
+]
+export const ROLE_LABEL = { admin: 'Administrador', full: 'Edição total', view: 'Só exibição' }
+
+// Papel efetivo de um usuário num projeto (espelha a lógica do backend):
+// admin global > exceção da pessoa (members) > papel padrão do projeto.
+export function effectiveProjectRole(project, user) {
+  if (!user) return 'view'
+  if (user.isAdmin) return 'admin'
+  const m = (project?.members || []).find(x => x.userId === user.id)
+  if (m) return m.role === 'full' ? 'full' : 'view'
+  return project?.defaultRole === 'view' ? 'view' : 'full'
+}
+// Pode criar/editar/excluir atividades, editar o projeto, excluir materiais.
+export const canEditProject = (role) => role === 'admin' || role === 'full'
+
+// ---------- arquivos ----------
+export const MAX_FILE_BYTES = 25 * 1024 * 1024 // 25 MB (igual ao limite do backend)
+// Formata bytes em texto legível: 1.2 MB, 340 KB, 18 B…
+export function formatBytes(bytes) {
+  const n = Number(bytes) || 0
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
 // ---------- checklist / progress helpers ----------
 export function checklistStats(task) {
   const list = task.checklist || []

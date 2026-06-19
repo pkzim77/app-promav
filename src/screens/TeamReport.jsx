@@ -149,10 +149,12 @@ export function TeamReport({ users, tasks, projects, sessions, now }) {
                     const color = PROJECT_COLORS[proj?.color] || 'var(--fg-4)'
                     return (
                       <div key={task.id} className="team-bar-row">
-                        <div className="team-bar-label">
+                        <div className="team-bar-label" title={`${task.title}${proj ? ' · ' + proj.name : ''}`}>
                           <span className="dot" style={{ background: color }} />
-                          <span className="ttl">{task.title}</span>
-                          <span className="prj">{proj?.name}</span>
+                          <span className="team-bar-text">
+                            <span className="ttl">{task.title}</span>
+                            {proj && <span className="prj">{proj.name}</span>}
+                          </span>
                         </div>
                         <div className="team-bar-track">
                           <div className="team-bar-fill" style={{ width: Math.max(3, ms / maxUser * 100) + '%', background: color }} />

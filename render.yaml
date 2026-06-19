@@ -1,0 +1,45 @@
+# Render Blueprint — sobe o backend (Express) + o frontend (estático) de graça.
+# O banco continua no Neon. Passo a passo no README (seção "Deploy grátis no Render").
+#
+# Como usar: no Render → "New +" → "Blueprint" → conecte este repositório.
+# O Render vai pedir os valores marcados como "sync: false".
+services:
+  # ---------- Backend: API Express ----------
+  - type: web
+    name: promav-api
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install
+    startCommand: node server/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false              # cole a connection string do Neon (a mesma do seu .env)
+      - key: JWT_SECRET
+        generateValue: true      # o Render gera um segredo aleatório seguro
+      - key: ADMIN_EMAIL
+        value: engenharia.promav@gmail.com
+      # CORS_ORIGIN é opcional. Sem ele, o backend libera todas as origens —
+      # seguro aqui porque a autenticação é por token (não usa cookies).
+      # Para travar, descomente e cole a URL do site:
+      # - key: CORS_ORIGIN
+      #   sync: false
+
+  # ---------- Frontend: build estático do Vite ----------
+  - type: web
+    name: promav-web
+    runtime: static
+    # --include=dev garante que o Vite (devDependency) seja instalado no build.
+    buildCommand: npm install --include=dev && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false              # cole a URL do backend: https://promav-api.onrender.com
+    routes:
+      # SPA: qualquer rota cai no index.html.
+      - type: rewrite
+        source: /*
+        destination: /index.html

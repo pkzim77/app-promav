@@ -62,6 +62,35 @@ export const api = {
   updateProject: (id, data) => req('PUT', `/projects/${id}`, data),
   deleteProject: (id) => req('DELETE', `/projects/${id}`),
 
+  // ----- arquivos (upload/download de documentos e imagens guardados no banco) -----
+  // Envia o arquivo cru; metadados (tipo, nome, rótulo) vão na query string.
+  uploadFile: async (projectId, file, kind, label = '') => {
+    const qs = new URLSearchParams({ kind, filename: file.name, label, mime: file.type || 'application/octet-stream' })
+    // Enviamos sempre como octet-stream para o express.json não tentar parsear
+    // arquivos .json; o mime real vai na query string.
+    const headers = { 'Content-Type': 'application/octet-stream' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const res = await fetch(`${BASE}/projects/${projectId}/files?${qs}`, { method: 'POST', headers, body: file })
+    if (res.status === 401) { setToken(null); onUnauthorized() }
+    if (!res.ok) {
+      let msg = `${res.status}`
+      try { msg = (await res.json()).error || msg } catch { /* corpo não-JSON */ }
+      throw new Error(msg)
+    }
+    return res.json()
+  },
+  // URL para exibir/baixar um arquivo (token na query, pois <img>/<a> não enviam header).
+  fileUrl: (fileId) => `${BASE}/files/${fileId}?token=${encodeURIComponent(token || '')}`,
+
+  // Adiciona um material (link) — permitido também para 'Só exibição'.
+  addResource: (projectId, resource) => req('POST', `/projects/${projectId}/resources`, resource),
+  // Remove um material — exige Edição total.
+  deleteResource: (projectId, resourceId) => req('DELETE', `/projects/${projectId}/resources/${resourceId}`),
+  // Marca/desmarca itens de checklist — permitido para 'Só exibição'.
+  toggleChecklist: (taskId, checklist) => req('PATCH', `/tasks/${taskId}/checklist`, { checklist }),
+  // Entrar/sair de uma atividade (só a própria participação) — permitido para 'Só exibição'.
+  toggleMembership: (taskId, join) => req('POST', `/tasks/${taskId}/membership`, { join }),
+
   createTask: (data) => req('POST', '/tasks', data),
   updateTask: (id, data) => req('PUT', `/tasks/${id}`, data),
   deleteTask: (id) => req('DELETE', `/tasks/${id}`),

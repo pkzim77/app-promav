@@ -81,7 +81,7 @@ export function UserMenu({ user, onChangePassword, onLogout }) {
   )
 }
 
-export function TopBar({ title, currentUser, onChangePassword, onLogout, onNewProject, tasks, projects, sessions, now, onStartTimer, onStopTimer }) {
+export function TopBar({ title, currentUser, canNewProject = true, onChangePassword, onLogout, onNewProject, tasks, projects, sessions, now, onStartTimer, onStopTimer }) {
   return (
     <header className="topbar">
       <h1 className="tb-title">{title}</h1>
@@ -91,9 +91,11 @@ export function TopBar({ title, currentUser, onChangePassword, onLogout, onNewPr
         <input placeholder="Buscar projetos e tarefas" />
       </div>
       <TimeClock currentUser={currentUser} tasks={tasks} projects={projects} sessions={sessions} now={now} onStart={onStartTimer} onStop={onStopTimer} />
-      <button className="btn btn-primary" onClick={onNewProject}>
-        <Icon name="plus" size={17} stroke={2.2} />Novo projeto
-      </button>
+      {canNewProject && (
+        <button className="btn btn-primary" onClick={onNewProject}>
+          <Icon name="plus" size={17} stroke={2.2} />Novo projeto
+        </button>
+      )}
       <UserMenu user={currentUser} onChangePassword={onChangePassword} onLogout={onLogout} />
     </header>
   )

@@ -1,7 +1,7 @@
 import React from 'react'
 import { Sidebar, TopBar } from './components/Chrome.jsx'
 import { Toast } from './components/primitives.jsx'
-import { TaskModal, ProjectModal, ConfirmDialog, ChangePasswordModal } from './components/Modals.jsx'
+import { TaskModal, ProjectModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal } from './components/Modals.jsx'
 import { Hub } from './screens/Hub.jsx'
 import { ProjectList, ProjectDetail } from './screens/Projects.jsx'
 import { Kanban } from './screens/Kanban.jsx'
@@ -10,6 +10,7 @@ import { Reports } from './screens/Reports.jsx'
 import { TeamReport } from './screens/TeamReport.jsx'
 import { Login } from './screens/Login.jsx'
 import { api } from './data/api.js'
+import { effectiveProjectRole, canEditProject } from './data/store.js'
 // Promav app — root: dados vêm do backend (Express + Neon) via src/data/api.js.
 
 const TITLES = { hub: 'Visão geral', projects: 'Projetos', kanban: 'Kanban', gantt: 'Gantt', reports: 'Relatórios', team: 'Equipe' }
@@ -109,7 +110,7 @@ export default function App() {
         setProjects(ps => [...ps, saved]); flash('Projeto criado.')
       }
       setModal(null)
-    } catch (e) { flash('Erro ao salvar projeto.') }
+    } catch (e) { flash(e.message || 'Erro ao salvar projeto.') }
   }
   const askDeleteProject = (project) => setModal({
     type: 'confirm', title: 'Excluir projeto?',
@@ -121,6 +122,41 @@ export default function App() {
         setTasks(ts => ts.filter(t => t.projectId !== project.id))
         setModal(null); setRoute({ view: 'projects' }); flash('Projeto excluído.')
       } catch (e) { flash('Erro ao excluir projeto.') }
+    },
+  })
+
+  // Abre o modal para adicionar um documento/link ao projeto atual.
+  const openAddResource = (resType) => setModal({ type: 'resource', resType })
+  // Persiste o novo recurso no projeto atual. Documentos/imagens são enviados
+  // como arquivo (vão para o banco); links são apenas a URL (como antes).
+  const saveResource = async (payload) => {
+    const project = currentProject
+    if (!project) return
+    try {
+      const saved = payload.upload
+        ? await api.uploadFile(project.id, payload.file, payload.kind, payload.label)
+        : await api.addResource(project.id, payload)
+      setProjects(ps => ps.map(p => p.id === saved.id ? saved : p))
+      setModal(null); flash('Material adicionado.')
+    } catch (e) { flash(e.message || 'Erro ao adicionar material.') }
+  }
+
+  // Copia o link de um recurso (documento/link) para a área de transferência.
+  const copyResourceLink = async (resource) => {
+    const url = resource.fileId ? api.fileUrl(resource.fileId) : resource.url
+    try { await navigator.clipboard.writeText(url); flash('Link copiado.') }
+    catch (e) { flash('Não foi possível copiar o link.') }
+  }
+  // Remove um documento/link do projeto (endpoint dedicado; exige Edição total).
+  const askDeleteResource = (project, resource) => setModal({
+    type: 'confirm', title: 'Excluir item?',
+    message: `"${resource.label || resource.filename || resource.url}" será removido deste projeto.`,
+    onConfirm: async () => {
+      try {
+        const saved = await api.deleteResource(project.id, resource.id)
+        setProjects(ps => ps.map(p => p.id === saved.id ? saved : p))
+        setModal(null); flash('Item removido.')
+      } catch (e) { flash(e.message || 'Erro ao remover item.') }
     },
   })
 
@@ -159,6 +195,26 @@ export default function App() {
       flash(`Atividade movida para ${labels[status]}.`)
     } catch (e) { setTasks(prev); flash('Erro ao mover atividade.') }
   }
+  // Entrar/sair de uma atividade (só a própria participação). Disponível para 'Só exibição'.
+  const toggleMyMembership = async (task, join) => {
+    setTasks(ts => ts.map(t => t.id === task.id
+      ? { ...t, memberIds: join ? [...new Set([...(t.memberIds || []), currentUserId])] : (t.memberIds || []).filter(x => x !== currentUserId) }
+      : t))
+    try {
+      const saved = await api.toggleMembership(task.id, join)
+      setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
+      flash(join ? 'Você entrou na atividade.' : 'Você saiu da atividade.')
+    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); flash(e.message || 'Erro ao atualizar participação.') }
+  }
+  // Marca/desmarca um item de checklist (otimista). Disponível também para 'Só exibição'.
+  const toggleChecklistItem = async (task, itemId) => {
+    const next = (task.checklist || []).map(i => i.id === itemId ? { ...i, done: !i.done } : i)
+    setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
+    try {
+      const saved = await api.toggleChecklist(task.id, next)
+      setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
+    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); flash(e.message || 'Erro ao atualizar checklist.') }
+  }
 
   // Checando token salvo.
   if (booting) {
@@ -190,6 +246,10 @@ export default function App() {
   }
 
   const currentProject = route.projectId ? projects.find(p => p.id === route.projectId) : null
+  const isAdmin = !!authUser?.isAdmin
+  // Papel efetivo do usuário no projeto aberto (admin/full/view).
+  const currentRole = currentProject ? effectiveProjectRole(currentProject, authUser) : 'view'
+  const canEditCurrent = canEditProject(currentRole)
 
   let screen
   if (route.view === 'hub') {
@@ -197,13 +257,18 @@ export default function App() {
   } else if (route.view === 'projects' && currentProject) {
     screen = <ProjectDetail project={currentProject} tasks={tasks} users={users}
       sessions={sessions} currentUserId={currentUserId} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
+      canEdit={canEditCurrent} role={currentRole}
       onBack={() => setRoute({ view: 'projects' })} onEdit={openEditProject}
-      onNewTask={openNewTask} onEditTask={openEditTask} onDeleteTask={askDeleteTask} />
+      onNewTask={openNewTask} onEditTask={openEditTask} onDeleteTask={askDeleteTask}
+      onToggleChecklist={toggleChecklistItem}
+      onCopyResource={copyResourceLink} onDeleteResource={(resource) => askDeleteResource(currentProject, resource)}
+      onAddResource={openAddResource} />
   } else if (route.view === 'projects') {
-    screen = <ProjectList projects={projects} tasks={tasks} onOpen={(id) => setRoute({ view: 'projects', projectId: id })}
+    screen = <ProjectList projects={projects} tasks={tasks} authUser={authUser} canCreate={isAdmin}
+      onOpen={(id) => setRoute({ view: 'projects', projectId: id })}
       onEdit={openEditProject} onDelete={askDeleteProject} onNew={openNewProject} />
   } else if (route.view === 'kanban') {
-    screen = <Kanban tasks={tasks} projects={projects} users={users} filterProject={filterProject} mine={mine}
+    screen = <Kanban tasks={tasks} projects={projects} users={users} authUser={authUser} filterProject={filterProject} mine={mine}
       currentUserId={currentUserId} onFilterProject={setFilterProject} onToggleMine={() => setMine(m => !m)}
       onMoveTask={moveTask} onNewTask={openNewTask} onEditTask={openEditTask}
       sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer} />
@@ -220,18 +285,30 @@ export default function App() {
       <Sidebar route={route} onNavigate={navigate} projects={projects} tasks={tasks} />
       <div className="main">
         <TopBar title={currentProject ? currentProject.name : TITLES[route.view]} currentUser={authUser}
+          canNewProject={isAdmin}
           onChangePassword={() => setModal({ type: 'password' })} onLogout={handleLogout} onNewProject={openNewProject}
           tasks={tasks} projects={projects} sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer} />
         <div className="content">{screen}</div>
       </div>
 
       {modal?.type === 'task' && (
-        <TaskModal task={modal.task} projects={projects} users={users}
+        <TaskModal task={modal.task} projects={projects} users={users} currentUserId={currentUserId}
           defaultProjectId={modal.defaultProjectId} defaultStatus={modal.defaultStatus}
+          canEdit={modal.task ? canEditProject(effectiveProjectRole(projects.find(p => p.id === modal.task.projectId), authUser)) : isAdmin}
+          onToggleChecklist={toggleChecklistItem} onToggleMembership={toggleMyMembership}
           onSave={saveTask} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'project' && (
-        <ProjectModal project={modal.project} onSave={saveProject} onClose={() => setModal(null)} />
+        <ProjectModal project={modal.project} users={users} isAdmin={isAdmin} onSave={saveProject} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'resource' && modal.resType === 'doc' && (
+        <DocumentModal onSave={saveResource} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'resource' && modal.resType === 'link' && (
+        <LinkModal onSave={saveResource} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'resource' && modal.resType === 'image' && (
+        <ImageModal onSave={saveResource} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'confirm' && (
         <ConfirmDialog title={modal.title} message={modal.message} onConfirm={modal.onConfirm} onClose={() => setModal(null)} />

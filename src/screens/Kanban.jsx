@@ -2,7 +2,7 @@ import React from 'react'
 import { Icon } from '../components/Icon.jsx'
 import { AvatarStack, PriorityTag, ChecklistMini } from '../components/primitives.jsx'
 import { TaskTimerButton } from '../components/TimeTracker.jsx'
-import { STATUSES, PROJECT_COLORS, taskMembers, fmtShort } from '../data/store.js'
+import { STATUSES, PROJECT_COLORS, taskMembers, fmtShort, effectiveProjectRole, canEditProject } from '../data/store.js'
 // Kanban — columns by status, cross-project cards, drag & drop, filters.
 
 function KanbanCard({ task, project, users, sessions, currentUserId, now, onStartTimer, onStopTimer, onDragStart, onDragEnd, dragging, onClick }) {
@@ -34,11 +34,15 @@ function KanbanCard({ task, project, users, sessions, currentUserId, now, onStar
   )
 }
 
-export function Kanban({ tasks, projects, users, filterProject, mine, currentUserId, onFilterProject, onToggleMine, onMoveTask, onNewTask, onEditTask, sessions, now, onStartTimer, onStopTimer }) {
+export function Kanban({ tasks, projects, users, authUser, filterProject, mine, currentUserId, onFilterProject, onToggleMine, onMoveTask, onNewTask, onEditTask, sessions, now, onStartTimer, onStopTimer }) {
   const [draggingId, setDraggingId] = React.useState(null)
   const [overCol, setOverCol] = React.useState(null)
 
   const projOf = (id) => projects.find(p => p.id === id)
+  // Pode criar atividade no contexto atual? (no projeto filtrado, ou em algum se "Todos").
+  const canCreate = filterProject
+    ? canEditProject(effectiveProjectRole(projOf(filterProject), authUser))
+    : projects.some(p => canEditProject(effectiveProjectRole(p, authUser)))
 
   let visible = tasks
   if (filterProject) visible = visible.filter(t => t.projectId === filterProject)
@@ -57,7 +61,7 @@ export function Kanban({ tasks, projects, users, filterProject, mine, currentUse
       <div style={{ padding: '20px 28px 0' }}>
         <div className="sec-head" style={{ marginBottom: 14 }}>
           <div><h2>Kanban</h2><div className="sub">Arraste os cards entre as colunas para mudar o status.</div></div>
-          <button className="btn btn-primary" onClick={() => onNewTask(filterProject || null)}><Icon name="plus" size={17} stroke={2.2} />Nova atividade</button>
+          {canCreate && <button className="btn btn-primary" onClick={() => onNewTask(filterProject || null)}><Icon name="plus" size={17} stroke={2.2} />Nova atividade</button>}
         </div>
         <div className="filterbar">
           <button className={'chip' + (!filterProject ? ' active' : '')} onClick={() => onFilterProject(null)}>Todos os projetos</button>
@@ -96,9 +100,11 @@ export function Kanban({ tasks, projects, users, filterProject, mine, currentUse
               {colTasks.length === 0 && (
                 <div style={{ fontSize: 12.5, color: 'var(--fg-4)', textAlign: 'center', padding: '18px 0' }}>Nenhuma atividade</div>
               )}
-              <button className="col-add" onClick={() => onNewTask(filterProject || null, col.id)}>
-                <Icon name="plus" size={15} stroke={2.2} />Adicionar
-              </button>
+              {canCreate && (
+                <button className="col-add" onClick={() => onNewTask(filterProject || null, col.id)}>
+                  <Icon name="plus" size={15} stroke={2.2} />Adicionar
+                </button>
+              )}
             </div>
           )
         })}

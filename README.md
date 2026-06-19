@@ -23,7 +23,38 @@ npm run preview  # serve a build de produção localmente
 
 O Vite faz proxy de `/api` → `http://localhost:3001`, então o front e o back rodam no mesmo `npm run dev`.
 
-## Deploy (Firebase Hosting + Cloud Run)
+## Deploy grátis no Render (recomendado, sem cartão)
+
+Forma mais simples e **sem custo** de colocar no ar: **backend** (Express) como _Web Service_ e **frontend** (build do Vite) como _Static Site_, os dois no [Render](https://render.com). O banco continua no **Neon** (o mesmo `DATABASE_URL` que você já usa). O arquivo [`render.yaml`](render.yaml) na raiz já descreve os dois serviços.
+
+> **Antes de tudo:** faça `git push` do projeto para o GitHub — o Render faz deploy a partir do repositório.
+
+### Passo a passo
+
+1. **Suba para o GitHub** (se ainda não subiu): `git push origin main`.
+2. Em [dashboard.render.com](https://dashboard.render.com) → **New +** → **Blueprint** → conecte o repositório `app-promav`. O Render lê o `render.yaml` e cria os dois serviços.
+3. Quando pedir os valores secretos, preencha:
+   - **`DATABASE_URL`** (no serviço `promav-api`): a connection string do Neon (a mesma do seu `.env`).
+   - **`VITE_API_URL`** (no serviço `promav-web`): `https://promav-api.onrender.com` (a URL que o backend terá; confira no passo 4 e ajuste se o Render tiver mudado o nome).
+4. Aguarde o deploy do **`promav-api`**. Abra-o e confirme a URL pública (algo como `https://promav-api.onrender.com`). Teste `…/api/health` → deve responder `{ "ok": true }`.
+5. Se a URL real do backend for diferente da que você colocou em `VITE_API_URL`, ajuste no `promav-web` (**Environment**) e clique em **Manual Deploy → Clear build cache & deploy**.
+6. Abra a URL do **`promav-web`** e faça login. Pronto. 🎉
+
+> **Login:** use um usuário que já existe no seu banco Neon. O usuário com e-mail `ADMIN_EMAIL` (padrão `engenharia.promav@gmail.com`) vira administrador automaticamente; se ele não existir, o primeiro usuário do banco é promovido.
+
+> **CORS:** por padrão o backend libera todas as origens (seguro aqui, pois a autenticação é por token, não por cookie). Para restringir, adicione a env `CORS_ORIGIN` no `promav-api` com a URL do site (`https://promav-web.onrender.com`).
+
+### Pontos de atenção (plano grátis)
+
+- O **backend grátis dorme** após ~15 min sem uso; a primeira visita depois disso leva ~50s para acordar. O frontend (estático) fica sempre no ar.
+- O **`VITE_API_URL` é embutido no build** do frontend. Se trocar a URL do backend, refaça o deploy do `promav-web` (**Clear build cache & deploy**).
+- O banco Neon grátis também hiberna; a primeira consulta o acorda em ~1s.
+
+---
+
+## Deploy alternativo (Firebase Hosting + Cloud Run)
+
+> Requer uma conta Google Cloud com **faturamento ativado** (cartão na conta, embora o uso baixo caiba no nível gratuito). Se quer evitar cartão, use o Render acima.
 
 Dois serviços separados: **frontend** estático no Firebase Hosting, **backend** em container no Cloud Run. O banco continua no Neon.
 
@@ -125,12 +156,16 @@ Base: `/api` (proxy do Vite para a porta 3001).
 | GET | `/sessions` | sessões do cronômetro |
 | POST | `/sessions/start` | inicia (fecha a ativa e abre nova) |
 | POST | `/sessions/stop` | para a sessão ativa do usuário |
+| POST | `/projects/:id/files` | upload de documento/imagem (corpo = arquivo cru; `?kind`, `?filename`, `?label`, `?mime`) → guarda no banco e devolve o projeto |
+| GET | `/files/:id` | baixa/serve um arquivo (aceita `?token=` para `<img>`/`<a>`) |
 
 ### Banco (Neon / Postgres)
 
-Tabelas: `users`, `projects`, `tasks`, `task_members` (N:N), `checklist_items`, `time_sessions`.
+Tabelas: `users`, `projects`, `tasks`, `task_members` (N:N), `checklist_items`, `time_sessions`, `files`.
 Enums: `task_status` (todo/progress/done), `task_priority` (low/medium/high), `project_color`.
-Excluir um projeto remove em cascata suas tarefas → checklist, membros e sessões. Há índice único parcial garantindo **um cronômetro ativo por usuário**.
+Excluir um projeto remove em cascata suas tarefas → checklist, membros, sessões e arquivos. Há índice único parcial garantindo **um cronômetro ativo por usuário**.
+
+**Arquivos (`files`):** documentos e imagens enviados pela tela do projeto são guardados como `bytea` no Postgres (até **25 MB**, qualquer tipo). A tabela é criada automaticamente na subida do backend (`ensureSchema`, idempotente). Cada upload também adiciona um item em `projects.resources` no formato `{ id, type, fileId, filename, mime, size, label }`; **links** continuam como `{ id, type, url, label }` (URL externa). Ao remover um documento/imagem, o arquivo órfão é apagado do banco.
 
 ### Login (usuários de exemplo)
 
