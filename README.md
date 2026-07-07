@@ -52,44 +52,6 @@ Forma mais simples e **sem custo** de colocar no ar: **backend** (Express) como 
 
 ---
 
-## Deploy alternativo (Firebase Hosting + Cloud Run)
-
-> Requer uma conta Google Cloud com **faturamento ativado** (cartão na conta, embora o uso baixo caiba no nível gratuito). Se quer evitar cartão, use o Render acima.
-
-Dois serviços separados: **frontend** estático no Firebase Hosting, **backend** em container no Cloud Run. O banco continua no Neon.
-
-### 1. Backend → Cloud Run
-
-```bash
-cp deploy.env.yaml.example deploy.env.yaml   # preencha DATABASE_URL, JWT_SECRET, CORS_ORIGIN
-
-gcloud run deploy promav-api \
-  --source . \
-  --region southamerica-east1 \
-  --allow-unauthenticated \
-  --env-vars-file deploy.env.yaml
-```
-
-O `Dockerfile` na raiz é usado automaticamente. Ao terminar, o comando imprime a **URL do serviço** (algo como `https://promav-api-xxxx.run.app`) — copie.
-
-> `CORS_ORIGIN` deve listar os domínios do Firebase (`https://SEU_PROJECT.web.app,https://SEU_PROJECT.firebaseapp.com`). O `PORT` é injetado pelo Cloud Run; não precisa definir.
-
-### 2. Frontend → Firebase Hosting
-
-```bash
-# 1. aponte para a URL do backend que o Cloud Run gerou:
-#    edite .env.production  ->  VITE_API_URL=https://promav-api-xxxx.run.app
-# 2. configure o projeto (uma vez):
-#    edite .firebaserc  ->  "default": "SEU_PROJECT_ID"   (ou rode: firebase use --add)
-
-npm run build          # gera dist/ com a URL do backend embutida
-firebase deploy --only hosting
-```
-
-Como o cliente HTTP usa `VITE_API_URL`, o build de produção fala direto com o Cloud Run; em desenvolvimento esse valor fica vazio e o proxy do Vite assume.
-
-> **Importante:** o `VITE_API_URL` é embutido **no momento do `npm run build`** — se trocar a URL do backend, refaça o build e o deploy.
-
 ## Estrutura
 
 ```
@@ -98,11 +60,8 @@ Como o cliente HTTP usa `VITE_API_URL`, o build de produção fala direto com o 
 ├── vite.config.js            # inclui proxy /api → backend (dev)
 ├── package.json
 ├── .env.example              # modelo da DATABASE_URL (Neon) + JWT_SECRET
-├── .env.production           # VITE_API_URL p/ o build do frontend (Cloud Run)
-├── Dockerfile                # imagem do backend (Cloud Run)
-├── .dockerignore / .gcloudignore
-├── firebase.json / .firebaserc  # config do Firebase Hosting
-├── deploy.env.yaml.example   # modelo das envs do backend no Cloud Run
+├── .env.production           # VITE_API_URL p/ o build do frontend (Render)
+├── render.yaml               # Blueprint do deploy no Render (backend + frontend)
 ├── server/                   # BACKEND (Express + Neon)
 │   ├── index.js              # rotas REST /api/* + auth + CORS
 │   ├── auth.js               # bcrypt + JWT + middleware requireAuth
