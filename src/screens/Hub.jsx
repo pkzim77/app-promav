@@ -67,8 +67,8 @@ export function Hub({ projects, tasks, onNavigate, sessions, currentUserId, now 
             <button key={p.id} className="card" style={{ padding: 18, textAlign: 'left' }} onClick={() => onNavigate({ view: 'projects', projectId: p.id })}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 12 }}>
                 <span style={{ width: 30, height: 30, borderRadius: 'var(--r-sm)', background: PROJECT_COLORS[p.color], flexShrink: 0 }} />
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--fg-1)' }}>{p.name}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div title={p.name} style={{ fontWeight: 600, fontSize: 15, color: 'var(--fg-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
                   <div style={{ fontSize: 12.5, color: 'var(--fg-3)' }}>{count} atividades</div>
                 </div>
                 <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 14, color: 'var(--fg-2)' }}>{pct}%</span>

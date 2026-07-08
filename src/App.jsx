@@ -5,6 +5,7 @@ import { TaskModal, ProjectModal, ConfirmDialog, ChangePasswordModal, DocumentMo
 import { Hub } from './screens/Hub.jsx'
 import { ProjectList, ProjectDetail } from './screens/Projects.jsx'
 import { Kanban } from './screens/Kanban.jsx'
+import { TaskListView } from './screens/List.jsx'
 import { Gantt } from './screens/Gantt.jsx'
 import { Reports } from './screens/Reports.jsx'
 import { TeamReport } from './screens/TeamReport.jsx'
@@ -13,13 +14,14 @@ import { api } from './data/api.js'
 import { effectiveProjectRole, canEditProject } from './data/store.js'
 // Promav app — root: dados vêm do backend (Express + Neon) via src/data/api.js.
 
-const TITLES = { hub: 'Visão geral', projects: 'Projetos', kanban: 'Kanban', gantt: 'Gantt', reports: 'Relatórios', team: 'Equipe' }
+const TITLES = { hub: 'Visão geral', projects: 'Projetos', list: 'Lista', kanban: 'Kanban', gantt: 'Gantt', reports: 'Relatórios', team: 'Equipe' }
 
 export default function App() {
   const [authUser, setAuthUser] = React.useState(null)   // usuário logado (ou null)
   const [booting, setBooting] = React.useState(true)     // checagem inicial do token
   const [users, setUsers] = React.useState([])
   const [projects, setProjects] = React.useState([])
+  const [folders, setFolders] = React.useState([])
   const [tasks, setTasks] = React.useState([])
   const [route, setRoute] = React.useState({ view: 'hub' })
   const [filterProject, setFilterProject] = React.useState(null)
@@ -42,7 +44,7 @@ export default function App() {
     setLoadError(null)
     try {
       const data = await api.bootstrap()
-      setUsers(data.users); setProjects(data.projects); setTasks(data.tasks); setSessions(data.sessions)
+      setUsers(data.users); setProjects(data.projects); setTasks(data.tasks); setSessions(data.sessions); setFolders(data.folders || [])
       setDataReady(true)
     } catch (err) { setLoadError(err.message) }
   }, [])
@@ -51,7 +53,7 @@ export default function App() {
   const handleLogout = React.useCallback(() => {
     api.logout()
     setAuthUser(null); setDataReady(false)
-    setUsers([]); setProjects([]); setTasks([]); setSessions([])
+    setUsers([]); setProjects([]); setTasks([]); setSessions([]); setFolders([])
     setRoute({ view: 'hub' }); setModal(null)
   }, [])
 
@@ -93,13 +95,23 @@ export default function App() {
 
   const navigate = (r) => {
     setRoute({ view: r.view, projectId: r.projectId })
+    // Ao abrir a Lista a partir de um projeto, já filtra por ele.
+    if (r.view === 'list') setFilterProject(r.projectId || null)
     if (r.view === 'kanban') setMine(!!r.mine)
     if (r.mine) setMine(true)
   }
 
   // ----- projects -----
-  const openNewProject = () => setModal({ type: 'project' })
+  const openNewProject = (folderId) => setModal({ type: 'project', defaultFolderId: typeof folderId === 'string' ? folderId : null })
   const openEditProject = (project) => setModal({ type: 'project', project })
+  const renameProject = async (project) => {
+    const name = window.prompt('Novo nome do projeto:', project.name)
+    if (name == null || !name.trim() || name.trim() === project.name) return
+    try {
+      const saved = await api.updateProject(project.id, { ...project, name: name.trim() })
+      setProjects(ps => ps.map(p => p.id === saved.id ? saved : p)); flash('Projeto renomeado.')
+    } catch (e) { flash(e.message || 'Erro ao renomear projeto.') }
+  }
   const saveProject = async (data) => {
     try {
       if (data.id) {
@@ -159,6 +171,80 @@ export default function App() {
       } catch (e) { flash(e.message || 'Erro ao remover item.') }
     },
   })
+
+  // ----- folders (pastas que agrupam projetos na sidebar) -----
+  const createFolder = async (parentId) => {
+    const parent = typeof parentId === 'string' ? parentId : null
+    const name = window.prompt(parent ? 'Nome da nova subpasta:' : 'Nome da nova pasta:')
+    if (name == null || !name.trim()) return
+    try {
+      const saved = await api.createFolder(name.trim(), parent)
+      setFolders(fs => [...fs, saved]); flash(parent ? 'Subpasta criada.' : 'Pasta criada.')
+    } catch (e) { flash(e.message || 'Erro ao criar pasta.') }
+  }
+  const renameFolder = async (folder) => {
+    const name = window.prompt('Novo nome da pasta:', folder.name)
+    if (name == null || !name.trim() || name.trim() === folder.name) return
+    try {
+      const saved = await api.renameFolder(folder.id, name.trim())
+      setFolders(fs => fs.map(f => f.id === saved.id ? saved : f)); flash('Pasta renomeada.')
+    } catch (e) { flash(e.message || 'Erro ao renomear pasta.') }
+  }
+  const askDeleteFolder = (folder) => setModal({
+    type: 'confirm', title: 'Excluir pasta?',
+    message: `A pasta "${folder.name}" e suas subpastas serão removidas. Os projetos dentro delas NÃO serão apagados — apenas ficarão sem pasta.`,
+    onConfirm: async () => {
+      try {
+        await api.deleteFolder(folder.id)
+        // Reúne a pasta + todas as descendentes (espelha o ON DELETE CASCADE do banco).
+        setFolders(fs => {
+          const removed = new Set([folder.id])
+          let grew = true
+          while (grew) {
+            grew = false
+            for (const f of fs) {
+              if (f.parentId && removed.has(f.parentId) && !removed.has(f.id)) { removed.add(f.id); grew = true }
+            }
+          }
+          // os projetos das pastas apagadas ficam "soltos" (espelha o ON DELETE SET NULL)
+          setProjects(ps => ps.map(p => removed.has(p.folderId) ? { ...p, folderId: null } : p))
+          return fs.filter(f => !removed.has(f.id))
+        })
+        setModal(null); flash('Pasta excluída.')
+      } catch (e) { flash(e.message || 'Erro ao excluir pasta.') }
+    },
+  })
+
+  // Mover/reordenar por drag-and-drop. `beforeId` = id do irmão antes do qual
+  // inserir (null = solta no fim do grupo). Atualiza a tela na hora e persiste.
+  const moveFolder = async (draggedId, newParentId, beforeId) => {
+    const parent = newParentId || null
+    if (draggedId === beforeId) return
+    const order = folders.filter(f => (f.parentId || null) === parent && f.id !== draggedId)
+      .sort((a, b) => a.position - b.position).map(f => f.id)
+    const at = beforeId ? order.indexOf(beforeId) : -1
+    order.splice(at < 0 ? order.length : at, 0, draggedId)
+    setFolders(prev => prev.map(f => {
+      const pos = order.indexOf(f.id)
+      return pos < 0 ? f : { ...f, parentId: parent, position: pos }
+    }))
+    try { await api.reorderFolders(parent, order) }
+    catch (e) { flash(e.message || 'Erro ao mover pasta.'); loadData() }
+  }
+  const moveProject = async (draggedId, newFolderId, beforeId) => {
+    const folder = newFolderId || null
+    if (draggedId === beforeId) return
+    const order = projects.filter(p => (p.folderId || null) === folder && p.id !== draggedId)
+      .sort((a, b) => (a.position || 0) - (b.position || 0)).map(p => p.id)
+    const at = beforeId ? order.indexOf(beforeId) : -1
+    order.splice(at < 0 ? order.length : at, 0, draggedId)
+    setProjects(prev => prev.map(p => {
+      const pos = order.indexOf(p.id)
+      return pos < 0 ? p : { ...p, folderId: folder, position: pos }
+    }))
+    try { await api.reorderProjects(folder, order) }
+    catch (e) { flash(e.message || 'Erro ao mover projeto.'); loadData() }
+  }
 
   // ----- tasks -----
   const openNewTask = (projectId, status) => setModal({ type: 'task', defaultProjectId: projectId, defaultStatus: status })
@@ -267,6 +353,10 @@ export default function App() {
     screen = <ProjectList projects={projects} tasks={tasks} authUser={authUser} canCreate={isAdmin}
       onOpen={(id) => setRoute({ view: 'projects', projectId: id })}
       onEdit={openEditProject} onDelete={askDeleteProject} onNew={openNewProject} />
+  } else if (route.view === 'list') {
+    screen = <TaskListView tasks={tasks} projects={projects} users={users} authUser={authUser} filterProject={filterProject} mine={mine}
+      currentUserId={currentUserId} onFilterProject={setFilterProject} onToggleMine={() => setMine(m => !m)}
+      onMoveTask={moveTask} onNewTask={openNewTask} onEditTask={openEditTask} />
   } else if (route.view === 'kanban') {
     screen = <Kanban tasks={tasks} projects={projects} users={users} authUser={authUser} filterProject={filterProject} mine={mine}
       currentUserId={currentUserId} onFilterProject={setFilterProject} onToggleMine={() => setMine(m => !m)}
@@ -282,7 +372,12 @@ export default function App() {
 
   return (
     <div className="app">
-      <Sidebar route={route} onNavigate={navigate} projects={projects} tasks={tasks} />
+      <Sidebar route={route} onNavigate={navigate} projects={projects} tasks={tasks}
+        folders={folders} isAdmin={isAdmin}
+        onNewFolder={createFolder} onRenameFolder={renameFolder} onDeleteFolder={askDeleteFolder}
+        onNewProjectInFolder={openNewProject}
+        onMoveFolder={moveFolder} onMoveProject={moveProject}
+        onRenameProject={renameProject} onEditProject={openEditProject} onDeleteProject={askDeleteProject} />
       <div className="main">
         <TopBar title={currentProject ? currentProject.name : TITLES[route.view]} currentUser={authUser}
           canNewProject={isAdmin}
@@ -299,7 +394,7 @@ export default function App() {
           onSave={saveTask} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'project' && (
-        <ProjectModal project={modal.project} users={users} isAdmin={isAdmin} onSave={saveProject} onClose={() => setModal(null)} />
+        <ProjectModal project={modal.project} users={users} folders={folders} defaultFolderId={modal.defaultFolderId} isAdmin={isAdmin} onSave={saveProject} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'resource' && modal.resType === 'doc' && (
         <DocumentModal onSave={saveResource} onClose={() => setModal(null)} />

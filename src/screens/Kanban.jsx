@@ -57,13 +57,12 @@ export function Kanban({ tasks, projects, users, authUser, filterProject, mine, 
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ padding: '20px 28px 0' }}>
-        <div className="sec-head" style={{ marginBottom: 14 }}>
-          <div><h2>Kanban</h2><div className="sub">Arraste os cards entre as colunas para mudar o status.</div></div>
-          {canCreate && <button className="btn btn-primary" onClick={() => onNewTask(filterProject || null)}><Icon name="plus" size={17} stroke={2.2} />Nova atividade</button>}
-        </div>
-        <div className="filterbar">
+    <div className="page">
+      <div className="sec-head">
+        <div><h2>Kanban</h2><div className="sub">Arraste os cards entre as colunas para mudar o status.</div></div>
+        {canCreate && <button className="btn btn-primary" onClick={() => onNewTask(filterProject || null)}><Icon name="plus" size={17} stroke={2.2} />Nova atividade</button>}
+      </div>
+      <div className="filterbar">
           <button className={'chip' + (!filterProject ? ' active' : '')} onClick={() => onFilterProject(null)}>Todos os projetos</button>
           {projects.map(p => (
             <button key={p.id} className={'chip' + (filterProject === p.id ? ' active' : '')} onClick={() => onFilterProject(p.id)}>
@@ -75,7 +74,6 @@ export function Kanban({ tasks, projects, users, authUser, filterProject, mine, 
             <Icon name="inbox" size={15} />Minhas tarefas
           </button>
         </div>
-      </div>
 
       <div className="board">
         {STATUSES.map(col => {

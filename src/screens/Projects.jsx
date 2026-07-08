@@ -14,12 +14,12 @@ function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete })
   const canEdit = canEditProject(role)
   const canDelete = role === 'admin'
   return (
-    <div className="card" style={{ padding: 18, display: 'flex', flexDirection: 'column' }}>
+    <div className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', minHeight: 200 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
         <span style={{ width: 34, height: 34, borderRadius: 'var(--r-md)', background: color, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <button onClick={() => onOpen(project.id)} style={{ font: 'var(--text-h4)', color: 'var(--fg-1)', textAlign: 'left', padding: 0 }}>{project.name}</button>
-          <p style={{ fontSize: 13, color: 'var(--fg-3)', margin: '3px 0 0', lineHeight: 1.45 }}>{project.desc}</p>
+          <button onClick={() => onOpen(project.id)} title={project.name} style={{ font: 'var(--text-h4)', color: 'var(--fg-1)', textAlign: 'left', padding: 0, width: '100%', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden', overflowWrap: 'anywhere' }}>{project.name}</button>
+          <p style={{ fontSize: 13, color: 'var(--fg-3)', margin: '3px 0 0', lineHeight: 1.45, display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 3, overflow: 'hidden', overflowWrap: 'anywhere' }}>{project.desc}</p>
         </div>
         {(canEdit || canDelete) && (
           <div style={{ display: 'flex', gap: 2 }}>
@@ -57,7 +57,7 @@ export function ProjectList({ projects, tasks, authUser, canCreate = true, onOpe
           text="Crie seu primeiro projeto para começar a organizar atividades, prazos e responsáveis."
           action={canCreate ? <button className="btn btn-primary" onClick={onNew}><Icon name="plus" size={17} stroke={2.2} />Criar projeto</button> : null} />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(264px, 1fr))', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 18 }}>
           {projects.map(p => <ProjectGridCard key={p.id} project={p} tasks={tasks} authUser={authUser} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete} />)}
         </div>
       )}
@@ -310,8 +310,8 @@ export function ProjectDetail({ project, tasks, users, sessions, currentUserId, 
       </button>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 22 }}>
         <span style={{ width: 46, height: 46, borderRadius: 'var(--r-lg)', background: color, flexShrink: 0 }} />
-        <div style={{ flex: 1 }}>
-          <h1 style={{ font: 'var(--text-h1)', margin: 0, letterSpacing: 'var(--tracking-tight)' }}>{project.name}</h1>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h1 style={{ font: 'var(--text-h1)', margin: 0, letterSpacing: 'var(--tracking-tight)', overflowWrap: 'anywhere' }}>{project.name}</h1>
           <p style={{ fontSize: 14, color: 'var(--fg-3)', margin: '5px 0 0' }}>{project.desc}</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--fg-3)', marginTop: 10 }}>
             <Icon name="calendar" size={15} />{fmtMed(project.start)} — {fmtMed(project.end)}

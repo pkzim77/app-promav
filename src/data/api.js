@@ -62,6 +62,13 @@ export const api = {
   updateProject: (id, data) => req('PUT', `/projects/${id}`, data),
   deleteProject: (id) => req('DELETE', `/projects/${id}`),
 
+  // ----- pastas (agrupam projetos na sidebar) -----
+  createFolder: (name, parentId = null) => req('POST', '/folders', { name, parentId }),
+  renameFolder: (id, name) => req('PUT', `/folders/${id}`, { name }),
+  deleteFolder: (id) => req('DELETE', `/folders/${id}`),
+  reorderFolders: (parentId, orderedIds) => req('PUT', '/folders/reorder', { parentId, orderedIds }),
+  reorderProjects: (folderId, orderedIds) => req('PUT', '/projects/reorder', { folderId, orderedIds }),
+
   // ----- arquivos (upload/download de documentos e imagens guardados no banco) -----
   // Envia o arquivo cru; metadados (tipo, nome, rótulo) vão na query string.
   uploadFile: async (projectId, file, kind, label = '') => {

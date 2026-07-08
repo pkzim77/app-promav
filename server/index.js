@@ -55,6 +55,8 @@ const PROJECT_SELECT = `
   SELECT id, name,
          description AS desc,
          color,
+         folder_id AS "folderId",
+         position,
          notes,
          resources,
          default_role AS "defaultRole",
@@ -65,6 +67,9 @@ const PROJECT_SELECT = `
          to_char(start_date, 'YYYY-MM-DD') AS start,
          to_char(end_date,   'YYYY-MM-DD') AS "end"
   FROM projects`
+
+// Lista de pastas, na ordem em que devem aparecer na sidebar.
+const FOLDER_SELECT = 'SELECT id, name, position, parent_id AS "parentId" FROM folders'
 
 // Normaliza os recursos do projeto antes de gravar. Há dois formatos:
 //  • externo  → { id, type, url, label }            (link colado: docs.google, etc.)
@@ -260,13 +265,14 @@ app.post('/api/auth/change-password', wrap(async (req, res) => {
 
 // Carga inicial do app — tudo num request só.
 app.get('/api/bootstrap', wrap(async (_req, res) => {
-  const [users, projects, tasks, sessions] = await Promise.all([
+  const [users, projects, tasks, sessions, folders] = await Promise.all([
     q(`SELECT ${LIST_USER} FROM users ORDER BY id`),
-    q(`${PROJECT_SELECT} ORDER BY id`),
+    q(`${PROJECT_SELECT} ORDER BY position, id`),
     q(`${TASK_SELECT} ORDER BY t.id`),
     listSessions(),
+    q(`${FOLDER_SELECT} ORDER BY position, name`),
   ])
-  res.json({ users, projects, tasks, sessions })
+  res.json({ users, projects, tasks, sessions, folders })
 }))
 
 app.get('/api/users', wrap(async (_req, res) => {
@@ -275,17 +281,17 @@ app.get('/api/users', wrap(async (_req, res) => {
 
 // ----- projetos -----
 app.get('/api/projects', wrap(async (_req, res) => {
-  res.json(await q(`${PROJECT_SELECT} ORDER BY id`))
+  res.json(await q(`${PROJECT_SELECT} ORDER BY position, id`))
 }))
 
 // Criar projeto: só administradores. Já grava papel padrão e exceções por pessoa.
 app.post('/api/projects', requireAdmin, wrap(async (req, res) => {
-  const { name, desc = '', color = 'indigo', start, end, notes = '', resources = [], defaultRole = 'full', members = [] } = req.body
+  const { name, desc = '', color = 'indigo', folderId = null, start, end, notes = '', resources = [], defaultRole = 'full', members = [] } = req.body
   const id = genId('p')
   await tx(async (client) => {
     await client.query(
-      'INSERT INTO projects (id, name, description, color, start_date, end_date, notes, resources, default_role) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-      [id, name, desc, color, start, end, notes, JSON.stringify(normalizeResources(resources)), normDefaultRole(defaultRole)]
+      'INSERT INTO projects (id, name, description, color, folder_id, start_date, end_date, notes, resources, default_role) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+      [id, name, desc, color, folderId || null, start, end, notes, JSON.stringify(normalizeResources(resources)), normDefaultRole(defaultRole)]
     )
     await replaceMembers(client, id, members)
   })
@@ -293,16 +299,33 @@ app.post('/api/projects', requireAdmin, wrap(async (req, res) => {
   res.status(201).json(row)
 }))
 
+// Mover/reordenar projetos: só administradores. Recebe a pasta de destino
+// (folderId, null = solto) e a lista ordenada dos ids daquele grupo.
+app.put('/api/projects/reorder', requireAdmin, wrap(async (req, res) => {
+  const folderId = req.body.folderId || null
+  const orderedIds = Array.isArray(req.body.orderedIds) ? req.body.orderedIds : []
+  if (folderId) {
+    const [folder] = await q('SELECT id FROM folders WHERE id = $1', [folderId])
+    if (!folder) return res.status(400).json({ error: 'Pasta de destino não encontrada.' })
+  }
+  await tx(async (client) => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await client.query('UPDATE projects SET folder_id = $2, position = $3 WHERE id = $1', [orderedIds[i], folderId, i])
+    }
+  })
+  res.status(204).end()
+}))
+
 // Editar projeto: precisa de Edição total. Papel padrão e exceções (permissões)
 // só são alterados por administradores.
 app.put('/api/projects/:id', gate((req) => req.params.id, CAN.edit), wrap(async (req, res) => {
-  const { name, desc = '', color, start, end, notes = '', resources = [], defaultRole, members } = req.body
+  const { name, desc = '', color, folderId = null, start, end, notes = '', resources = [], defaultRole, members } = req.body
   const clean = normalizeResources(resources)
   const isAdmin = req.projectRole === 'admin'
   const ok = await tx(async (client) => {
     const r = await client.query(
-      'UPDATE projects SET name = $2, description = $3, color = $4, start_date = $5, end_date = $6, notes = $7, resources = $8 WHERE id = $1 RETURNING id',
-      [req.params.id, name, desc, color, start, end, notes, JSON.stringify(clean)]
+      'UPDATE projects SET name = $2, description = $3, color = $4, folder_id = $5, start_date = $6, end_date = $7, notes = $8, resources = $9 WHERE id = $1 RETURNING id',
+      [req.params.id, name, desc, color, folderId || null, start, end, notes, JSON.stringify(clean)]
     )
     if (!r.rows.length) return false
     await pruneOrphanFiles(client, req.params.id, clean) // remove arquivos não referenciados
@@ -357,6 +380,70 @@ app.delete('/api/projects/:id/resources/:rid', gate((req) => req.params.id, CAN.
   if (!ok) return res.status(404).json({ error: 'Projeto não encontrado.' })
   const [row] = await q(`${PROJECT_SELECT} WHERE id = $1`, [req.params.id])
   res.json(row)
+}))
+
+// ----- pastas (agrupam projetos na sidebar) -----
+app.get('/api/folders', wrap(async (_req, res) => {
+  res.json(await q(`${FOLDER_SELECT} ORDER BY position, name`))
+}))
+
+// Criar pasta: só administradores. Entra no fim da lista (maior position + 1).
+app.post('/api/folders', requireAdmin, wrap(async (req, res) => {
+  const name = (req.body.name || '').trim()
+  if (!name) return res.status(400).json({ error: 'Informe um nome para a pasta.' })
+  // parentId = pasta-mãe (subpasta). NULL = pasta na raiz.
+  const parentId = req.body.parentId || null
+  if (parentId) {
+    const [parent] = await q('SELECT id FROM folders WHERE id = $1', [parentId])
+    if (!parent) return res.status(400).json({ error: 'Pasta-mãe não encontrada.' })
+  }
+  const id = genId('fd')
+  const [{ next }] = await q('SELECT COALESCE(max(position), 0) + 1 AS next FROM folders')
+  await q('INSERT INTO folders (id, name, position, parent_id) VALUES ($1, $2, $3, $4)', [id, name, next, parentId])
+  const [row] = await q(`${FOLDER_SELECT} WHERE id = $1`, [id])
+  res.status(201).json(row)
+}))
+
+// Mover/reordenar pastas: só administradores. Recebe a pasta-mãe de destino
+// (parentId, null = raiz) e a lista ordenada dos ids daquele grupo de irmãs.
+// Reatribui parent_id e position de todas de uma vez.
+app.put('/api/folders/reorder', requireAdmin, wrap(async (req, res) => {
+  const parentId = req.body.parentId || null
+  const orderedIds = Array.isArray(req.body.orderedIds) ? req.body.orderedIds : []
+  // Impede ciclo: uma pasta não pode virar filha dela mesma nem de uma descendente.
+  if (parentId) {
+    const all = await q('SELECT id, parent_id AS "parentId" FROM folders')
+    const byId = new Map(all.map(f => [f.id, f]))
+    for (const movedId of orderedIds) {
+      for (let cur = parentId, guard = 0; cur && guard < 1000; cur = byId.get(cur)?.parentId, guard++) {
+        if (cur === movedId) return res.status(400).json({ error: 'Não dá para mover uma pasta para dentro dela mesma.' })
+      }
+    }
+  }
+  await tx(async (client) => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await client.query('UPDATE folders SET parent_id = $2, position = $3 WHERE id = $1', [orderedIds[i], parentId, i])
+    }
+  })
+  res.status(204).end()
+}))
+
+// Renomear pasta: só administradores.
+app.put('/api/folders/:id', requireAdmin, wrap(async (req, res) => {
+  const name = (req.body.name || '').trim()
+  if (!name) return res.status(400).json({ error: 'Informe um nome para a pasta.' })
+  const rows = await q('UPDATE folders SET name = $2 WHERE id = $1 RETURNING id', [req.params.id, name])
+  if (!rows.length) return res.status(404).json({ error: 'Pasta não encontrada.' })
+  const [row] = await q(`${FOLDER_SELECT} WHERE id = $1`, [req.params.id])
+  res.json(row)
+}))
+
+// Excluir pasta: só administradores. Os projetos dentro dela viram "soltos"
+// (folder_id = NULL por causa do ON DELETE SET NULL), não são apagados.
+app.delete('/api/folders/:id', requireAdmin, wrap(async (req, res) => {
+  const rows = await q('DELETE FROM folders WHERE id = $1 RETURNING id', [req.params.id])
+  if (!rows.length) return res.status(404).json({ error: 'Pasta não encontrada.' })
+  res.status(204).end()
 }))
 
 // ----- arquivos (documentos/imagens enviados, guardados como bytea no Postgres) -----
@@ -539,6 +626,25 @@ async function ensureSchema() {
     )
   `)
   await q('CREATE INDEX IF NOT EXISTS files_project_id_idx ON files (project_id)')
+
+  // ----- pastas (agrupam projetos na sidebar) -----
+  await q(`
+    CREATE TABLE IF NOT EXISTS folders (
+      id         text PRIMARY KEY,
+      name       text NOT NULL,
+      position   integer NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `)
+  // Pasta-mãe: permite subpastas (pasta dentro de pasta, aninhamento ilimitado).
+  // NULL = pasta na raiz. Apagar a pasta-mãe apaga as subpastas junto (CASCADE);
+  // os projetos dentro delas ficam soltos por causa do ON DELETE SET NULL abaixo.
+  await q('ALTER TABLE folders ADD COLUMN IF NOT EXISTS parent_id text REFERENCES folders(id) ON DELETE CASCADE')
+  // Gaveta do projeto. NULL = projeto solto (sem pasta). Apagar a pasta só
+  // solta os projetos (ON DELETE SET NULL), nunca os apaga.
+  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS folder_id text REFERENCES folders(id) ON DELETE SET NULL')
+  // Ordem do projeto na sidebar (dentro da pasta ou entre os soltos). Usado no drag-and-drop.
+  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0')
 
   // ----- permissões -----
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin boolean NOT NULL DEFAULT false')

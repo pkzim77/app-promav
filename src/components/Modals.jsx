@@ -458,11 +458,12 @@ function PermissionsEditor({ users, defaultRole, members, onChangeDefault, onCha
   )
 }
 
-export function ProjectModal({ project, users = [], isAdmin = false, onSave, onClose }) {
+export function ProjectModal({ project, users = [], folders = [], defaultFolderId = null, isAdmin = false, onSave, onClose }) {
   const editing = !!project
   const [name, setName] = React.useState(project?.name || '')
   const [desc, setDesc] = React.useState(project?.desc || '')
   const [color, setColor] = React.useState(project?.color || 'indigo')
+  const [folderId, setFolderId] = React.useState(project?.folderId || defaultFolderId || '')
   const [start, setStart] = React.useState(project?.start || '2026-05-26')
   const [end, setEnd] = React.useState(project?.end || '2026-07-01')
   const [notes, setNotes] = React.useState(project?.notes || '')
@@ -477,7 +478,7 @@ export function ProjectModal({ project, users = [], isAdmin = false, onSave, onC
   const save = () => {
     setTouched(true)
     if (!name.trim() || dErr) return
-    onSave({ ...(project || {}), name: name.trim(), desc: desc.trim(), color, start, end, notes: notes.trim(), resources, defaultRole, members })
+    onSave({ ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start, end, notes: notes.trim(), resources, defaultRole, members })
   }
 
   return (
@@ -492,6 +493,18 @@ export function ProjectModal({ project, users = [], isAdmin = false, onSave, onC
       </Field>
       <Field label="Descrição">
         <textarea className="control" value={desc} placeholder="Sobre o que é este projeto?" onChange={e => setDesc(e.target.value)} />
+      </Field>
+      <Field label="Pasta">
+        <select className="control" value={folderId} onChange={e => setFolderId(e.target.value)}>
+          <option value="">Sem pasta</option>
+          {folders.map(f => {
+            // Caminho completo da pasta (ex: "Obras / São Paulo") para distinguir subpastas.
+            const byId = new Map(folders.map(x => [x.id, x]))
+            const parts = []
+            for (let cur = f, guard = 0; cur && guard < 50; cur = byId.get(cur.parentId), guard++) parts.unshift(cur.name)
+            return <option key={f.id} value={f.id}>{parts.join(' / ')}</option>
+          })}
+        </select>
       </Field>
       <Field label="Anotações">
         <textarea className="control" value={notes} style={{ minHeight: 110 }}
