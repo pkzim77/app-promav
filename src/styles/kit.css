@@ -18,7 +18,7 @@ input, textarea, select { font-family: inherit; }
 .page-wide { padding: 24px 28px 40px; }
 
 /* ---------- Sidebar ---------- */
-.sidebar { width: 288px; flex-shrink: 0; background: var(--brand-ink); color: #fff; display: flex; flex-direction: column; padding: 18px 4px 18px 14px; gap: 4px; }
+.sidebar { width: 288px; flex-shrink: 0; background: var(--brand-ink); color: #fff; display: flex; flex-direction: column; padding: 18px 4px 18px 14px; gap: 4px; overflow-y: scroll; }
 .sb-brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 18px; }
 .sb-brand img { width: 30px; height: 30px; }
 .sb-brand .word { font-weight: 700; font-size: 21px; letter-spacing: -0.02em; color: #fff; }
