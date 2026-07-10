@@ -1,6 +1,7 @@
+import './primitives.css'
 import React from 'react'
-import { Icon } from './Icon.jsx'
-import { STATUS_MAP, PRIORITY_MAP, PROJECT_COLORS } from '../data/store.js'
+import { Icon } from '../Icon.jsx'
+import { STATUS_MAP, PRIORITY_MAP, PROJECT_COLORS } from '../../data/store.js'
 // Reusable presentational primitives for the Promav UI.
 
 export function Avatar({ user, size = 28 }) {

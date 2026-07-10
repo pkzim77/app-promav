@@ -1,7 +1,8 @@
+import './List.css'
 import React from 'react'
-import { Icon } from '../components/Icon.jsx'
-import { Avatar, StatusTag, PriorityTag, ChecklistMini } from '../components/primitives.jsx'
-import { STATUSES, PROJECT_COLORS, fmtShort, effectiveProjectRole, canEditProject } from '../data/store.js'
+import { Icon } from '../../components/Icon.jsx'
+import { Avatar, StatusTag, PriorityTag, ChecklistMini } from '../../components/primitives/primitives.jsx'
+import { STATUSES, PROJECT_COLORS, fmtShort, effectiveProjectRole, canEditProject } from '../../data/store.js'
 // Lista — atividades em formato de tabela, agrupadas por status (estilo ClickUp).
 
 export function TaskListView({ tasks, projects, users, authUser, filterProject, mine, currentUserId, onFilterProject, onToggleMine, onMoveTask, onNewTask, onEditTask }) {

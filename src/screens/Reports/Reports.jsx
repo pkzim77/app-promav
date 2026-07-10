@@ -1,8 +1,9 @@
+import './Reports.css'
 import React from 'react'
-import { Icon } from '../components/Icon.jsx'
-import { StatusTag } from '../components/primitives.jsx'
-import { ReportView } from './ReportView.jsx'
-import { PROJECT_COLORS, checklistStats, taskProgress } from '../data/store.js'
+import { Icon } from '../../components/Icon.jsx'
+import { StatusTag } from '../../components/primitives/primitives.jsx'
+import { ReportView } from '../ReportView/ReportView.jsx'
+import { PROJECT_COLORS, checklistStats, taskProgress } from '../../data/store.js'
 // Relatórios — escolha quais PROJETOS e quais ATIVIDADES entram, e gere o relatório.
 
 export function Reports({ projects, tasks, users }) {

@@ -1,0 +1,57 @@
+/* Estilos do componente primitives (usados só aqui). Compartilhados ficam em src/styles/kit.css */
+
+.av-stack { display: inline-flex; align-items: center; }
+
+.av-stack .av { border: 2px solid var(--surface); box-sizing: content-box; }
+
+.av-more { background: var(--bg-muted); color: var(--fg-3); }
+
+/* ---------- Tags ---------- */
+
+.tag { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; padding: 4px 10px; border-radius: var(--r-full); white-space: nowrap; }
+
+.tag .dot { width: 7px; height: 7px; border-radius: 50%; }
+
+/* ---------- Modal ---------- */
+
+.scrim { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: flex-start; justify-content: center; padding: 64px 20px; z-index: 100; animation: fade var(--dur) var(--ease); }
+
+.modal { 
+  width: 100%; 
+  max-width: 520px; 
+  max-height: 91vh;
+  background: var(--surface);
+  border-radius: var(--r-xl);
+  overflow-x: hidden;
+  overflow-y: scroll;
+  box-shadow: var(--shadow-lg); 
+  animation: rise var(--dur-slow) var(--ease-out); 
+}
+
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid var(--border); }
+
+.modal-head h3 { font: var(--text-h3); margin: 0; letter-spacing: var(--tracking-snug); }
+
+.modal-body { padding: 22px 24px; display: flex; flex-direction: column; gap: 16px; }
+
+.modal-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--border); }
+
+@keyframes fade { from { opacity: 0; } }
+
+/* ---------- Checklist mini indicator (cards / table) ---------- */
+
+.ck-mini { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--fg-3); }
+
+.ck-mini svg { color: var(--fg-4); }
+
+.ck-mini.full { color: var(--success); }
+
+.ck-mini.full svg { color: var(--success); }
+
+/* ---------- Toast ---------- */
+
+.toast-wrap { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+
+.toast { display: flex; align-items: center; gap: 10px; background: var(--brand-ink); color: #fff; font-size: 14px; font-weight: 500; padding: 11px 16px; border-radius: var(--r-md); box-shadow: var(--shadow-lg); animation: rise var(--dur) var(--ease-out); }
+
+.toast .ic { color: #6ee7a8; display: flex; }

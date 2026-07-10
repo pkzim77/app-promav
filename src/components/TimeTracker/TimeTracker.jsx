@@ -1,6 +1,7 @@
+import './TimeTracker.css'
 import React from 'react'
-import { Icon } from './Icon.jsx'
-import { PROJECT_COLORS } from '../data/store.js'
+import { Icon } from '../Icon.jsx'
+import { PROJECT_COLORS } from '../../data/store.js'
 // Cronômetro por atividade — cada sessão é vinculada a uma tarefa (taskId).
 
 export function fmtClock(ms) {

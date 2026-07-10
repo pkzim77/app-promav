@@ -1,5 +1,6 @@
+import './Gantt.css'
 import React from 'react'
-import { PROJECT_COLORS, parseDate, dayDiff, addDays, fmtShort, MONTHS_PT, todayISO } from '../data/store.js'
+import { PROJECT_COLORS, parseDate, dayDiff, addDays, fmtShort, MONTHS_PT, todayISO } from '../../data/store.js'
 // Gantt — horizontal bars per task, grouped by project, date ruler on top.
 
 const DAY_W = 26

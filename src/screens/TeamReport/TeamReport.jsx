@@ -1,7 +1,8 @@
+import './TeamReport.css'
 import React from 'react'
-import { Icon } from '../components/Icon.jsx'
-import { Avatar } from '../components/primitives.jsx'
-import { PROJECT_COLORS } from '../data/store.js'
+import { Icon } from '../../components/Icon.jsx'
+import { Avatar } from '../../components/primitives/primitives.jsx'
+import { PROJECT_COLORS } from '../../data/store.js'
 // Relatório da equipe — tempo gasto por pessoa em cada atividade, com filtro dia/semana/mês.
 
 const MS_MIN = 60000

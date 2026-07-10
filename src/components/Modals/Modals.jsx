@@ -1,7 +1,8 @@
+import './Modals.css'
 import React from 'react'
-import { Icon } from './Icon.jsx'
-import { Modal, Field, SegControl, StatusTag, PriorityTag } from './primitives.jsx'
-import { STATUSES, PRIORITIES, PROJECT_HEX, MAX_FILE_BYTES, formatBytes, PROJECT_ROLES } from '../data/store.js'
+import { Icon } from '../Icon.jsx'
+import { Modal, Field, SegControl, StatusTag, PriorityTag } from '../primitives/primitives.jsx'
+import { STATUSES, PRIORITIES, PROJECT_HEX, MAX_FILE_BYTES, formatBytes, PROJECT_ROLES } from '../../data/store.js'
 // Create/edit modals for tasks and projects + confirm dialog. Includes validation.
 
 function dateError(start, end) {

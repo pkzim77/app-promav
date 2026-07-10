@@ -1,8 +1,9 @@
+import './Kanban.css'
 import React from 'react'
-import { Icon } from '../components/Icon.jsx'
-import { AvatarStack, PriorityTag, ChecklistMini } from '../components/primitives.jsx'
-import { TaskTimerButton } from '../components/TimeTracker.jsx'
-import { STATUSES, PROJECT_COLORS, taskMembers, fmtShort, effectiveProjectRole, canEditProject } from '../data/store.js'
+import { Icon } from '../../components/Icon.jsx'
+import { AvatarStack, PriorityTag, ChecklistMini } from '../../components/primitives/primitives.jsx'
+import { TaskTimerButton } from '../../components/TimeTracker/TimeTracker.jsx'
+import { STATUSES, PROJECT_COLORS, taskMembers, fmtShort, effectiveProjectRole, canEditProject } from '../../data/store.js'
 // Kanban — columns by status, cross-project cards, drag & drop, filters.
 
 function KanbanCard({ task, project, users, sessions, currentUserId, now, onStartTimer, onStopTimer, onDragStart, onDragEnd, dragging, onClick }) {

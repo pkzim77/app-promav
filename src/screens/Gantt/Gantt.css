@@ -1,0 +1,41 @@
+/* Estilos do componente gantt (usados só aqui). Compartilhados ficam em src/styles/kit.css */
+
+/* ---------- Gantt ---------- */
+
+.gantt { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-card); }
+
+.gantt-scroll { overflow-x: auto; }
+
+.gantt-grid { position: relative; }
+
+.gantt-ruler { display: flex; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface-2); z-index: 5; }
+
+.gantt-label-col { width: 220px; flex-shrink: 0; border-right: 1px solid var(--border); }
+
+.gantt-month { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--fg-3); padding: 8px 10px 2px; }
+
+.gantt-days { display: flex; }
+
+.gantt-day { width: 26px; flex-shrink: 0; text-align: center; font-family: var(--font-mono); font-size: 10px; color: var(--fg-4); padding: 4px 0 6px; border-left: 1px solid var(--border); }
+
+.gantt-day.weekend { background: var(--bg-subtle); }
+
+.gantt-day.today { color: var(--brand); font-weight: 700; }
+
+.gantt-row { display: flex; align-items: stretch; border-bottom: 1px solid var(--border); }
+
+.gantt-row:hover { background: var(--bg-subtle); }
+
+.gantt-rowlabel { width: 220px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 0 12px; display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--fg-1); }
+
+.gantt-track { position: relative; flex: 1; height: 44px; }
+
+.gantt-bar { position: absolute; top: 9px; height: 26px; border-radius: var(--r-sm); display: flex; align-items: center; padding: 0 9px; color: #fff; font-size: 11.5px; font-weight: 600; box-shadow: var(--shadow-xs); overflow: hidden; white-space: nowrap; transition: filter var(--dur); }
+
+.gantt-bar:hover { filter: brightness(1.05); }
+
+.gantt-group { background: var(--bg-muted); }
+
+.gantt-group .gantt-rowlabel { font-weight: 700; }
+
+.gantt-today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--brand); opacity: .55; z-index: 3; }

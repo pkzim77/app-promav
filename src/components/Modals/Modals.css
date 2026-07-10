@@ -1,0 +1,119 @@
+/* Estilos do componente modals (usados só aqui). Compartilhados ficam em src/styles/kit.css */
+
+.field-row { display: flex; gap: 14px; }
+
+.field-row .field { flex: 1; }
+
+.field-error { font-size: 12.5px; color: var(--danger); display: flex; align-items: center; gap: 5px; }
+
+.color-swatches { display: flex; gap: 10px; }
+
+.color-swatches button { width: 30px; height: 30px; border-radius: var(--r-sm); border: 2px solid transparent; transition: transform var(--dur); }
+
+.color-swatches button:hover { transform: scale(1.1); }
+
+.color-swatches button.on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--fg-1); }
+
+/* ---------- Checklist (in task modal) ---------- */
+
+.ck-badge { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; color: var(--brand); background: var(--brand-soft); padding: 2px 8px; border-radius: var(--r-full); }
+
+.ck-edit-list { display: flex; flex-direction: column; gap: 2px; }
+
+.ck-edit-row { display: flex; align-items: center; gap: 10px; padding: 5px 4px; border-radius: var(--r-sm); }
+
+.ck-edit-row:hover { background: var(--bg-subtle); }
+
+.ck-text { font-size: 13.5px; color: var(--fg-1); flex: 1; }
+
+.ck-text.done { color: var(--fg-4); text-decoration: line-through; }
+
+.ck-del { opacity: 0; padding: 5px; }
+
+.ck-edit-row:hover .ck-del { opacity: 1; }
+
+.ck-add { display: flex; gap: 8px; margin-top: 8px; }
+
+.ck-add .control { flex: 1; }
+
+.ck-add .btn { flex-shrink: 0; }
+
+/* ---------- Member picker (task modal) ---------- */
+
+.member-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.member-chip { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--fg-2); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-full); padding: 4px 11px 4px 4px; transition: all var(--dur); }
+
+.member-chip:hover { border-color: var(--fg-4); }
+
+.member-chip.on { background: var(--brand-soft); border-color: transparent; color: var(--brand); }
+
+.member-chip.resp { background: var(--brand-soft-2); cursor: default; }
+
+.member-tag { font-size: 10px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--brand); background: var(--surface); padding: 1px 6px; border-radius: var(--r-full); }
+
+/* ---------- Project resources (editor in modal) ---------- */
+
+.res-edit-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
+
+.res-edit-row { display: flex; align-items: center; gap: 10px; padding: 7px 6px; border-radius: var(--r-sm); }
+
+.res-edit-row:hover { background: var(--bg-subtle); }
+
+.res-edit-ic { width: 28px; height: 28px; flex-shrink: 0; border-radius: var(--r-sm); background: var(--brand-soft); color: var(--brand); display: flex; align-items: center; justify-content: center; }
+
+.res-edit-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+
+.res-edit-label { font-size: 13.5px; font-weight: 600; color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.res-edit-url { font-size: 11.5px; color: var(--fg-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.res-del { opacity: 0; padding: 5px; flex-shrink: 0; }
+
+.res-edit-row:hover .res-del { opacity: 1; }
+
+.res-add { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+.res-add .seg { flex-basis: 100%; }
+
+.res-add .control { flex: 1; min-width: 140px; }
+
+.res-add .btn { flex-shrink: 0; }
+
+.ro-hint { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-3); background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; margin: 0 0 16px; }
+
+.perm-default { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+
+.perm-default-label { font-size: 13px; color: var(--fg-2); }
+
+.perm-list { display: flex; flex-direction: column; gap: 6px; }
+
+.perm-row { display: flex; align-items: center; gap: 10px; }
+
+.perm-name { flex: 1; min-width: 0; font-size: 13.5px; color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.perm-select { flex: 0 0 168px; width: 168px; min-width: 0; }
+
+.perm-admin-tag { font-size: 12px; font-weight: 600; color: var(--brand); background: var(--brand-soft); padding: 4px 10px; border-radius: var(--r-full); }
+
+/* Seletor de arquivo (modais de documento/imagem) */
+
+.filepicker { display: flex; width: 100%; align-items: center; padding: 14px; border: 1.5px dashed var(--border); border-radius: var(--r-md); background: var(--bg-subtle); color: var(--fg-2); transition: border-color var(--dur), background var(--dur); }
+
+.filepicker:hover { border-color: var(--brand); background: var(--brand-soft); }
+
+.filepicker-empty { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--fg-3); }
+
+.filepicker-file { display: flex; align-items: center; gap: 11px; min-width: 0; width: 100%; color: var(--brand); }
+
+.filepicker-meta { display: flex; flex-direction: column; min-width: 0; text-align: left; }
+
+.filepicker-name { font-size: 14px; font-weight: 600; color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.filepicker-size { font-size: 12px; color: var(--fg-4); }
+
+/* Pré-visualização da imagem no modal de nova imagem */
+
+.img-modal-preview { margin: 0 0 14px; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--bg-muted); max-height: 180px; display: flex; align-items: center; justify-content: center; }
+
+.img-modal-preview img { max-width: 100%; max-height: 180px; object-fit: contain; }

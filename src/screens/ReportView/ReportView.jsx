@@ -1,7 +1,8 @@
+import './ReportView.css'
 import React from 'react'
-import { Icon } from '../components/Icon.jsx'
-import { AvatarStack, StatusTag } from '../components/primitives.jsx'
-import { PROJECT_COLORS, checklistStats, taskProgress, taskMembers, parseDate, fmtFull, fmtMed, todayISO } from '../data/store.js'
+import { Icon } from '../../components/Icon.jsx'
+import { AvatarStack, StatusTag } from '../../components/primitives/primitives.jsx'
+import { PROJECT_COLORS, checklistStats, taskProgress, taskMembers, parseDate, fmtFull, fmtMed, todayISO } from '../../data/store.js'
 // ReportView — o relatório gerado: resumo geral + rollup por projeto + detalhe por atividade.
 
 function donut(pct, size = 76, stroke = 9, color = 'var(--brand)') {

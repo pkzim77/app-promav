@@ -1,0 +1,37 @@
+/* Estilos do componente kanban (usados só aqui). Compartilhados ficam em src/styles/kit.css */
+
+/* ---------- Kanban ---------- */
+
+.board { display: flex; gap: 16px; align-items: flex-start; overflow-x: auto; }
+
+.column { width: 304px; flex-shrink: 0; background: var(--bg-muted); border-radius: var(--r-lg); padding: 12px; display: flex; flex-direction: column; gap: 10px; transition: background var(--dur); }
+
+.column.dragover { background: var(--brand-soft); outline: 2px dashed var(--brand); outline-offset: -2px; }
+
+.col-head { display: flex; align-items: center; gap: 8px; padding: 4px 6px 0; }
+
+.col-head .dot { width: 9px; height: 9px; border-radius: 50%; }
+
+.col-head .name { font-size: 13.5px; font-weight: 700; color: var(--fg-1); }
+
+.col-head .count { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--fg-3); background: var(--surface); border-radius: var(--r-full); padding: 1px 8px; }
+
+.col-add { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--fg-3); padding: 8px 10px; border-radius: var(--r-md); transition: background var(--dur), color var(--dur); }
+
+.col-add:hover { background: var(--surface); color: var(--brand); }
+
+.kcard { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--fg-4); border-radius: var(--r-md); box-shadow: var(--shadow-xs); padding: 12px; cursor: grab; transition: box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease); }
+
+.kcard:hover { box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+
+.kcard.dragging { opacity: .5; }
+
+.kcard .kc-proj { margin-bottom: 8px; }
+
+.kcard .kc-title { font-size: 14px; font-weight: 600; color: var(--fg-1); line-height: 1.4; margin: 0 0 12px; }
+
+.kc-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.kc-foot .right { display: flex; align-items: center; gap: 9px; }
+
+.kc-date { font-family: var(--font-mono); font-size: 11px; color: var(--fg-4); }

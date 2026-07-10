@@ -1,9 +1,10 @@
+import './Projects.css'
 import React from 'react'
-import { Icon } from '../components/Icon.jsx'
-import { AvatarStack, StatusTag, PriorityTag, ProgressBar } from '../components/primitives.jsx'
-import { TaskTimerButton } from '../components/TimeTracker.jsx'
-import { PROJECT_COLORS, projectProgress, taskProgress, checklistStats, taskMembers, fmtShort, fmtMed, formatBytes, effectiveProjectRole, canEditProject, ROLE_LABEL } from '../data/store.js'
-import { api } from '../data/api.js'
+import { Icon } from '../../components/Icon.jsx'
+import { AvatarStack, StatusTag, PriorityTag, ProgressBar } from '../../components/primitives/primitives.jsx'
+import { TaskTimerButton } from '../../components/TimeTracker/TimeTracker.jsx'
+import { PROJECT_COLORS, projectProgress, taskProgress, checklistStats, taskMembers, fmtShort, fmtMed, formatBytes, effectiveProjectRole, canEditProject, ROLE_LABEL } from '../../data/store.js'
+import { api } from '../../data/api.js'
 // Projetos — grid of project cards, and a project detail view with task table.
 
 function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete }) {

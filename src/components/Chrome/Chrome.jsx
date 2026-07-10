@@ -1,8 +1,9 @@
+import './Chrome.css'
 import React from 'react'
-import { Icon } from './Icon.jsx'
-import { Avatar } from './primitives.jsx'
-import { TimeClock } from './TimeTracker.jsx'
-import { PROJECT_COLORS } from '../data/store.js'
+import { Icon } from '../Icon.jsx'
+import { Avatar } from '../primitives/primitives.jsx'
+import { TimeClock } from '../TimeTracker/TimeTracker.jsx'
+import { PROJECT_COLORS } from '../../data/store.js'
 // App chrome: left sidebar + top bar with search and user selector.
 
 // Menu de "três pontinhos" de uma pasta: aparece ao passar o mouse na pasta
@@ -72,7 +73,7 @@ function ProjectMenu({ project, onRename, onEdit, onDelete }) {
   )
 }
 
-export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAdmin = false, onNewFolder, onRenameFolder, onDeleteFolder, onNewProjectInFolder, onMoveFolder, onMoveProject, onRenameProject, onEditProject, onDeleteProject }) {
+export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAdmin = false, collapsed: navCollapsed = false, mobileOpen = false, onToggleCollapse, onCloseMobile, onNewFolder, onRenameFolder, onDeleteFolder, onNewProjectInFolder, onMoveFolder, onMoveProject, onRenameProject, onEditProject, onDeleteProject }) {
   // Pastas abertas/fechadas. Começam todas abertas.
   const [collapsed, setCollapsed] = React.useState(() => new Set())
   const toggle = (id) => setCollapsed(prev => {
@@ -150,6 +151,9 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
   }
   const hintClass = (key) => hint?.key === key ? ' drop-' + hint.mode : ''
 
+  // Navegar sempre fecha o menu no celular (drawer).
+  const go = (r) => { onNavigate(r); onCloseMobile && onCloseMobile() }
+
   const nav = [
     { id: 'hub', label: 'Visão geral', icon: 'hub' },
     { id: 'projects', label: 'Projetos', icon: 'folder' },
@@ -169,8 +173,8 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
       onDragEnd={clearDrag}
       onDragOver={overProj(p)}
       onDrop={dropProj(p)}>
-      <button className={'sb-proj' + (route.projectId === p.id ? ' active' : '')}
-        onClick={() => onNavigate({ view: 'list', projectId: p.id })}>
+      <button className={'sb-proj' + (route.projectId === p.id ? ' active' : '')} title={p.name}
+        onClick={() => go({ view: 'list', projectId: p.id })}>
         <Icon name="list" size={16} style={{ color: PROJECT_COLORS[p.color], flexShrink: 0 }} />
         <span className="sb-proj-name" title={p.name}>{p.name}</span>
       </button>
@@ -199,8 +203,8 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
           onDragEnd={clearDrag}
           onDragOver={overFolder(f)}
           onDrop={dropFolder(f)}>
-          <button className="sb-folder-head" onClick={() => toggle(f.id)}>
-            <Icon name={open ? 'chevronDown' : 'chevronRight'} size={15} />
+          <button className="sb-folder-head" title={f.name} onClick={() => toggle(f.id)}>
+            <Icon name={open ? 'chevronDown' : 'chevronRight'} size={15} className="sb-folder-chevron" />
             <Icon name="folder" size={16} />
             <span className="sb-folder-name" title={f.name}>{f.name}</span>
           </button>
@@ -221,19 +225,22 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
   }
 
   return (
-    <aside className="sidebar">
+    <aside className={'sidebar' + (navCollapsed ? ' nav-collapsed' : '') + (mobileOpen ? ' mobile-open' : '')}>
       <div className="sb-brand">
-        <img src="/assets/promav-mark-light.svg" alt="" />
         <span className="word">promav</span>
+        <button className="sb-collapse-btn" title={navCollapsed ? 'Expandir menu' : 'Recolher menu'}
+          onClick={onToggleCollapse}>
+          <Icon name="panelLeft" size={18} />
+        </button>
       </div>
       {nav.map(n => (
-        <button key={n.id} className={'sb-item' + (route.view === n.id ? ' active' : '')} onClick={() => onNavigate({ view: n.id })}>
-          <Icon name={n.icon} size={19} />{n.label}
+        <button key={n.id} className={'sb-item' + (route.view === n.id ? ' active' : '')} title={n.label} onClick={() => go({ view: n.id })}>
+          <Icon name={n.icon} size={19} /><span className="sb-label">{n.label}</span>
         </button>
       ))}
 
       <div className="sb-section">
-        Projetos
+        <span className="sb-section-text">Projetos</span>
         {isAdmin && (
           <button className="sb-section-btn" title="Nova pasta" onClick={onNewFolder}>
             <Icon name="plus" size={15} stroke={2.4} />
@@ -292,9 +299,12 @@ export function UserMenu({ user, onChangePassword, onLogout }) {
   )
 }
 
-export function TopBar({ title, currentUser, canNewProject = true, onChangePassword, onLogout, onNewProject, tasks, projects, sessions, now, onStartTimer, onStopTimer }) {
+export function TopBar({ title, currentUser, canNewProject = true, onToggleMobileNav, onChangePassword, onLogout, onNewProject, tasks, projects, sessions, now, onStartTimer, onStopTimer }) {
   return (
     <header className="topbar">
+      <button className="tb-hamburger" title="Menu" onClick={onToggleMobileNav}>
+        <Icon name="menu" size={22} />
+      </button>
       <h1 className="tb-title">{title}</h1>
       <div className="tb-spacer" />
       <div className="search">

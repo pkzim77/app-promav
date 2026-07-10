@@ -1,0 +1,43 @@
+/* Estilos do componente reportview (usados só aqui). Compartilhados ficam em src/styles/kit.css */
+
+/* ---------- Reports: generated document ---------- */
+
+.report-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 0 20px; }
+
+.report-summary { display: flex; align-items: center; gap: 32px; padding: 22px 26px; margin-bottom: 26px; }
+
+.rep-donut { display: flex; align-items: center; gap: 16px; padding-right: 32px; border-right: 1px solid var(--border); }
+
+.rep-stat-grid { display: flex; gap: 40px; }
+
+.rep-stat-grid > div { display: flex; flex-direction: column; }
+
+.rep-stat-grid .num { font-family: var(--font-mono); font-weight: 700; font-size: 26px; color: var(--fg-1); letter-spacing: -0.02em; }
+
+.rep-stat-grid .lab { font-size: 12.5px; color: var(--fg-3); margin-top: 3px; }
+
+.report-group { margin-bottom: 26px; }
+
+.report-group-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+
+.report-group-head h3 { font: var(--text-h4); margin: 0; }
+
+.report-task { padding: 16px; border-bottom: 1px solid var(--border); }
+
+.report-task:last-child { border-bottom: none; }
+
+.report-task-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+
+.report-checklist { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; margin-top: 12px; }
+
+.report-ck-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-2); }
+
+.report-ck-item.done { color: var(--fg-4); }
+
+.report-ck-box { width: 16px; height: 16px; flex-shrink: 0; border-radius: var(--r-xs); border: 1.5px solid var(--border-strong); background: var(--surface); display: flex; align-items: center; justify-content: center; color: #fff; }
+
+.report-ck-item.done .report-ck-box { background: var(--success); border-color: var(--success); }
+
+.report-remaining { margin-top: 12px; font-size: 12.5px; color: var(--warning); background: var(--warning-soft); padding: 8px 12px; border-radius: var(--r-sm); line-height: 1.5; }
+
+.report-late { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--danger); background: var(--danger-soft); padding: 3px 9px; border-radius: var(--r-full); }

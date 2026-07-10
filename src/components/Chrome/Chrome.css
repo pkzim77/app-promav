@@ -1,0 +1,187 @@
+/* Estilos do componente chrome (usados só aqui). Compartilhados ficam em src/styles/kit.css */
+
+/* ---------- Sidebar ---------- */
+
+.sidebar { width: 288px; flex-shrink: 0; background: var(--brand-ink); color: #fff; display: flex; flex-direction: column; padding: 18px 4px 18px 14px; gap: 4px; overflow-y: scroll; transition: width var(--dur) var(--ease); }
+
+.sb-brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 18px; }
+
+.sb-brand img { width: 30px; height: 30px; flex-shrink: 0; }
+
+.sb-brand .word { font-weight: 700; font-size: 21px; letter-spacing: -0.02em; color: #fff; }
+
+.sb-collapse-btn { margin-left: auto; display: grid; place-items: center; width: 30px; height: 30px; border-radius: var(--r-sm); color: rgba(255,255,255,.55); flex-shrink: 0; }
+
+.sb-collapse-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
+
+/* ---------- Botão hamburger (só no celular) ---------- */
+
+.tb-hamburger { display: none; place-items: center; width: 38px; height: 38px; margin-left: -6px; border-radius: var(--r-md); color: var(--fg-2); }
+
+.tb-hamburger:hover { background: var(--bg-muted); color: var(--fg-1); }
+
+.nav-backdrop { display: none; }
+
+.sb-section { display: flex; align-items: center; justify-content: space-between; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,.42); padding: 16px 10px 6px; }
+
+.sb-section-btn { display: grid; place-items: center; width: 22px; height: 22px; border-radius: var(--r-sm); color: rgba(255,255,255,.55); }
+
+.sb-section-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
+
+.sb-item { display: flex; align-items: center; gap: 11px; padding: 9px 11px; border-radius: var(--r-md); color: rgba(255,255,255,.74); font-size: 12px; font-weight: 500; width: 100%; text-align: left; transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+
+.sb-item:hover { background: rgba(255,255,255,.07); color: #fff; }
+
+.sb-item.active { background: rgba(255,255,255,.13); color: #fff; }
+
+.sb-item .badge { margin-left: auto; font-family: var(--font-mono); font-size: 11px; font-weight: 600; background: rgba(255,255,255,.14); color: rgba(255,255,255,.8); padding: 1px 7px; border-radius: var(--r-full); }
+
+.sb-proj { display: flex; align-items: center; gap: 10px; padding: 7px 11px; border-radius: var(--r-md); color: rgba(255,255,255,.7); font-size: 12px; font-weight: 500; width: 100%; text-align: left; }
+
+.sb-proj:hover { color: #fff; }
+
+.sb-proj .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+.sb-proj .sb-proj-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
+
+/* linha do projeto: botão + menu de três pontinhos (aparece no hover) */
+
+.sb-proj-row { position: relative; display: flex; align-items: center; border-radius: var(--r-md); }
+
+.sb-proj-row:hover { background: rgba(255,255,255,.07); }
+
+.sb-proj-row:has(.sb-proj.active) { background: rgba(255,255,255,.13); }
+
+.sb-proj-row .sb-proj { flex: 1; min-width: 0; background: transparent; }
+
+.sb-proj-row .sb-proj.active { color: #fff; }
+
+.sb-proj-row .sb-folder-menu-btn { visibility: hidden; }
+
+.sb-proj-row:hover .sb-folder-menu-btn, .sb-proj-row .sb-folder-menu.open .sb-folder-menu-btn { visibility: visible; }
+
+/* ----- drag-and-drop da sidebar ----- */
+
+.sidebar [draggable="true"] { cursor: grab; }
+
+/* "entrar" numa pasta/projeto: contorno */
+
+.sb-folder-row.drop-into, .sb-proj-row.drop-into { box-shadow: inset 0 0 0 2px #7c6cff; border-radius: var(--r-md); }
+
+/* inserir antes/depois: linha guia */
+
+.sb-folder-row.drop-before::before, .sb-folder-row.drop-after::after,
+.sb-proj-row.drop-before::before, .sb-proj-row.drop-after::after {
+  content: ''; position: absolute; left: 8px; right: 8px; height: 2px; background: #7c6cff; border-radius: 2px; z-index: 2;
+}
+
+.sb-folder-row.drop-before::before, .sb-proj-row.drop-before::before { top: -1px; }
+
+.sb-folder-row.drop-after::after, .sb-proj-row.drop-after::after { bottom: -1px; }
+
+/* zona para soltar na raiz (tirar de dentro da pasta) */
+
+.sb-root-drop { min-height: 24px; flex: 1; }
+
+.sb-root-drop.active { min-height: 40px; margin: 8px; border: 1.5px dashed rgba(255,255,255,.22); border-radius: var(--r-md); display: grid; place-items: center; color: rgba(255,255,255,.45); font-size: 11px; text-align: center; padding: 6px; }
+
+.sb-root-drop.drop-into { border-color: #7c6cff; color: #cfc7ff; background: rgba(124,108,255,.08); }
+
+/* ----- pastas na sidebar ----- */
+
+.sb-folder-row { position: relative; display: flex; align-items: center; min-height: 8px; border-radius: var(--r-md); padding-right: 4px; }
+
+.sb-folder-row:hover { background: rgba(255,255,255,.07); }
+
+.sb-folder-head { display: flex; align-items: center; gap: 8px; padding: 8px 4px 8px 10px; color: rgba(255,255,255,.82); font-size: 12px; font-weight: 600; flex: 1; min-width: 0; align-self: stretch; text-align: left; }
+
+.sb-folder-head > svg { flex-shrink: 0; }
+
+.sb-folder-head .sb-folder-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
+
+.sb-folder-menu { position: relative; flex-shrink: 0; display: flex; align-items: center; gap: 2px; padding-right: 8px;}
+
+.sb-folder-menu-btn { visibility: hidden; display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r-sm); color: rgba(255,255,255,.6); }
+
+.sb-folder-row:hover .sb-folder-menu-btn, .sb-folder-menu.open .sb-folder-menu-btn { visibility: visible; }
+
+.sb-folder-menu-btn:hover { background: rgba(255,255,255,.14); color: #fff; }
+
+.sb-folder-body { padding-left: 14px; }
+
+.sb-folder-empty { padding: 6px 11px; font-size: 12.5px; color: rgba(255,255,255,.38); font-style: italic; }
+
+.sb-foot { margin-top: auto; padding-top: 12px; }
+
+/* ---------- Top bar ---------- */
+
+.topbar { height: 60px; flex-shrink: 0; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 14px; padding: 0 28px; }
+
+.tb-title { font: var(--text-h3); color: var(--fg-1); margin: 0; letter-spacing: var(--tracking-snug); }
+
+.tb-spacer { flex: 1; }
+
+.search { display: flex; align-items: center; gap: 8px; background: var(--bg-muted); border: 1px solid transparent; border-radius: var(--r-md); padding: 8px 12px; color: var(--fg-3); width: 240px; transition: border-color var(--dur), background var(--dur); }
+
+.search:focus-within { background: var(--surface); border-color: var(--brand); box-shadow: var(--shadow-focus); }
+
+.search input { border: none; outline: none; background: none; font-size: 14px; color: var(--fg-1); width: 100%; }
+
+.search input::placeholder { color: var(--fg-4); }
+
+.userselect-btn { display: flex; align-items: center; gap: 8px; padding: 5px 9px 5px 5px; border-radius: var(--r-full); background: var(--bg-muted); color: var(--fg-1); font-size: 13.5px; font-weight: 600; }
+
+.userselect-btn:hover { background: var(--bg-subtle); box-shadow: inset 0 0 0 1px var(--border); }
+
+/* ---------- Account menu ---------- */
+
+.menu-account { display: flex; align-items: center; gap: 11px; padding: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
+
+.menu-account-name { font-size: 14px; font-weight: 600; color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.menu-account-email { font-size: 12.5px; color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Sidebar recolhida: só ícones (desktop) ---------- */
+
+@media (min-width: 861px) {
+  .sidebar.nav-collapsed { width: 72px; padding-left: 8px; padding-right: 8px; overflow-x: hidden; }
+  .sidebar.nav-collapsed .sb-brand { justify-content: center; padding: 6px 0 18px; }
+  .sidebar.nav-collapsed .sb-brand .word,
+  .sidebar.nav-collapsed .sb-label,
+  .sidebar.nav-collapsed .sb-section-text,
+  .sidebar.nav-collapsed .sb-folder-name,
+  .sidebar.nav-collapsed .sb-proj-name,
+  .sidebar.nav-collapsed .sb-folder-chevron,
+  .sidebar.nav-collapsed .sb-folder-menu,
+  .sidebar.nav-collapsed .sb-folder-empty,
+  .sidebar.nav-collapsed .sb-root-drop { display: none; }
+  .sidebar.nav-collapsed .sb-collapse-btn { margin-left: 0; }
+  .sidebar.nav-collapsed .sb-item,
+  .sidebar.nav-collapsed .sb-folder-head,
+  .sidebar.nav-collapsed .sb-proj { justify-content: center; padding-left: 0; padding-right: 0; gap: 0; }
+  .sidebar.nav-collapsed .sb-section { justify-content: center; padding: 12px 0 6px; }
+  .sidebar.nav-collapsed .sb-folder { margin-left: 0 !important; }
+  .sidebar.nav-collapsed .sb-folder-body { padding-left: 0; }
+  /* Recolhido: esconde a seção "Projetos" inteira (título, botão + e as pastas/projetos);
+     fica só a navegação principal. Expanda o menu para ver os projetos. */
+  .sidebar.nav-collapsed .sb-section,
+  .sidebar.nav-collapsed .sb-folder,
+  .sidebar.nav-collapsed .sb-proj-row { display: none; }
+}
+
+/* ---------- Celular: sidebar vira drawer ---------- */
+
+@media (max-width: 860px) {
+  .tb-hamburger { display: grid; }
+  .sb-collapse-btn { display: none; }
+  /* Barra de topo fica ACIMA da gaveta: o hamburger continua visível e
+     clicável mesmo com o menu aberto (clicar nele fecha). */
+  .topbar { position: relative; z-index: 70; }
+  .sidebar { position: fixed; top: 0; left: 0; bottom: 0; z-index: 60; width: 280px;
+    padding-top: 74px; transform: translateX(-100%);
+    transition: transform var(--dur) var(--ease); box-shadow: 2px 0 24px rgba(0,0,0,.35); }
+  .sidebar .sb-brand { display: none; }  /* a barra de topo já é o cabeçalho */
+  .sidebar.mobile-open { transform: translateX(0); }
+  .app.nav-open .nav-backdrop { display: block; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
+}
+

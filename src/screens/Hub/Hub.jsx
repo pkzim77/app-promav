@@ -1,8 +1,9 @@
+import './Hub.css'
 import React from 'react'
-import { Icon } from '../components/Icon.jsx'
-import { ProgressBar } from '../components/primitives.jsx'
-import { sameDay, fmtDur } from '../components/TimeTracker.jsx'
-import { PROJECT_COLORS, projectProgress } from '../data/store.js'
+import { Icon } from '../../components/Icon.jsx'
+import { ProgressBar } from '../../components/primitives/primitives.jsx'
+import { sameDay, fmtDur } from '../../components/TimeTracker/TimeTracker.jsx'
+import { PROJECT_COLORS, projectProgress } from '../../data/store.js'
 // Hub / Visão geral — summary stats + big navigation cards + recent projects.
 
 function StatCard({ num, label }) {

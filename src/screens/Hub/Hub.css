@@ -1,0 +1,23 @@
+/* Estilos do componente hub (usados só aqui). Compartilhados ficam em src/styles/kit.css */
+
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 18px 20px; box-shadow: var(--shadow-card); }
+
+.stat-num { font-family: var(--font-sans); font-size: 32px; font-weight: 700; color: var(--fg-1); letter-spacing: -0.02em; line-height: 1; }
+
+.stat-label { font-size: 13px; color: var(--fg-3); margin-top: 7px; }
+
+/* ---------- Hub nav cards ---------- */
+
+.hubcards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+.hubcard { text-align: left; padding: 22px; border-radius: var(--r-lg); border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-card); transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+
+.hubcard:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+
+.hubcard .ic { width: 44px; height: 44px; border-radius: var(--r-md); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+
+.hubcard h3 { font: var(--text-h4); margin: 0 0 4px; color: var(--fg-1); }
+
+.hubcard p { font-size: 13px; color: var(--fg-3); margin: 0; line-height: 1.5; }
+
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--brand); margin: 0 0 8px; }

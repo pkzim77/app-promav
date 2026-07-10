@@ -1,15 +1,15 @@
 import React from 'react'
-import { Sidebar, TopBar } from './components/Chrome.jsx'
-import { Toast } from './components/primitives.jsx'
-import { TaskModal, ProjectModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal } from './components/Modals.jsx'
-import { Hub } from './screens/Hub.jsx'
-import { ProjectList, ProjectDetail } from './screens/Projects.jsx'
-import { Kanban } from './screens/Kanban.jsx'
-import { TaskListView } from './screens/List.jsx'
-import { Gantt } from './screens/Gantt.jsx'
-import { Reports } from './screens/Reports.jsx'
-import { TeamReport } from './screens/TeamReport.jsx'
-import { Login } from './screens/Login.jsx'
+import { Sidebar, TopBar } from './components/Chrome/Chrome.jsx'
+import { Toast } from './components/primitives/primitives.jsx'
+import { TaskModal, ProjectModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal } from './components/Modals/Modals.jsx'
+import { Hub } from './screens/Hub/Hub.jsx'
+import { ProjectList, ProjectDetail } from './screens/Projects/Projects.jsx'
+import { Kanban } from './screens/Kanban/Kanban.jsx'
+import { TaskListView } from './screens/List/List.jsx'
+import { Gantt } from './screens/Gantt/Gantt.jsx'
+import { Reports } from './screens/Reports/Reports.jsx'
+import { TeamReport } from './screens/TeamReport/TeamReport.jsx'
+import { Login } from './screens/Login/Login.jsx'
 import { api } from './data/api.js'
 import { effectiveProjectRole, canEditProject } from './data/store.js'
 // Promav app — root: dados vêm do backend (Express + Neon) via src/data/api.js.
@@ -28,6 +28,8 @@ export default function App() {
   const [mine, setMine] = React.useState(false)
   const [modal, setModal] = React.useState(null)
   const [toast, setToast] = React.useState(null)
+  const [navCollapsed, setNavCollapsed] = React.useState(false)  // rail só de ícones (desktop)
+  const [mobileNavOpen, setMobileNavOpen] = React.useState(false) // drawer (celular)
   const [sessions, setSessions] = React.useState([])
   const [now, setNow] = React.useState(Date.now())
   const [dataReady, setDataReady] = React.useState(false)
@@ -371,16 +373,20 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className={'app' + (mobileNavOpen ? ' nav-open' : '')}>
       <Sidebar route={route} onNavigate={navigate} projects={projects} tasks={tasks}
         folders={folders} isAdmin={isAdmin}
+        collapsed={navCollapsed} mobileOpen={mobileNavOpen}
+        onToggleCollapse={() => setNavCollapsed(c => !c)}
+        onCloseMobile={() => setMobileNavOpen(false)}
         onNewFolder={createFolder} onRenameFolder={renameFolder} onDeleteFolder={askDeleteFolder}
         onNewProjectInFolder={openNewProject}
         onMoveFolder={moveFolder} onMoveProject={moveProject}
         onRenameProject={renameProject} onEditProject={openEditProject} onDeleteProject={askDeleteProject} />
+      <div className="nav-backdrop" onClick={() => setMobileNavOpen(false)} />
       <div className="main">
         <TopBar title={currentProject ? currentProject.name : TITLES[route.view]} currentUser={authUser}
-          canNewProject={isAdmin}
+          canNewProject={isAdmin} onToggleMobileNav={() => setMobileNavOpen(o => !o)}
           onChangePassword={() => setModal({ type: 'password' })} onLogout={handleLogout} onNewProject={openNewProject}
           tasks={tasks} projects={projects} sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer} />
         <div className="content">{screen}</div>

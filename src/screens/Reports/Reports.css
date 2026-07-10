@@ -1,0 +1,33 @@
+/* Estilos do componente reports (usados só aqui). Compartilhados ficam em src/styles/kit.css */
+
+/* ---------- Reports: selection list ---------- */
+
+.rep-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+
+.rep-summary { font-size: 13.5px; color: var(--fg-3); }
+
+.rep-summary strong { color: var(--fg-1); font-weight: 700; }
+
+.rep-group { overflow: hidden; }
+
+.rep-group-head { display: flex; align-items: center; gap: 11px; padding: 13px 16px; background: var(--surface-2); border-bottom: 1px solid var(--border); cursor: pointer; transition: background var(--dur); }
+
+.rep-group-head:hover { background: var(--bg-muted); }
+
+.rep-group-name { font-weight: 700; font-size: 14.5px; color: var(--fg-1); }
+
+.rep-group-head .rep-count { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--fg-3); background: var(--surface); border: 1px solid var(--border); padding: 1px 9px; border-radius: var(--r-full); }
+
+.rep-group-empty { padding: 16px; font-size: 13px; color: var(--fg-4); }
+
+.ck-dash { width: 9px; height: 2px; border-radius: 2px; background: #fff; }
+
+.rep-selrow { display: flex; align-items: center; gap: 13px; padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background var(--dur); }
+
+.rep-selrow:last-child { border-bottom: none; }
+
+.rep-selrow:hover { background: var(--bg-subtle); }
+
+.rep-selrow.on { background: color-mix(in srgb, var(--brand-soft) 55%, var(--surface)); }
+
+.rep-selrow.on:hover { background: var(--brand-soft); }

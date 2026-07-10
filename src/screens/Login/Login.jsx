@@ -1,5 +1,6 @@
+import './Login.css'
 import React from 'react'
-import { Icon } from '../components/Icon.jsx'
+import { Icon } from '../../components/Icon.jsx'
 // Tela de login — email + senha. Chama onLogin(email, password) que rejeita em caso de erro.
 
 export function Login({ onLogin }) {
