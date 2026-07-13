@@ -107,6 +107,13 @@ input, textarea, select { font-family: inherit; }
 
 .filterbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
 
+/* Seletor de projeto da barra de filtros (Kanban, Gantt) */
+.filter-select { font-size: 13.5px; font-weight: 600; color: var(--fg-2); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-md); padding: 8px 12px; min-width: 280px; max-width: 100%; cursor: pointer; transition: border-color var(--dur), box-shadow var(--dur); }
+
+.filter-select:hover { border-color: var(--fg-4); }
+
+.filter-select:focus { outline: none; border-color: var(--brand); box-shadow: var(--shadow-focus); }
+
 .chip { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--fg-2); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-full); padding: 7px 13px; transition: all var(--dur); }
 
 .chip:hover { border-color: var(--fg-4); }

@@ -40,12 +40,11 @@ export function TaskListView({ tasks, projects, users, authUser, filterProject, 
         {canCreate && <button className="btn btn-primary" onClick={() => onNewTask(filterProject || null)}><Icon name="plus" size={17} stroke={2.2} />Nova atividade</button>}
       </div>
       <div className="filterbar">
-        <button className={'chip' + (!filterProject ? ' active' : '')} onClick={() => onFilterProject(null)}>Todos os projetos</button>
-        {projects.map(p => (
-          <button key={p.id} className={'chip' + (filterProject === p.id ? ' active' : '')} onClick={() => onFilterProject(p.id)}>
-            <span className="dot" style={{ background: PROJECT_COLORS[p.color] }} />{p.name}
-          </button>
-        ))}
+        <select className="filter-select" value={filterProject || ''} aria-label="Filtrar por projeto"
+          onChange={(e) => onFilterProject(e.target.value || null)}>
+          <option value="">Todos os projetos</option>
+          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
         <span style={{ width: 1, height: 22, background: 'var(--border)', margin: '0 4px' }} />
         <button className={'chip' + (mine ? ' active' : '')} onClick={onToggleMine}>
           <Icon name="inbox" size={15} />Minhas tarefas

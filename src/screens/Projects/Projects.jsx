@@ -43,24 +43,92 @@ function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete })
   )
 }
 
-export function ProjectList({ projects, tasks, authUser, canCreate = true, onOpen, onEdit, onDelete, onNew }) {
+// Card de uma pasta na tela de Projetos: entra na pasta ao clicar.
+function FolderGridCard({ folder, subCount, projCount, onEnter }) {
+  const parts = []
+  if (subCount) parts.push(`${subCount} ${subCount > 1 ? 'pastas' : 'pasta'}`)
+  parts.push(`${projCount} ${projCount === 1 ? 'projeto' : 'projetos'}`)
+  return (
+    <button className="card proj-folder-card" onClick={() => onEnter(folder.id)} title={folder.name}>
+      <span className="proj-folder-ic"><Icon name="folder" size={28} /></span>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div className="proj-folder-name">{folder.name}</div>
+        <div className="proj-folder-meta">{parts.join(' · ')}</div>
+      </div>
+      <Icon name="chevronRight" size={20} style={{ color: 'var(--fg-4)', flexShrink: 0 }} />
+    </button>
+  )
+}
+
+export function ProjectList({ projects, tasks, folders = [], authUser, canCreate = true, onOpen, onEdit, onDelete, onNew }) {
+  const [openId, setOpenId] = React.useState(null) // pasta aberta (null = raiz)
+
+  const folderIds = React.useMemo(() => new Set(folders.map(f => f.id)), [folders])
+  // Pasta atual é válida? (pode ter sido excluída) — senão, volta à raiz.
+  const currentId = openId && folderIds.has(openId) ? openId : null
+
+  const byPos = (a, b) => (a.position || 0) - (b.position || 0)
+  // Subpastas de uma pasta (raiz = parentId nulo ou pai inexistente).
+  const childFolders = (pid) => folders.filter(f =>
+    pid == null ? (!f.parentId || !folderIds.has(f.parentId)) : f.parentId === pid).sort(byPos)
+  // Projetos dentro de uma pasta (raiz = sem pasta ou pasta inexistente).
+  const projectsIn = (fid) => projects.filter(p =>
+    fid == null ? (!p.folderId || !folderIds.has(p.folderId)) : p.folderId === fid).sort(byPos)
+
+  // Trilha (breadcrumb) da raiz até a pasta atual.
+  const path = []
+  { let cur = folders.find(f => f.id === currentId), seen = new Set()
+    while (cur && !seen.has(cur.id)) { seen.add(cur.id); path.unshift(cur); cur = cur.parentId && folderIds.has(cur.parentId) ? folders.find(f => f.id === cur.parentId) : null } }
+
+  const subfolders = childFolders(currentId)
+  const projs = projectsIn(currentId)
+  const isEmpty = !subfolders.length && !projs.length
+
   return (
     <div className="page">
       <div className="sec-head">
         <div>
           <h2>Projetos</h2>
-          <div className="sub">{projects.length} projetos · {tasks.length} atividades no total</div>
+          <div className="sub">{projects.length} projetos · {folders.length} pastas · {tasks.length} atividades no total</div>
         </div>
-        {canCreate && <button className="btn btn-primary" onClick={onNew}><Icon name="plus" size={17} stroke={2.2} />Novo projeto</button>}
+        {canCreate && <button className="btn btn-primary" onClick={() => onNew(currentId)}><Icon name="plus" size={17} stroke={2.2} />Novo projeto</button>}
       </div>
-      {projects.length === 0 ? (
-        <EmptyState icon="folder" title="Nenhum projeto ainda"
-          text="Crie seu primeiro projeto para começar a organizar atividades, prazos e responsáveis."
-          action={canCreate ? <button className="btn btn-primary" onClick={onNew}><Icon name="plus" size={17} stroke={2.2} />Criar projeto</button> : null} />
+
+      {/* Trilha de navegação: Projetos / Pasta / Subpasta */}
+      <nav className="proj-crumbs">
+        <button className="proj-crumb" onClick={() => setOpenId(null)} disabled={!currentId}>
+          <Icon name="folder" size={15} />Projetos
+        </button>
+        {path.map(f => (
+          <React.Fragment key={f.id}>
+            <Icon name="chevronRight" size={14} style={{ color: 'var(--fg-4)' }} />
+            <button className="proj-crumb" onClick={() => setOpenId(f.id)} disabled={f.id === currentId}>{f.name}</button>
+          </React.Fragment>
+        ))}
+      </nav>
+
+      {isEmpty ? (
+        <EmptyState icon="folder"
+          title={currentId ? 'Pasta vazia' : 'Nenhum projeto ainda'}
+          text={currentId ? 'Esta pasta ainda não tem subpastas nem projetos.' : 'Crie seu primeiro projeto para começar a organizar atividades, prazos e responsáveis.'}
+          action={canCreate ? <button className="btn btn-primary" onClick={() => onNew(currentId)}><Icon name="plus" size={17} stroke={2.2} />Novo projeto</button> : null} />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 18 }}>
-          {projects.map(p => <ProjectGridCard key={p.id} project={p} tasks={tasks} authUser={authUser} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete} />)}
-        </div>
+        <>
+          {subfolders.length > 0 && (
+            <div className="proj-explorer-grid" style={{ marginBottom: projs.length ? 24 : 0 }}>
+              {subfolders.map(f => (
+                <FolderGridCard key={f.id} folder={f}
+                  subCount={childFolders(f.id).length} projCount={projectsIn(f.id).length}
+                  onEnter={setOpenId} />
+              ))}
+            </div>
+          )}
+          {projs.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 18 }}>
+              {projs.map(p => <ProjectGridCard key={p.id} project={p} tasks={tasks} authUser={authUser} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete} />)}
+            </div>
+          )}
+        </>
       )}
     </div>
   )

@@ -160,8 +160,8 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
     { id: 'list', label: 'Lista', icon: 'list' },
     { id: 'kanban', label: 'Kanban', icon: 'kanban' },
     { id: 'gantt', label: 'Gantt', icon: 'gantt' },
-    { id: 'reports', label: 'Relatórios', icon: 'trendingUp' },
-    { id: 'team', label: 'Equipe', icon: 'users' },
+    { id: 'reports', label: 'Relatórios Dos Projetos', icon: 'trendingUp' },
+    { id: 'team', label: 'Relatórios Da Equipe', icon: 'users' },
   ]
 
   // Um botão de projeto (a "lista de tarefas"), reutilizado dentro e fora das pastas.

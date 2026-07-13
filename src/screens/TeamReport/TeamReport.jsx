@@ -115,12 +115,11 @@ export function TeamReport({ users, tasks, projects, sessions, now }) {
 
       {/* filtro de projeto */}
       <div className="filterbar">
-        <button className={'chip' + (!projFilter ? ' active' : '')} onClick={() => setProjFilter(null)}>Todos os projetos</button>
-        {projects.map(p => (
-          <button key={p.id} className={'chip' + (projFilter === p.id ? ' active' : '')} onClick={() => setProjFilter(p.id)}>
-            <span className="dot" style={{ background: PROJECT_COLORS[p.color] }} />{p.name}
-          </button>
-        ))}
+        <select className="filter-select" value={projFilter || ''} aria-label="Filtrar por projeto"
+          onChange={(e) => setProjFilter(e.target.value || null)}>
+          <option value="">Todos os projetos</option>
+          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
       </div>
 
       {totalAll === 0 ? (

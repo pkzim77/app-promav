@@ -352,7 +352,7 @@ export default function App() {
       onCopyResource={copyResourceLink} onDeleteResource={(resource) => askDeleteResource(currentProject, resource)}
       onAddResource={openAddResource} />
   } else if (route.view === 'projects') {
-    screen = <ProjectList projects={projects} tasks={tasks} authUser={authUser} canCreate={isAdmin}
+    screen = <ProjectList projects={projects} tasks={tasks} folders={folders} authUser={authUser} canCreate={isAdmin}
       onOpen={(id) => setRoute({ view: 'projects', projectId: id })}
       onEdit={openEditProject} onDelete={askDeleteProject} onNew={openNewProject} />
   } else if (route.view === 'list') {

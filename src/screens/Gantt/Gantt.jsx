@@ -58,12 +58,11 @@ export function Gantt({ tasks, projects, filterProject, onFilterProject }) {
           <div><h2>Gantt</h2><div className="sub">Linha do tempo das atividades, agrupadas por projeto.</div></div>
         </div>
         <div className="filterbar">
-          <button className={'chip' + (!filterProject ? ' active' : '')} onClick={() => onFilterProject(null)}>Todos os projetos</button>
-          {projects.map(p => (
-            <button key={p.id} className={'chip' + (filterProject === p.id ? ' active' : '')} onClick={() => onFilterProject(p.id)}>
-              <span className="dot" style={{ background: PROJECT_COLORS[p.color] }} />{p.name}
-            </button>
-          ))}
+          <select className="filter-select" value={filterProject || ''} aria-label="Filtrar por projeto"
+            onChange={(e) => onFilterProject(e.target.value || null)}>
+            <option value="">Todos os projetos</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
         </div>
       </div>
 
