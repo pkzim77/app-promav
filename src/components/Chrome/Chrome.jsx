@@ -1,6 +1,7 @@
 import './Chrome.css'
 import React from 'react'
 import { Icon } from '../Icon.jsx'
+import { Logo } from '../Logo/Logo.jsx'
 import { Avatar } from '../primitives/primitives.jsx'
 import { TimeClock } from '../TimeTracker/TimeTracker.jsx'
 import { PROJECT_COLORS } from '../../data/store.js'
@@ -74,9 +75,9 @@ function ProjectMenu({ project, onRename, onEdit, onDelete }) {
 }
 
 export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAdmin = false, collapsed: navCollapsed = false, mobileOpen = false, onToggleCollapse, onCloseMobile, onNewFolder, onRenameFolder, onDeleteFolder, onNewProjectInFolder, onMoveFolder, onMoveProject, onRenameProject, onEditProject, onDeleteProject }) {
-  // Pastas abertas/fechadas. Começam todas abertas.
-  const [collapsed, setCollapsed] = React.useState(() => new Set())
-  const toggle = (id) => setCollapsed(prev => {
+  // Guardamos quais pastas estão ABERTAS. Começa vazio → todas fechadas.
+  const [expanded, setExpanded] = React.useState(() => new Set())
+  const toggle = (id) => setExpanded(prev => {
     const next = new Set(prev)
     next.has(id) ? next.delete(id) : next.add(id)
     return next
@@ -194,7 +195,7 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
   const renderFolder = (f, depth = 0) => {
     const inside = projects.filter(p => p.folderId === f.id)
     const subfolders = childrenOf(f.id)
-    const open = !collapsed.has(f.id)
+    const open = expanded.has(f.id)
     return (
       <div key={f.id} className="sb-folder" style={depth ? { marginLeft: 14 } : undefined}>
         <div className={'sb-folder-row' + (open ? ' open' : '') + (drag?.id === f.id ? ' dragging' : '') + hintClass('f:' + f.id)}
@@ -227,7 +228,7 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
   return (
     <aside className={'sidebar' + (navCollapsed ? ' nav-collapsed' : '') + (mobileOpen ? ' mobile-open' : '')}>
       <div className="sb-brand">
-        <span className="word">promav</span>
+        <Logo size={19} />
         <button className="sb-collapse-btn" title={navCollapsed ? 'Expandir menu' : 'Recolher menu'}
           onClick={onToggleCollapse}>
           <Icon name="panelLeft" size={18} />

@@ -15,17 +15,21 @@ function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete })
   const canEdit = canEditProject(role)
   const canDelete = role === 'admin'
   return (
-    <div className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', minHeight: 200 }}>
+    // O card inteiro abre o projeto; os botões de ação param a propagação.
+    <div className="card proj-card" role="button" tabIndex={0} title={project.name}
+      onClick={() => onOpen(project.id)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(project.id) } }}
+      style={{ padding: 22, display: 'flex', flexDirection: 'column', minHeight: 200 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
         <span style={{ width: 34, height: 34, borderRadius: 'var(--r-md)', background: color, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <button onClick={() => onOpen(project.id)} title={project.name} style={{ font: 'var(--text-h4)', color: 'var(--fg-1)', textAlign: 'left', padding: 0, width: '100%', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden', overflowWrap: 'anywhere' }}>{project.name}</button>
+          <div style={{ font: 'var(--text-h4)', color: 'var(--fg-1)', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden', overflowWrap: 'anywhere' }}>{project.name}</div>
           <p style={{ fontSize: 13, color: 'var(--fg-3)', margin: '3px 0 0', lineHeight: 1.45, display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 3, overflow: 'hidden', overflowWrap: 'anywhere' }}>{project.desc}</p>
         </div>
         {(canEdit || canDelete) && (
           <div style={{ display: 'flex', gap: 2 }}>
-            {canEdit && <button className="btn-icon" onClick={() => onEdit(project)} aria-label="Editar"><Icon name="pencil" size={16} /></button>}
-            {canDelete && <button className="btn-icon" onClick={() => onDelete(project)} aria-label="Excluir"><Icon name="trash" size={16} /></button>}
+            {canEdit && <button className="btn-icon" onClick={(e) => { e.stopPropagation(); onEdit(project) }} aria-label="Editar"><Icon name="pencil" size={16} /></button>}
+            {canDelete && <button className="btn-icon" onClick={(e) => { e.stopPropagation(); onDelete(project) }} aria-label="Excluir"><Icon name="trash" size={16} /></button>}
           </div>
         )}
       </div>
@@ -89,7 +93,6 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
       <div className="sec-head">
         <div>
           <h2>Projetos</h2>
-          <div className="sub">{projects.length} projetos · {folders.length} pastas · {tasks.length} atividades no total</div>
         </div>
         {canCreate && <button className="btn btn-primary" onClick={() => onNew(currentId)}><Icon name="plus" size={17} stroke={2.2} />Novo projeto</button>}
       </div>

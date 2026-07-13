@@ -1,0 +1,13 @@
+/* Estilos do componente Logo (usados só aqui). Compartilhados ficam em src/styles/kit.css */
+
+/* Tudo em "em" para a logo escalar junto com o font-size passado via prop. */
+
+.logo { display: inline-flex; align-items: center; gap: 0.5em; line-height: 1; color: inherit; white-space: nowrap; user-select: none; }
+
+/* Fina e com bastante espaçamento entre letras — o traço editorial da marca. */
+.logo-word { font-family: var(--font-sans); font-weight: 400; font-size: 1em; letter-spacing: 0.16em; text-transform: uppercase; }
+
+/* A última letra não precisa do espaçamento à direita: compensa o gap. */
+.logo-word:last-child { margin-right: -0.16em; }
+
+.logo-bar { width: 0.075em; min-width: 1px; height: 1.15em; background: var(--accent); border-radius: 1px; flex-shrink: 0; }

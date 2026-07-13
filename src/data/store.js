@@ -9,9 +9,10 @@ export const PROJECT_COLORS = {
   green: 'var(--proj-green)', amber: 'var(--proj-amber)', coral: 'var(--proj-coral)',
   pink: 'var(--proj-pink)', purple: 'var(--proj-purple)',
 }
+// Espelha os tokens --proj-* (tons terrosos da paleta "Taupe & Ink").
 export const PROJECT_HEX = {
-  indigo: '#6366F1', blue: '#2D7FF9', teal: '#14B8A6', green: '#22B07D',
-  amber: '#F5A623', coral: '#F0603F', pink: '#EC4899', purple: '#A855F7',
+  indigo: '#6E6A9B', blue: '#5A7695', teal: '#4C7F78', green: '#7E8A4C',
+  amber: '#C0912E', coral: '#B0603F', pink: '#B0757F', purple: '#8A6690',
 }
 
 export const STATUSES = [

@@ -1,8 +1,12 @@
 /* ============================================================
    PROMAV — Design Tokens
-   Calm, professional project-management UI. Indigo-forward,
-   light theme. Tokens are the single source of truth for the
-   whole system (foundations, cards, UI kit).
+   Paleta "Taupe & Ink": editorial, monocromática, fiel à logo.
+   Quase-preto + bege quente sobre papel. Ação primária em tinta
+   (preto); o bege aparece só nos detalhes. Sóbrio e atemporal.
+   Tokens são a única fonte de verdade do sistema inteiro.
+
+   TINTA  #16150F   MARCA  #B4A587   MARCA+ #8C7B58
+   TELA   #F6F4EF   WELL   #EEEAE0   BORDA  #E4DED1
    ============================================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
@@ -12,30 +16,34 @@
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  /* ---------- Brand: indigo ---------- */
-  --brand:          #4B3FE4;  /* primary action            */
-  --brand-hover:    #3E33CC;  /* hover                     */
-  --brand-pressed:  #332AAD;  /* active/pressed            */
-  --brand-soft:     #ECEBFD;  /* tinted background         */
-  --brand-soft-2:   #DEDBFB;  /* tinted bg, stronger       */
-  --brand-ink:      #1E1B4B;  /* deep navy-indigo (sidebar, ink) */
-  --brand-contrast: #FFFFFF;  /* text on brand             */
+  /* ---------- Brand: tinta (ação primária = preto) ---------- */
+  --brand:          #16150F;  /* TINTA — primary action    */
+  --brand-hover:    #2C2A20;  /* hover (tinta clareada)    */
+  --brand-pressed:  #000000;  /* active/pressed            */
+  --brand-soft:     #EEEAE0;  /* WELL — fundo bege         */
+  --brand-soft-2:   #E4DED1;  /* BORDA — bege mais forte   */
+  --brand-ink:      #16150F;  /* TINTA (sidebar, toast)    */
+  --brand-contrast: #FFFFFF;  /* texto sobre a tinta       */
 
-  /* ---------- Neutrals (cool, faint indigo tint) ---------- */
-  --fg-1: #1B1A2E;  /* primary text / headings   */
-  --fg-2: #4A4960;  /* secondary text            */
-  --fg-3: #6E6D85;  /* muted / meta              */
-  --fg-4: #9B9AAE;  /* placeholder / disabled    */
+  /* ---------- Bege da marca (só nos detalhes) ---------- */
+  --accent:        #B4A587;  /* MARCA                      */
+  --accent-strong: #8C7B58;  /* MARCA+                     */
+
+  /* ---------- Neutros (quentes, puxados pro bege) ---------- */
+  --fg-1: #16150F;  /* primary text / headings   */
+  --fg-2: #55503F;  /* secondary text            */
+  --fg-3: #7A7361;  /* muted / meta              */
+  --fg-4: #A79E89;  /* placeholder / disabled    */
 
   --bg:        #FFFFFF;  /* base surface          */
-  --bg-subtle: #F7F7FB;  /* app canvas            */
-  --bg-muted:  #F0F0F6;  /* hover rows / wells    */
+  --bg-subtle: #F6F4EF;  /* TELA — app canvas     */
+  --bg-muted:  #EEEAE0;  /* WELL — hover / wells  */
   --surface:   #FFFFFF;  /* cards, modals         */
-  --surface-2: #FBFBFE;  /* nested surface        */
+  --surface-2: #FBFAF6;  /* nested surface        */
 
-  --border:        #E7E7F0;  /* default hairline   */
-  --border-strong: #D6D6E4;  /* inputs, emphasis   */
-  --overlay:       rgba(27,26,46,.45); /* modal scrim */
+  --border:        #E4DED1;  /* BORDA — hairline   */
+  --border-strong: #D6CDBA;  /* inputs, emphasis   */
+  --overlay:       rgba(22,21,15,.45); /* modal scrim */
 
   /* ---------- Semantic ---------- */
   --success:      #1FA463;  --success-soft: #E4F6EE;
@@ -43,25 +51,28 @@
   --danger:       #E5484D;  --danger-soft:  #FCE7E8;
   --info:         #2D7FF9;  --info-soft:    #E5F0FE;
 
-  /* ---------- Status (Kanban) ---------- */
-  --status-todo:        #8A8AA3;  --status-todo-soft:        #EEEEF3;
+  /* ---------- Status (Kanban) — "a fazer" em bege ---------- */
+  --status-todo:        #8C7B58;  --status-todo-soft:        #EEEAE0;
   --status-progress:    #2D7FF9;  --status-progress-soft:    #E5F0FE;
   --status-done:        #1FA463;  --status-done-soft:        #E4F6EE;
 
   /* ---------- Priority ---------- */
-  --prio-low:    #7B8794;  --prio-low-soft:    #EEF1F3;
+  --prio-low:    #7A7361;  --prio-low-soft:    #EEEAE0;
   --prio-medium: #E8920C;  --prio-medium-soft: #FCEFD7;
   --prio-high:   #E5484D;  --prio-high-soft:   #FCE7E8;
 
-  /* ---------- Project palette (tags + Gantt bars) ---------- */
-  --proj-indigo: #6366F1;
-  --proj-blue:   #2D7FF9;
-  --proj-teal:   #14B8A6;
-  --proj-green:  #22B07D;
-  --proj-amber:  #F5A623;
-  --proj-coral:  #F0603F;
-  --proj-pink:   #EC4899;
-  --proj-purple: #A855F7;
+  /* ---------- Project palette (tags + barras do Gantt) ----------
+     Tons terrosos e dessaturados, em harmonia com o bege e a tinta.
+     As CHAVES (indigo, blue, ...) estão gravadas no banco: mantemos os
+     nomes e a família de cor, só trocamos o valor por uma versão sóbria. */
+  --proj-coral:  #B0603F;  /* terracota */
+  --proj-amber:  #C0912E;  /* ocre      */
+  --proj-green:  #7E8A4C;  /* oliva     */
+  --proj-teal:   #4C7F78;  /* verde-azulado profundo */
+  --proj-blue:   #5A7695;  /* azul-ardósia */
+  --proj-indigo: #6E6A9B;  /* índigo empoeirado */
+  --proj-purple: #8A6690;  /* ameixa    */
+  --proj-pink:   #B0757F;  /* rosa-velho */
 
   /* ---------- Radii ---------- */
   --r-xs:   6px;
@@ -83,13 +94,13 @@
   --sp-12: 48px;
   --sp-16: 64px;
 
-  /* ---------- Elevation (soft, calm) ---------- */
-  --shadow-xs:   0 1px 2px rgba(27,26,46,.06);
-  --shadow-sm:   0 1px 2px rgba(27,26,46,.06), 0 1px 3px rgba(27,26,46,.08);
-  --shadow-card: 0 1px 2px rgba(27,26,46,.05), 0 4px 10px rgba(27,26,46,.05);
-  --shadow-md:   0 6px 16px rgba(27,26,46,.10);
-  --shadow-lg:   0 16px 40px rgba(27,26,46,.16);
-  --shadow-focus: 0 0 0 3px rgba(75,63,228,.22);
+  /* ---------- Elevation (sombras quentes, de tinta) ---------- */
+  --shadow-xs:   0 1px 2px rgba(22,21,15,.06);
+  --shadow-sm:   0 1px 2px rgba(22,21,15,.06), 0 1px 3px rgba(22,21,15,.08);
+  --shadow-card: 0 1px 2px rgba(22,21,15,.05), 0 4px 10px rgba(22,21,15,.05);
+  --shadow-md:   0 6px 16px rgba(22,21,15,.10);
+  --shadow-lg:   0 16px 40px rgba(22,21,15,.16);
+  --shadow-focus: 0 0 0 3px rgba(140,123,88,.30); /* foco em MARCA+ */
 
   /* ---------- Motion ---------- */
   --ease: cubic-bezier(.2,.7,.3,1);

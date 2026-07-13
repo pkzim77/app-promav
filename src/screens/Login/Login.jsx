@@ -1,6 +1,7 @@
 import './Login.css'
 import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
+import { Logo } from '../../components/Logo/Logo.jsx'
 // Tela de login — email + senha. Chama onLogin(email, password) que rejeita em caso de erro.
 
 export function Login({ onLogin }) {
@@ -26,8 +27,7 @@ export function Login({ onLogin }) {
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
         <div className="login-brand">
-          <img src="/assets/promav-mark-light.svg" alt="" />
-          <span className="word">promav</span>
+          <Logo size={20} />
         </div>
         <h1 className="login-title">Entrar</h1>
         <p className="login-sub">Acesse com seu email e senha.</p>

@@ -8,11 +8,7 @@
 .login-card { width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-xl); box-shadow: var(--shadow-lg); padding: 32px 28px; animation: rise var(--dur-slow) var(--ease-out); }
 
-.login-brand { display: flex; align-items: center; gap: 9px; margin-bottom: 22px; }
-
-.login-brand img { width: 30px; height: 30px; }
-
-.login-brand .word { font-size: 19px; font-weight: 800; letter-spacing: -.01em; color: var(--brand-ink); }
+.login-brand { display: flex; align-items: center; justify-content: center; gap: 9px; margin-bottom: 22px; color: var(--fg-1); }
 
 .login-title { font-size: 21px; font-weight: 700; color: var(--fg-1); margin: 0 0 4px; }
 

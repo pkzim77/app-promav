@@ -6,9 +6,8 @@
 
 .sb-brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 18px; }
 
-.sb-brand img { width: 30px; height: 30px; flex-shrink: 0; }
 
-.sb-brand .word { font-weight: 700; font-size: 21px; letter-spacing: -0.02em; color: #fff; }
+.sb-brand .logo { color: #fff; }
 
 .sb-collapse-btn { margin-left: auto; display: grid; place-items: center; width: 30px; height: 30px; border-radius: var(--r-sm); color: rgba(255,255,255,.55); flex-shrink: 0; }
 
@@ -66,13 +65,13 @@
 
 /* "entrar" numa pasta/projeto: contorno */
 
-.sb-folder-row.drop-into, .sb-proj-row.drop-into { box-shadow: inset 0 0 0 2px #7c6cff; border-radius: var(--r-md); }
+.sb-folder-row.drop-into, .sb-proj-row.drop-into { box-shadow: inset 0 0 0 2px var(--accent); border-radius: var(--r-md); }
 
 /* inserir antes/depois: linha guia */
 
 .sb-folder-row.drop-before::before, .sb-folder-row.drop-after::after,
 .sb-proj-row.drop-before::before, .sb-proj-row.drop-after::after {
-  content: ''; position: absolute; left: 8px; right: 8px; height: 2px; background: #7c6cff; border-radius: 2px; z-index: 2;
+  content: ''; position: absolute; left: 8px; right: 8px; height: 2px; background: var(--accent); border-radius: 2px; z-index: 2;
 }
 
 .sb-folder-row.drop-before::before, .sb-proj-row.drop-before::before { top: -1px; }
@@ -85,7 +84,7 @@
 
 .sb-root-drop.active { min-height: 40px; margin: 8px; border: 1.5px dashed rgba(255,255,255,.22); border-radius: var(--r-md); display: grid; place-items: center; color: rgba(255,255,255,.45); font-size: 11px; text-align: center; padding: 6px; }
 
-.sb-root-drop.drop-into { border-color: #7c6cff; color: #cfc7ff; background: rgba(124,108,255,.08); }
+.sb-root-drop.drop-into { border-color: var(--accent); color: var(--brand-soft-2); background: rgba(180,165,135,.12); }
 
 /* ----- pastas na sidebar ----- */
 
@@ -146,7 +145,7 @@
 @media (min-width: 861px) {
   .sidebar.nav-collapsed { width: 72px; padding-left: 8px; padding-right: 8px; overflow-x: hidden; }
   .sidebar.nav-collapsed .sb-brand { justify-content: center; padding: 6px 0 18px; }
-  .sidebar.nav-collapsed .sb-brand .word,
+  .sidebar.nav-collapsed .logo,
   .sidebar.nav-collapsed .sb-label,
   .sidebar.nav-collapsed .sb-section-text,
   .sidebar.nav-collapsed .sb-folder-name,

@@ -1,6 +1,7 @@
 import './ReportView.css'
 import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
+import { Logo } from '../../components/Logo/Logo.jsx'
 import { AvatarStack, StatusTag } from '../../components/primitives/primitives.jsx'
 import { PROJECT_COLORS, checklistStats, taskProgress, taskMembers, parseDate, fmtFull, fmtMed, todayISO } from '../../data/store.js'
 // ReportView — o relatório gerado: resumo geral + rollup por projeto + detalhe por atividade.
@@ -52,7 +53,7 @@ export function ReportView({ report, projects, users, onBack }) {
       {/* header */}
       <div className="report-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <img src="/assets/promav-mark.svg" alt="" style={{ width: 34, height: 34 }} />
+          <Logo size={18} />
           <div>
             <div style={{ fontWeight: 700, fontSize: 20, letterSpacing: '-0.02em' }}>Relatório de progresso</div>
             <div style={{ fontSize: 13, color: 'var(--fg-3)' }}>Gerado em {fmtFull(todayISO())} · {total} atividades</div>

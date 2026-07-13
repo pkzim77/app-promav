@@ -31,10 +31,11 @@ export function Hub({ projects, tasks, onNavigate, sessions, currentUserId, now 
   const todayMs = (sessions || []).filter(s => s.userId === currentUserId && sameDay(s.start, now))
     .reduce((sum, s) => sum + ((s.end || now) - s.start), 0)
   const cards = [
-    { icon: 'folder', title: 'Projetos', desc: 'Crie e gerencie seus projetos e atividades.', tint: 'var(--brand-soft)', ink: 'var(--brand)', view: 'projects' },
-    { icon: 'kanban', title: 'Kanban', desc: 'Acompanhe o fluxo das tarefas por status.', tint: 'var(--status-progress-soft)', ink: 'var(--status-progress)', view: 'kanban' },
-    { icon: 'gantt', title: 'Gantt', desc: 'Visualize a linha do tempo dos projetos.', tint: 'var(--proj-amber-soft, #FCEFD7)', ink: 'var(--warning)', view: 'gantt' },
-    { icon: 'inbox', title: 'Minhas tarefas', desc: 'Veja o que está sob sua responsabilidade.', tint: 'var(--success-soft)', ink: 'var(--success)', view: 'kanban', mine: true },
+    // Ícones no bege da marca (MARCA+) sobre bege claro, iguais nos quatro.
+    { icon: 'folder', title: 'Projetos', desc: 'Crie e gerencie seus projetos e atividades.', tint: 'var(--brand-soft)', ink: 'var(--accent-strong)', view: 'projects' },
+    { icon: 'kanban', title: 'Kanban', desc: 'Acompanhe o fluxo das tarefas por status.', tint: 'var(--brand-soft)', ink: 'var(--accent-strong)', view: 'kanban' },
+    { icon: 'gantt', title: 'Gantt', desc: 'Visualize a linha do tempo dos projetos.', tint: 'var(--brand-soft)', ink: 'var(--accent-strong)', view: 'gantt' },
+    { icon: 'inbox', title: 'Minhas tarefas', desc: 'Veja o que está sob sua responsabilidade.', tint: 'var(--brand-soft)', ink: 'var(--accent-strong)', view: 'kanban', mine: true },
   ]
   return (
     <div className="page">
