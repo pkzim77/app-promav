@@ -415,30 +415,22 @@ function ResourceEditor({ resources, onChange }) {
   )
 }
 
-// Editor de permissões por projeto (só administradores veem). Define o papel
-// padrão (para quem não tem exceção) e exceções por pessoa.
-function PermissionsEditor({ users, defaultRole, members, onChangeDefault, onChangeMembers }) {
-  const roleOf = (userId) => {
-    const m = members.find(x => x.userId === userId)
-    return m ? m.role : 'default'
-  }
+// Quem participa do projeto (só administradores veem). A lista é a porta de
+// entrada: quem estiver como "Sem acesso" NÃO enxerga o projeto no sistema.
+// Administradores têm acesso total a tudo e não entram na lista.
+function PermissionsEditor({ users, members, onChangeMembers }) {
+  const roleOf = (userId) => members.find(x => x.userId === userId)?.role || 'none'
   const setRole = (userId, value) => {
-    if (value === 'default') onChangeMembers(members.filter(x => x.userId !== userId))
-    else {
-      const others = members.filter(x => x.userId !== userId)
-      onChangeMembers([...others, { userId, role: value }])
-    }
+    const others = members.filter(x => x.userId !== userId)
+    onChangeMembers(value === 'none' ? others : [...others, { userId, role: value }])
   }
+  const comAcesso = users.filter(u => !u.isAdmin && roleOf(u.id) !== 'none').length
   return (
     <div className="field">
       <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        Permissões
-        <span style={{ fontWeight: 400, color: 'var(--fg-4)', fontSize: 12.5 }}>quem pode editar este projeto</span>
+        Quem participa
+        <span style={{ fontWeight: 400, color: 'var(--fg-4)', fontSize: 12.5 }}>só quem estiver aqui enxerga o projeto</span>
       </label>
-      <div className="perm-default">
-        <span className="perm-default-label">Novas pessoas recebem</span>
-        <SegControl options={PROJECT_ROLES} value={defaultRole} onChange={onChangeDefault} />
-      </div>
       <div className="perm-list">
         {users.map(u => (
           <div className="perm-row" key={u.id}>
@@ -448,12 +440,17 @@ function PermissionsEditor({ users, defaultRole, members, onChangeDefault, onCha
               <span className="perm-admin-tag">Acesso total</span>
             ) : (
               <select className="control perm-select" value={roleOf(u.id)} onChange={e => setRole(u.id, e.target.value)}>
-                <option value="default">Padrão ({defaultRole === 'view' ? 'Só exibição' : 'Edição total'})</option>
+                <option value="none">Sem acesso</option>
                 {PROJECT_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
               </select>
             )}
           </div>
         ))}
+      </div>
+      <div className="perm-default-label" style={{ marginTop: 10 }}>
+        {comAcesso === 0
+          ? 'Ninguém além dos administradores vê este projeto.'
+          : `${comAcesso} ${comAcesso === 1 ? 'pessoa vê' : 'pessoas veem'} este projeto (além dos administradores).`}
       </div>
     </div>
   )
@@ -469,7 +466,6 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const [end, setEnd] = React.useState(project?.end || '2026-07-01')
   const [notes, setNotes] = React.useState(project?.notes || '')
   const [resources, setResources] = React.useState(project?.resources ? project.resources.map(r => ({ ...r })) : [])
-  const [defaultRole, setDefaultRole] = React.useState(project?.defaultRole || 'full')
   const [members, setMembers] = React.useState(project?.members ? project.members.map(m => ({ ...m })) : [])
   const [touched, setTouched] = React.useState(false)
 
@@ -479,7 +475,7 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const save = () => {
     setTouched(true)
     if (!name.trim() || dErr) return
-    onSave({ ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start, end, notes: notes.trim(), resources, defaultRole, members })
+    onSave({ ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start, end, notes: notes.trim(), resources, members })
   }
 
   return (
@@ -513,8 +509,7 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
           onChange={e => setNotes(e.target.value)} />
       </Field>
       {isAdmin && (
-        <PermissionsEditor users={users} defaultRole={defaultRole} members={members}
-          onChangeDefault={setDefaultRole} onChangeMembers={setMembers} />
+        <PermissionsEditor users={users} members={members} onChangeMembers={setMembers} />
       )}
       <Field label="Cor">
         <div className="color-swatches">

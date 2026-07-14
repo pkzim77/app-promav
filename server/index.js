@@ -111,14 +111,33 @@ const CAN = {
   adminOnly: ['admin'],             // gerenciar permissões, excluir projeto
 }
 
-// Papel efetivo de um usuário num projeto: admin global > exceção da pessoa > padrão do projeto.
+// Papel efetivo de um usuário num projeto: admin global > pessoa incluída no projeto.
+// Quem NÃO foi incluído não tem papel nenhum (null) — não enxerga o projeto.
+// É este null que faz o gate() barrar todas as rotas do projeto.
 async function effectiveRole(userId, projectId) {
   const [u] = await q('SELECT is_admin FROM users WHERE id = $1', [userId])
   if (u && u.is_admin) return 'admin'
   const [m] = await q('SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2', [projectId, userId])
-  if (m) return normRole(m.role)
-  const [p] = await q('SELECT default_role FROM projects WHERE id = $1', [projectId])
-  return p ? normDefaultRole(p.default_role) : 'view'
+  return m ? normRole(m.role) : null
+}
+
+// Ids dos projetos que um usuário enxerga. Admin vê todos (null = sem filtro).
+async function visibleProjectIds(userId) {
+  if (await userIsAdmin(userId)) return null
+  const rows = await q('SELECT project_id FROM project_members WHERE user_id = $1', [userId])
+  return rows.map(r => r.project_id)
+}
+
+// Mantém só as pastas que levam a algum projeto visível (e seus ancestrais),
+// para não exibir uma árvore de pastas vazias a quem não participa de nada.
+function foldersWithProjects(folders, projects) {
+  const byId = new Map(folders.map(f => [f.id, f]))
+  const keep = new Set()
+  for (const p of projects) {
+    let id = p.folderId
+    while (id && byId.has(id) && !keep.has(id)) { keep.add(id); id = byId.get(id).parentId }
+  }
+  return folders.filter(f => keep.has(f.id))
 }
 
 async function userIsAdmin(userId) {
@@ -189,8 +208,12 @@ async function getTask(id) {
   const rows = await q(`${TASK_SELECT} WHERE t.id = $1`, [id])
   return rows[0] || null
 }
-async function listSessions() {
-  return (await q(`${SESSION_SELECT} ORDER BY start_at`)).map(mapSession)
+// projectIds: null = todos (admin); array = só as sessões de tarefas desses projetos.
+async function listSessions(projectIds = null) {
+  const rows = projectIds === null
+    ? await q(`${SESSION_SELECT} ORDER BY start_at`)
+    : await q(`${SESSION_SELECT} WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ANY($1)) ORDER BY start_at`, [projectIds])
+  return rows.map(mapSession)
 }
 
 // Substitui checklist e membros de uma tarefa (estratégia: apaga e reinsere).
@@ -264,15 +287,27 @@ app.post('/api/auth/change-password', wrap(async (req, res) => {
 }))
 
 // Carga inicial do app — tudo num request só.
-app.get('/api/bootstrap', wrap(async (_req, res) => {
+// Admin recebe tudo; os demais recebem SOMENTE os projetos em que foram
+// incluídos (e as tarefas/sessões/pastas correspondentes). O filtro é aqui,
+// no servidor: esconder no front deixaria os dados trafegarem mesmo assim.
+app.get('/api/bootstrap', wrap(async (req, res) => {
+  const ids = await visibleProjectIds(req.userId)   // null = admin (sem filtro)
+  const all = ids === null
+
   const [users, projects, tasks, sessions, folders] = await Promise.all([
     q(`SELECT ${LIST_USER} FROM users ORDER BY id`),
-    q(`${PROJECT_SELECT} ORDER BY position, id`),
-    q(`${TASK_SELECT} ORDER BY t.id`),
-    listSessions(),
+    all ? q(`${PROJECT_SELECT} ORDER BY position, id`)
+        : q(`${PROJECT_SELECT} WHERE id = ANY($1) ORDER BY position, id`, [ids]),
+    all ? q(`${TASK_SELECT} ORDER BY t.id`)
+        : q(`${TASK_SELECT} WHERE t.project_id = ANY($1) ORDER BY t.id`, [ids]),
+    listSessions(ids),
     q(`${FOLDER_SELECT} ORDER BY position, name`),
   ])
-  res.json({ users, projects, tasks, sessions, folders })
+
+  res.json({
+    users, projects, tasks, sessions,
+    folders: all ? folders : foldersWithProjects(folders, projects),
+  })
 }))
 
 app.get('/api/users', wrap(async (_req, res) => {
@@ -280,8 +315,11 @@ app.get('/api/users', wrap(async (_req, res) => {
 }))
 
 // ----- projetos -----
-app.get('/api/projects', wrap(async (_req, res) => {
-  res.json(await q(`${PROJECT_SELECT} ORDER BY position, id`))
+app.get('/api/projects', wrap(async (req, res) => {
+  const ids = await visibleProjectIds(req.userId)
+  res.json(ids === null
+    ? await q(`${PROJECT_SELECT} ORDER BY position, id`)
+    : await q(`${PROJECT_SELECT} WHERE id = ANY($1) ORDER BY position, id`, [ids]))
 }))
 
 // Criar projeto: só administradores. Já grava papel padrão e exceções por pessoa.
@@ -502,8 +540,11 @@ app.get('/api/files/:id', wrap(async (req, res) => {
 }))
 
 // ----- tarefas -----
-app.get('/api/tasks', wrap(async (_req, res) => {
-  res.json(await q(`${TASK_SELECT} ORDER BY t.id`))
+app.get('/api/tasks', wrap(async (req, res) => {
+  const ids = await visibleProjectIds(req.userId)
+  res.json(ids === null
+    ? await q(`${TASK_SELECT} ORDER BY t.id`)
+    : await q(`${TASK_SELECT} WHERE t.project_id = ANY($1) ORDER BY t.id`, [ids]))
 }))
 
 app.post('/api/tasks', gate((req) => req.body.projectId, CAN.edit), wrap(async (req, res) => {
@@ -580,8 +621,8 @@ app.delete('/api/tasks/:id', gate(taskProjectId, CAN.edit), wrap(async (req, res
 }))
 
 // ----- cronômetro (time sessions) -----
-app.get('/api/sessions', wrap(async (_req, res) => {
-  res.json(await listSessions())
+app.get('/api/sessions', wrap(async (req, res) => {
+  res.json(await listSessions(await visibleProjectIds(req.userId)))
 }))
 
 // Inicia: fecha a sessão ativa do usuário (se houver) e abre uma nova.
@@ -594,13 +635,13 @@ app.post('/api/sessions/start', wrap(async (req, res) => {
       [genId('s'), userId, taskId]
     )
   })
-  res.status(201).json(await listSessions())
+  res.status(201).json(await listSessions(await visibleProjectIds(req.userId)))
 }))
 
 // Para: fecha a sessão ativa do usuário.
 app.post('/api/sessions/stop', wrap(async (req, res) => {
   await q('UPDATE time_sessions SET end_at = now() WHERE user_id = $1 AND end_at IS NULL', [req.body.userId])
-  res.json(await listSessions())
+  res.json(await listSessions(await visibleProjectIds(req.userId)))
 }))
 
 // ---------- middleware de erro ----------

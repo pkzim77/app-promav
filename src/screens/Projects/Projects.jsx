@@ -112,8 +112,10 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
 
       {isEmpty ? (
         <EmptyState icon="folder"
-          title={currentId ? 'Pasta vazia' : 'Nenhum projeto ainda'}
-          text={currentId ? 'Esta pasta ainda não tem subpastas nem projetos.' : 'Crie seu primeiro projeto para começar a organizar atividades, prazos e responsáveis.'}
+          title={currentId ? 'Pasta vazia' : canCreate ? 'Nenhum projeto ainda' : 'Você ainda não está em nenhum projeto'}
+          text={currentId ? 'Esta pasta ainda não tem subpastas nem projetos.'
+            : canCreate ? 'Crie seu primeiro projeto para começar a organizar atividades, prazos e responsáveis.'
+            : 'Você só enxerga os projetos em que foi incluído. Peça a um administrador para adicionar você.'}
           action={canCreate ? <button className="btn btn-primary" onClick={() => onNew(currentId)}><Icon name="plus" size={17} stroke={2.2} />Novo projeto</button> : null} />
       ) : (
         <>

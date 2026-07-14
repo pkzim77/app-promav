@@ -125,13 +125,13 @@ export const PROJECT_ROLES = [
 export const ROLE_LABEL = { admin: 'Administrador', full: 'Edição total', view: 'Só exibição' }
 
 // Papel efetivo de um usuário num projeto (espelha a lógica do backend):
-// admin global > exceção da pessoa (members) > papel padrão do projeto.
+// admin global > pessoa incluída no projeto. Quem não foi incluído não tem
+// papel (null) — não enxerga o projeto. O backend nem envia esses projetos.
 export function effectiveProjectRole(project, user) {
-  if (!user) return 'view'
+  if (!user) return null
   if (user.isAdmin) return 'admin'
   const m = (project?.members || []).find(x => x.userId === user.id)
-  if (m) return m.role === 'full' ? 'full' : 'view'
-  return project?.defaultRole === 'view' ? 'view' : 'full'
+  return m ? (m.role === 'full' ? 'full' : 'view') : null
 }
 // Pode criar/editar/excluir atividades, editar o projeto, excluir materiais.
 export const canEditProject = (role) => role === 'admin' || role === 'full'
