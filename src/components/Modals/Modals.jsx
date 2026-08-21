@@ -483,7 +483,7 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   }
 
   return (
-    <Modal title={editing ? 'Editar projeto' : 'Novo projeto'} onClose={onClose}
+    <Modal className="project-modal" title={editing ? 'Editar projeto' : 'Novo projeto'} onClose={onClose}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
         <button className="btn btn-primary" onClick={save}>{editing ? 'Salvar alterações' : 'Criar projeto'}</button>
