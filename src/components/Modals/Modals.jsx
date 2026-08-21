@@ -10,9 +10,11 @@ function dateError(start, end) {
   return null
 }
 
-export function TaskModal({ task, projects, users, currentUserId, defaultProjectId, defaultStatus, canEdit = true, onToggleChecklist, onToggleMembership, onSave, onClose }) {
+export function TaskModal({ task, projects, users, currentUserId, defaultProjectId, defaultStatus, defaultParentId = null, canEdit = true, onToggleChecklist, onToggleMembership, onSave, onClose }) {
   const editing = !!task
   const ro = !canEdit // somente leitura (papel 'Só exibição'): só checklist + entrar/sair
+  const parentId = task?.parentId ?? defaultParentId ?? null
+  const isSubtask = !!parentId  // subtarefa herda o projeto da mãe → campo travado
   const [title, setTitle] = React.useState(task?.title || '')
   const [projectId, setProjectId] = React.useState(task?.projectId || defaultProjectId || projects[0]?.id || '')
   const [assigneeId, setAssigneeId] = React.useState(task?.assigneeId || users[0]?.id || '')
@@ -59,7 +61,7 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   const save = () => {
     setTouched(true)
     if (!title.trim() || !projectId || dErr) return
-    onSave({ ...(task || {}), title: title.trim(), projectId, assigneeId, memberIds: memberIds.filter(id => id !== assigneeId), status, priority, start, end, checklist })
+    onSave({ ...(task || {}), title: title.trim(), projectId, parentId, assigneeId, memberIds: memberIds.filter(id => id !== assigneeId), status, priority, start, end, checklist })
   }
 
   return (
@@ -80,11 +82,13 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
       </Field>
       <div className="field-row">
         <Field label="Projeto">
-          <select className="control" value={projectId} disabled={ro} onChange={e => setProjectId(e.target.value)}>
+          <select className="control" value={projectId} disabled={ro || isSubtask} onChange={e => setProjectId(e.target.value)}>
             <option value="" disabled>Selecione</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          {projErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{projErr}</span>}
+          {isSubtask
+            ? <span style={{ fontSize: 12, color: 'var(--fg-4)' }}>Subtarefa — herda o projeto da atividade-mãe.</span>
+            : projErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{projErr}</span>}
         </Field>
         <Field label="Responsável">
           <select className="control" value={assigneeId} disabled={ro} onChange={e => setAssigneeId(e.target.value)}>

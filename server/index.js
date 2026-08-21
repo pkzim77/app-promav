@@ -35,6 +35,7 @@ const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).cat
 const TASK_SELECT = `
   SELECT t.id,
          t.project_id  AS "projectId",
+         t.parent_id   AS "parentId",
          t.title,
          t.assignee_id AS "assigneeId",
          t.status,
@@ -548,13 +549,20 @@ app.get('/api/tasks', wrap(async (req, res) => {
 }))
 
 app.post('/api/tasks', gate((req) => req.body.projectId, CAN.edit), wrap(async (req, res) => {
-  const { projectId, title, assigneeId, status = 'todo', priority = 'medium', start, end, checklist = [], memberIds = [] } = req.body
+  const { projectId, title, assigneeId, status = 'todo', priority = 'medium', start, end, checklist = [], memberIds = [], parentId = null } = req.body
+  let pid = projectId
+  if (parentId) {
+    const [parent] = await q('SELECT project_id, parent_id FROM tasks WHERE id = $1', [parentId])
+    if (!parent) return res.status(400).json({ error: 'Atividade-mãe não encontrada.' })
+    if (parent.parent_id) return res.status(400).json({ error: 'Uma subtarefa não pode ter subtarefas.' })
+    pid = parent.project_id  // a subtarefa herda o projeto da mãe
+  }
   const id = genId('t')
   await tx(async (client) => {
     await client.query(
-      `INSERT INTO tasks (id, project_id, title, assignee_id, status, priority, start_date, end_date)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [id, projectId, title, assigneeId || null, status, priority, start, end]
+      `INSERT INTO tasks (id, project_id, title, assignee_id, status, priority, start_date, end_date, parent_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [id, pid, title, assigneeId || null, status, priority, start, end, parentId]
     )
     await replaceChildren(client, id, checklist, memberIds, assigneeId)
   })
@@ -686,6 +694,10 @@ async function ensureSchema() {
   await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS folder_id text REFERENCES folders(id) ON DELETE SET NULL')
   // Ordem do projeto na sidebar (dentro da pasta ou entre os soltos). Usado no drag-and-drop.
   await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0')
+
+  // Subtarefa: uma atividade pode ter uma atividade-mãe (um nível só). NULL = de
+  // topo. Apagar a mãe apaga as subtarefas junto (CASCADE).
+  await q('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_id text REFERENCES tasks(id) ON DELETE CASCADE')
 
   // ----- permissões -----
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin boolean NOT NULL DEFAULT false')
