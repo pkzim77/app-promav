@@ -29,6 +29,39 @@ export const PRIORITIES = [
 ]
 export const PRIORITY_MAP = Object.fromEntries(PRIORITIES.map(p => [p.id, p]))
 
+// ---------- ficha do projeto (dados do convênio) ----------
+// Origem do recurso do convênio (espelha o backend).
+export const RESOURCE_ORIGINS = [
+  { id: 'federal',   label: 'Governo Federal' },
+  { id: 'estadual',  label: 'Governo Estadual' },
+  { id: 'municipal', label: 'Prefeitura (recurso próprio)' },
+  { id: 'emenda',    label: 'Emenda parlamentar' },
+  { id: 'outro',     label: 'Outro' },
+]
+export const RESOURCE_ORIGIN_MAP = Object.fromEntries(RESOURCE_ORIGINS.map(o => [o.id, o]))
+
+// Status geral do projeto (diferente do status das atividades).
+export const PROJECT_STATUSES = [
+  { id: 'planejamento', label: 'Planejamento',  color: '#6E6A9B' },
+  { id: 'andamento',    label: 'Em andamento',  color: '#1f64cc' },
+  { id: 'paralisado',   label: 'Paralisado',    color: '#B0603F' },
+  { id: 'concluido',    label: 'Concluído',     color: '#157a49' },
+]
+export const PROJECT_STATUS_MAP = Object.fromEntries(PROJECT_STATUSES.map(s => [s.id, s]))
+
+// Formata um número como moeda brasileira (R$ 250.000,00). null/undefined → '—'.
+export function formatBRL(value) {
+  if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) return '—'
+  return Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+// Converte texto digitado ("250000,00", "R$ 250.000,00") em número. Vazio/inválido → null.
+export function parseBRL(text) {
+  const s = String(text || '').replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.')
+  if (!s) return null
+  const n = Number(s)
+  return Number.isFinite(n) && n >= 0 ? n : null
+}
+
 export const SEED_USERS = [
   { id: 'u1', name: 'Marina Souza',  initials: 'MS', color: 'var(--proj-blue)' },
   { id: 'u2', name: 'Lucas Rocha',   initials: 'LR', color: 'var(--proj-purple)' },

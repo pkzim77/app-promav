@@ -3,7 +3,7 @@ import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
 import { AvatarStack, StatusTag, PriorityTag, ProgressBar } from '../../components/primitives/primitives.jsx'
 import { TaskTimerButton } from '../../components/TimeTracker/TimeTracker.jsx'
-import { PROJECT_COLORS, projectProgress, taskProgress, checklistStats, taskMembers, fmtShort, fmtMed, formatBytes, effectiveProjectRole, canEditProject, ROLE_LABEL } from '../../data/store.js'
+import { PROJECT_COLORS, STATUSES, projectProgress, taskProgress, checklistStats, taskMembers, fmtShort, fmtMed, fmtFull, dayDiff, formatBytes, effectiveProjectRole, canEditProject, ROLE_LABEL, RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, formatBRL } from '../../data/store.js'
 import { api } from '../../data/api.js'
 // Projetos — grid of project cards, and a project detail view with task table.
 
@@ -373,7 +373,139 @@ function ProjectAbout({ notes, resources, canDelete, onCopyResource, onDeleteRes
   )
 }
 
+// Donut de progresso: arco único (uma série → sem legenda; o número no centro
+// é o próprio rótulo). Traço arredondado e trilha neutra, como no relatório.
+function ProgressDonut({ pct, size = 148, stroke = 16 }) {
+  const r = (size - stroke) / 2
+  const c = 2 * Math.PI * r
+  const color = pct === 100 ? 'var(--success)' : 'var(--brand)'
+  return (
+    <div className="cover-donut" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}
+        role="img" aria-label={`Progresso da obra: ${pct}%`}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--bg-muted)" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+          strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} strokeLinecap="round"
+          style={{ transition: 'stroke-dashoffset .7s var(--ease)' }} />
+      </svg>
+      <div className="cover-donut-center">
+        <span className="cover-donut-pct">{pct}<i>%</i></span>
+        <span className="cover-donut-cap">concluído</span>
+      </div>
+    </div>
+  )
+}
+
+// Capa do projeto: primeira aba, pensada para ser projetada numa reunião —
+// progresso da obra em destaque + a ficha do cadastro em blocos legíveis.
+function ProjectCover({ project, tasks, users }) {
+  const list = tasks.filter(t => t.projectId === project.id)
+  const pct = projectProgress(tasks, project.id)
+  const origem = RESOURCE_ORIGIN_MAP[project.origemRecurso]
+  const st = PROJECT_STATUS_MAP[project.status] || PROJECT_STATUS_MAP.planejamento
+  const responsibles = (project.responsibleIds || []).map(id => users.find(u => u.id === id)).filter(Boolean)
+  const dash = (v) => (v && String(v).trim() ? v : '—')
+
+  // Distribuição por status — cada fatia recebe rótulo e contagem (nunca só cor).
+  const breakdown = STATUSES.map(s => ({ ...s, n: list.filter(t => t.status === s.id).length }))
+  const dias = project.start && project.end ? dayDiff(project.start, project.end) : null
+
+  return (
+    <div className="proj-cover">
+      {/* ---- Faixa de destaque: progresso + valor + status ---- */}
+      <div className="card cover-hero">
+        <ProgressDonut pct={pct} />
+
+        <div className="cover-hero-main">
+          <span className="cover-eyebrow">Progresso da obra</span>
+          <div className="cover-breakdown">
+            {breakdown.map(s => (
+              <div className="cover-bd-item" key={s.id}>
+                <span className="cover-bd-dot" style={{ background: s.color }} />
+                <span className="cover-bd-num">{s.n}</span>
+                <span className="cover-bd-lab">{s.label}</span>
+              </div>
+            ))}
+          </div>
+          <div className="cover-bd-bar">
+            {breakdown.filter(s => s.n > 0).map(s => (
+              <span key={s.id} style={{ flex: s.n, background: s.color }} title={`${s.label}: ${s.n}`} />
+            ))}
+            {list.length === 0 && <span style={{ flex: 1, background: 'var(--bg-muted)' }} />}
+          </div>
+          <span className="cover-bd-total">{list.length} {list.length === 1 ? 'atividade' : 'atividades'} no total</span>
+        </div>
+
+        <div className="cover-hero-side">
+          <div className="cover-money">
+            <span className="cover-eyebrow">Valor do projeto</span>
+            <strong>{formatBRL(project.valorConvenio)}</strong>
+            {origem && <span className="cover-money-sub">{origem.label}</span>}
+          </div>
+          <span className="proj-status-badge lg" style={{ color: st.color, background: st.color + '1f' }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: st.color }} />{st.label}
+          </span>
+        </div>
+      </div>
+
+      {/* ---- Ficha do cadastro ---- */}
+      <div className="cover-facts">
+        <div className="card fact">
+          <span className="fact-ic"><Icon name="landmark" size={18} /></span>
+          <div>
+            <label>Prefeitura</label>
+            <div className="fact-value">{dash(project.prefeitura)}</div>
+            {project.secretaria && <div className="fact-sub">Secretaria de {project.secretaria}</div>}
+          </div>
+        </div>
+        <div className="card fact">
+          <span className="fact-ic"><Icon name="banknote" size={18} /></span>
+          <div>
+            <label>Origem do recurso</label>
+            <div className="fact-value">{origem ? origem.label : '—'}</div>
+          </div>
+        </div>
+        <div className="card fact">
+          <span className="fact-ic"><Icon name="calendar" size={18} /></span>
+          <div>
+            <label>Período de execução</label>
+            <div className="fact-value mono">{project.start ? fmtFull(project.start) : '—'} — {project.end ? fmtFull(project.end) : '—'}</div>
+            {dias != null && <div className="fact-sub">{dias} dias de prazo</div>}
+          </div>
+        </div>
+      </div>
+
+      {/* ---- Responsáveis ---- */}
+      <div className="card cover-block">
+        <h3>Profissionais responsáveis</h3>
+        {responsibles.length === 0 ? (
+          <p className="cover-empty">Nenhum profissional definido ainda. Edite o projeto para incluir.</p>
+        ) : (
+          <div className="ds-people">
+            {responsibles.map(u => (
+              <span className="ds-person" key={u.id}>
+                <span className="av" style={{ width: 28, height: 28, background: u.color, fontSize: 10 }}>{u.initials}</span>
+                {u.name}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ---- Observações ---- */}
+      {project.notes && (
+        <div className="card cover-block">
+          <h3>Observações</h3>
+          <NotesText text={project.notes} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function ProjectDetail({ project, tasks, users, sessions, currentUserId, now, canEdit = true, role, onStartTimer, onStopTimer, onBack, onEdit, onNewTask, onEditTask, onDeleteTask, onCopyResource, onDeleteResource, onAddResource }) {
+  // A capa ("Dados do projeto") abre primeiro: é o que se mostra numa reunião.
+  const [tab, setTab] = React.useState('data') // 'data' | 'overview'
   const list = tasks.filter(t => t.projectId === project.id)
   const pct = projectProgress(tasks, project.id)
   const color = PROJECT_COLORS[project.color]
@@ -398,6 +530,20 @@ export function ProjectDetail({ project, tasks, users, sessions, currentUserId, 
         {canEdit && <button className="btn btn-primary" onClick={() => onNewTask(project.id)}><Icon name="plus" size={17} stroke={2.2} />Nova atividade</button>}
       </div>
 
+      {/* Abas: a capa (Dados do projeto) vem primeiro; depois as atividades. */}
+      <div className="proj-tabs">
+        <button className={'proj-tab' + (tab === 'data' ? ' on' : '')} onClick={() => setTab('data')}>
+          <Icon name="landmark" size={15} />Dados do projeto
+        </button>
+        <button className={'proj-tab' + (tab === 'overview' ? ' on' : '')} onClick={() => setTab('overview')}>
+          <Icon name="list" size={15} />Atividades
+        </button>
+      </div>
+
+      {tab === 'data' ? (
+        <ProjectCover project={project} tasks={tasks} users={users} />
+      ) : (
+      <>
       <div className="card" style={{ padding: 18, marginBottom: 22, display: 'flex', alignItems: 'center', gap: 20 }}>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -431,6 +577,8 @@ export function ProjectDetail({ project, tasks, users, sessions, currentUserId, 
             </tbody>
           </table>
         </div>
+      )}
+      </>
       )}
     </div>
   )

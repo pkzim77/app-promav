@@ -2,7 +2,7 @@ import './Modals.css'
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field, SegControl, StatusTag, PriorityTag } from '../primitives/primitives.jsx'
-import { STATUSES, PRIORITIES, PROJECT_HEX, MAX_FILE_BYTES, formatBytes, PROJECT_ROLES } from '../../data/store.js'
+import { STATUSES, PRIORITIES, PROJECT_HEX, MAX_FILE_BYTES, formatBytes, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, parseBRL } from '../../data/store.js'
 // Create/edit modals for tasks and projects + confirm dialog. Includes validation.
 
 function dateError(start, end) {
@@ -415,42 +415,74 @@ function ResourceEditor({ resources, onChange }) {
   )
 }
 
-// Quem participa do projeto (só administradores veem). A lista é a porta de
-// entrada: quem estiver como "Sem acesso" NÃO enxerga o projeto no sistema.
-// Administradores têm acesso total a tudo e não entram na lista.
-function PermissionsEditor({ users, members, onChangeMembers }) {
+// Equipe do projeto — lista única que resolve duas coisas de uma vez:
+//  • acesso: quem estiver como "Sem acesso" NÃO enxerga o projeto no sistema
+//    (administradores têm acesso total e não têm seletor);
+//  • responsabilidade: o check da esquerda marca quem responde pelo projeto.
+// O seletor de acesso só aparece para administradores; os demais veem o papel
+// como texto (o backend também ignora alterações de permissão de não-admins).
+function ProjectTeamEditor({ users, members, responsibleIds, onChangeMembers, onChangeResponsibles, isAdmin, error }) {
   const roleOf = (userId) => members.find(x => x.userId === userId)?.role || 'none'
   const setRole = (userId, value) => {
     const others = members.filter(x => x.userId !== userId)
     onChangeMembers(value === 'none' ? others : [...others, { userId, role: value }])
   }
+  const isResp = (userId) => responsibleIds.includes(userId)
+  // Marcar alguém como responsável garante que ele enxergue o projeto:
+  // se estiver "Sem acesso", passa a ter Edição total automaticamente.
+  const toggleResp = (u) => {
+    if (isResp(u.id)) { onChangeResponsibles(responsibleIds.filter(x => x !== u.id)); return }
+    onChangeResponsibles([...responsibleIds, u.id])
+    if (isAdmin && !u.isAdmin && roleOf(u.id) === 'none') setRole(u.id, 'full')
+  }
+
   const comAcesso = users.filter(u => !u.isAdmin && roleOf(u.id) !== 'none').length
+  const nResp = users.filter(u => isResp(u.id)).length
+
   return (
     <div className="field">
       <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        Quem participa
-        <span style={{ fontWeight: 400, color: 'var(--fg-4)', fontSize: 12.5 }}>só quem estiver aqui enxerga o projeto</span>
+        Equipe do projeto
+        <span style={{ fontWeight: 400, color: 'var(--fg-4)', fontSize: 12.5 }}>marque quem responde pelo projeto</span>
       </label>
-      <div className="perm-list">
-        {users.map(u => (
-          <div className="perm-row" key={u.id}>
-            <span className="av" style={{ width: 26, height: 26, background: u.color, fontSize: 10 }}>{u.initials}</span>
-            <span className="perm-name">{u.name}{u.isAdmin ? ' · admin' : ''}</span>
-            {u.isAdmin ? (
-              <span className="perm-admin-tag">Acesso total</span>
-            ) : (
-              <select className="control perm-select" value={roleOf(u.id)} onChange={e => setRole(u.id, e.target.value)}>
-                <option value="none">Sem acesso</option>
-                {PROJECT_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
-              </select>
-            )}
-          </div>
-        ))}
+      <div className="perm-head">
+        <span className="perm-head-resp">Resp.</span>
+        <span>Pessoa</span>
+        {isAdmin && <span className="perm-head-role">Acesso ao projeto</span>}
       </div>
+      <div className="perm-list">
+        {users.map(u => {
+          const resp = isResp(u.id)
+          return (
+            <div className={'perm-row' + (resp ? ' is-resp' : '')} key={u.id}>
+              <button type="button" role="checkbox" aria-checked={resp}
+                className={'resp-check' + (resp ? ' on' : '')}
+                title={resp ? 'Remover como responsável' : 'Marcar como responsável'}
+                onClick={() => toggleResp(u)}>
+                {resp && <Icon name="check" size={13} stroke={3} />}
+              </button>
+              <span className="av" style={{ width: 26, height: 26, background: u.color, fontSize: 10 }}>{u.initials}</span>
+              <span className="perm-name">{u.name}{u.isAdmin ? ' · admin' : ''}</span>
+              {u.isAdmin ? (
+                <span className="perm-admin-tag">Acesso total</span>
+              ) : isAdmin ? (
+                <select className="control perm-select" value={roleOf(u.id)} onChange={e => setRole(u.id, e.target.value)}>
+                  <option value="none">Sem acesso</option>
+                  {PROJECT_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+                </select>
+              ) : (
+                <span className="perm-role-static">{ROLE_LABEL[roleOf(u.id)] || 'Sem acesso'}</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      {error && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{error}</span>}
       <div className="perm-default-label" style={{ marginTop: 10 }}>
         {comAcesso === 0
           ? 'Ninguém além dos administradores vê este projeto.'
           : `${comAcesso} ${comAcesso === 1 ? 'pessoa vê' : 'pessoas veem'} este projeto (além dos administradores).`}
+        {nResp > 0 && ` · ${nResp} ${nResp === 1 ? 'responsável' : 'responsáveis'}.`}
       </div>
     </div>
   )
@@ -467,15 +499,35 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const [notes, setNotes] = React.useState(project?.notes || '')
   const [resources, setResources] = React.useState(project?.resources ? project.resources.map(r => ({ ...r })) : [])
   const [members, setMembers] = React.useState(project?.members ? project.members.map(m => ({ ...m })) : [])
+  // ----- ficha do projeto (dados do convênio) -----
+  const [prefeitura, setPrefeitura] = React.useState(project?.prefeitura || '')
+  const [secretaria, setSecretaria] = React.useState(project?.secretaria || '')
+  const [responsibleIds, setResponsibleIds] = React.useState(project?.responsibleIds ? [...project.responsibleIds] : [])
+  const [origemRecurso, setOrigemRecurso] = React.useState(project?.origemRecurso || 'federal')
+  // Valor do convênio: mantido como texto enquanto digita; convertido ao salvar.
+  const [valorText, setValorText] = React.useState(
+    project?.valorConvenio != null
+      ? Number(project.valorConvenio).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : ''
+  )
+  const [projStatus, setProjStatus] = React.useState(project?.status || 'planejamento')
   const [touched, setTouched] = React.useState(false)
 
   const dErr = dateError(start, end)
   const nameErr = touched && !name.trim() ? 'Informe um nome.' : null
+  const prefErr = touched && !prefeitura.trim() ? 'Informe a prefeitura.' : null
+  const respErr = touched && responsibleIds.length === 0 ? 'Selecione ao menos um profissional responsável.' : null
+  const valorErr = touched && valorText.trim() && parseBRL(valorText) === null ? 'Valor inválido. Ex.: 250000,00' : null
 
   const save = () => {
     setTouched(true)
-    if (!name.trim() || dErr) return
-    onSave({ ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start, end, notes: notes.trim(), resources, members })
+    if (!name.trim() || !prefeitura.trim() || responsibleIds.length === 0 || dErr) return
+    if (valorText.trim() && parseBRL(valorText) === null) return
+    onSave({
+      ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start, end, notes: notes.trim(), resources, members,
+      prefeitura: prefeitura.trim(), secretaria: secretaria.trim(), responsibleIds,
+      origemRecurso, valorConvenio: parseBRL(valorText), status: projStatus,
+    })
   }
 
   return (
@@ -491,6 +543,40 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
       <Field label="Descrição">
         <textarea className="control" value={desc} placeholder="Sobre o que é este projeto?" onChange={e => setDesc(e.target.value)} />
       </Field>
+
+      <div className="field-row">
+        <Field label="Prefeitura">
+          <input className="control" value={prefeitura} placeholder="Ex.: Umari" onChange={e => setPrefeitura(e.target.value)} />
+          {prefErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{prefErr}</span>}
+        </Field>
+        <Field label="Secretaria">
+          <input className="control" value={secretaria} placeholder="Ex.: Educação" onChange={e => setSecretaria(e.target.value)} />
+        </Field>
+      </div>
+
+      <ProjectTeamEditor users={users} members={members} responsibleIds={responsibleIds}
+        onChangeMembers={setMembers} onChangeResponsibles={setResponsibleIds}
+        isAdmin={isAdmin} error={respErr} />
+
+      <div className="field-row">
+        <Field label="Origem do recurso">
+          <select className="control" value={origemRecurso} onChange={e => setOrigemRecurso(e.target.value)}>
+            {RESOURCE_ORIGINS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
+        </Field>
+        <Field label="Valor do projeto (R$)">
+          <input className="control" value={valorText} placeholder="Ex.: 250000,00" inputMode="decimal"
+            onChange={e => setValorText(e.target.value)} />
+          {valorErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{valorErr}</span>}
+        </Field>
+      </div>
+
+      <Field label="Status do projeto">
+        <select className="control" value={projStatus} onChange={e => setProjStatus(e.target.value)}>
+          {PROJECT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+        </select>
+      </Field>
+
       <Field label="Pasta">
         <select className="control" value={folderId} onChange={e => setFolderId(e.target.value)}>
           <option value="">Sem pasta</option>
@@ -508,9 +594,6 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
           placeholder="Contexto, objetivos, observações… O que ajuda a entender o projeto. Links colados aqui viram clicáveis."
           onChange={e => setNotes(e.target.value)} />
       </Field>
-      {isAdmin && (
-        <PermissionsEditor users={users} members={members} onChangeMembers={setMembers} />
-      )}
       <Field label="Cor">
         <div className="color-swatches">
           {Object.keys(PROJECT_HEX).map(k => (

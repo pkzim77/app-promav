@@ -59,6 +59,12 @@ const PROJECT_SELECT = `
          position,
          notes,
          resources,
+         prefeitura,
+         secretaria,
+         origem_recurso AS "origemRecurso",
+         valor_convenio::float8 AS "valorConvenio",
+         status,
+         responsible_ids AS "responsibleIds",
          default_role AS "defaultRole",
          COALESCE((
            SELECT json_agg(json_build_object('userId', pm.user_id, 'role', pm.role) ORDER BY pm.user_id)
@@ -97,6 +103,22 @@ function normalizeResources(input) {
     })
     .filter(Boolean)
 }
+
+// ----- dados do convênio (ficha do projeto) -----
+// Origem do recurso e status do projeto: listas fixas (espelham store.js).
+const ORIGENS_RECURSO = ['federal', 'estadual', 'municipal', 'emenda', 'outro']
+const PROJ_STATUSES = ['planejamento', 'andamento', 'paralisado', 'concluido']
+const normOrigem = (v) => (ORIGENS_RECURSO.includes(v) ? v : 'federal')
+const normProjStatus = (v) => (PROJ_STATUSES.includes(v) ? v : 'planejamento')
+// Valor do convênio: número >= 0 ou null (não informado).
+const normValor = (v) => {
+  if (v === null || v === undefined || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) && n >= 0 ? n : null
+}
+// Profissionais responsáveis: lista de ids de usuários, sem duplicados.
+const normResponsibles = (v) =>
+  Array.isArray(v) ? [...new Set(v.filter((x) => typeof x === 'string' && x))] : []
 
 // Papéis válidos por projeto: 'full' (Edição total) e 'view' (Só exibição).
 // 'admin' é global (users.is_admin) e tem poder total em todos os projetos.
@@ -324,12 +346,18 @@ app.get('/api/projects', wrap(async (req, res) => {
 
 // Criar projeto: só administradores. Já grava papel padrão e exceções por pessoa.
 app.post('/api/projects', requireAdmin, wrap(async (req, res) => {
-  const { name, desc = '', color = 'indigo', folderId = null, start, end, notes = '', resources = [], defaultRole = 'full', members = [] } = req.body
+  const {
+    name, desc = '', color = 'indigo', folderId = null, start, end, notes = '', resources = [], defaultRole = 'full', members = [],
+    prefeitura = '', secretaria = '', origemRecurso, valorConvenio, status, responsibleIds = [],
+  } = req.body
   const id = genId('p')
   await tx(async (client) => {
     await client.query(
-      'INSERT INTO projects (id, name, description, color, folder_id, start_date, end_date, notes, resources, default_role) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-      [id, name, desc, color, folderId || null, start, end, notes, JSON.stringify(normalizeResources(resources)), normDefaultRole(defaultRole)]
+      `INSERT INTO projects (id, name, description, color, folder_id, start_date, end_date, notes, resources, default_role,
+                             prefeitura, secretaria, origem_recurso, valor_convenio, status, responsible_ids)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+      [id, name, desc, color, folderId || null, start, end, notes, JSON.stringify(normalizeResources(resources)), normDefaultRole(defaultRole),
+       String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso), normValor(valorConvenio), normProjStatus(status), JSON.stringify(normResponsibles(responsibleIds))]
     )
     await replaceMembers(client, id, members)
   })
@@ -357,13 +385,19 @@ app.put('/api/projects/reorder', requireAdmin, wrap(async (req, res) => {
 // Editar projeto: precisa de Edição total. Papel padrão e exceções (permissões)
 // só são alterados por administradores.
 app.put('/api/projects/:id', gate((req) => req.params.id, CAN.edit), wrap(async (req, res) => {
-  const { name, desc = '', color, folderId = null, start, end, notes = '', resources = [], defaultRole, members } = req.body
+  const {
+    name, desc = '', color, folderId = null, start, end, notes = '', resources = [], defaultRole, members,
+    prefeitura = '', secretaria = '', origemRecurso, valorConvenio, status, responsibleIds = [],
+  } = req.body
   const clean = normalizeResources(resources)
   const isAdmin = req.projectRole === 'admin'
   const ok = await tx(async (client) => {
     const r = await client.query(
-      'UPDATE projects SET name = $2, description = $3, color = $4, folder_id = $5, start_date = $6, end_date = $7, notes = $8, resources = $9 WHERE id = $1 RETURNING id',
-      [req.params.id, name, desc, color, folderId || null, start, end, notes, JSON.stringify(clean)]
+      `UPDATE projects SET name = $2, description = $3, color = $4, folder_id = $5, start_date = $6, end_date = $7, notes = $8, resources = $9,
+                           prefeitura = $10, secretaria = $11, origem_recurso = $12, valor_convenio = $13, status = $14, responsible_ids = $15
+       WHERE id = $1 RETURNING id`,
+      [req.params.id, name, desc, color, folderId || null, start, end, notes, JSON.stringify(clean),
+       String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso), normValor(valorConvenio), normProjStatus(status), JSON.stringify(normResponsibles(responsibleIds))]
     )
     if (!r.rows.length) return false
     await pruneOrphanFiles(client, req.params.id, clean) // remove arquivos não referenciados
@@ -686,6 +720,18 @@ async function ensureSchema() {
   await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS folder_id text REFERENCES folders(id) ON DELETE SET NULL')
   // Ordem do projeto na sidebar (dentro da pasta ou entre os soltos). Usado no drag-and-drop.
   await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0')
+
+  // ----- ficha do projeto (dados do convênio) -----
+  await q("ALTER TABLE projects ADD COLUMN IF NOT EXISTS prefeitura text NOT NULL DEFAULT ''")
+  await q("ALTER TABLE projects ADD COLUMN IF NOT EXISTS secretaria text NOT NULL DEFAULT ''")
+  // Origem do recurso: federal | estadual | municipal | emenda | outro.
+  await q("ALTER TABLE projects ADD COLUMN IF NOT EXISTS origem_recurso text NOT NULL DEFAULT 'federal'")
+  // Valor do convênio em reais. NULL = não informado.
+  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS valor_convenio numeric(14,2)')
+  // Status do projeto: planejamento | andamento | paralisado | concluido.
+  await q("ALTER TABLE projects ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'planejamento'")
+  // Profissionais responsáveis: lista (jsonb) de ids de usuários.
+  await q(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS responsible_ids jsonb NOT NULL DEFAULT '[]'::jsonb`)
 
   // ----- permissões -----
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin boolean NOT NULL DEFAULT false')
