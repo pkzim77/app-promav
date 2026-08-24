@@ -36,6 +36,7 @@ export function TaskListView({ tasks, projects, users, authUser, filterProject, 
   const canCreate = filterProject
     ? canEditProject(effectiveProjectRole(projOf(filterProject), authUser))
     : projects.some(p => canEditProject(effectiveProjectRole(p, authUser)))
+  const createProjectId = filterProject || projects.find(p => canEditProject(effectiveProjectRole(p, authUser)))?.id || null
 
   const stOf = (id) => STATUSES.find(s => s.id === id)
 
@@ -94,7 +95,7 @@ export function TaskListView({ tasks, projects, users, authUser, filterProject, 
     <div className="page">
       <div className="sec-head">
         <div><h2>Lista</h2><div className="sub">Todas as atividades em formato de lista, agrupadas por status.</div></div>
-        {canCreate && <button className="btn btn-primary" onClick={() => onNewTask(filterProject || null)}><Icon name="plus" size={17} stroke={2.2} />Nova atividade</button>}
+        {canCreate && <button className="btn btn-primary" onClick={() => onNewTask(createProjectId)}><Icon name="plus" size={17} stroke={2.2} />Nova atividade</button>}
       </div>
       <div className="filterbar">
         <select className="filter-select" value={filterProject || ''} aria-label="Filtrar por projeto"
@@ -142,7 +143,7 @@ export function TaskListView({ tasks, projects, users, authUser, filterProject, 
                 )}
 
                 {open && canCreate && (
-                  <button className="lv-add" onClick={() => onNewTask(filterProject || null, col.id)}>
+                  <button className="lv-add" onClick={() => onNewTask(createProjectId, col.id)}>
                     <Icon name="plus" size={15} stroke={2.2} />Adicionar atividade
                   </button>
                 )}
