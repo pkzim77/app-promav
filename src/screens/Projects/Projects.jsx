@@ -153,8 +153,8 @@ export function EmptyState({ icon, title, text, action }) {
 function TaskRow({ task, members, sessions, currentUserId, now, canEdit, onStartTimer, onStopTimer, onEdit, onDelete }) {
   const resp = members[0]
   return (
-    <tr>
-      <td style={{ width: '28%' }}><button className="task-title task-title-btn" onClick={() => onEdit(task)}>{task.title}</button></td>
+    <tr className="task-row-clickable" onClick={() => onEdit(task)}>
+      <td style={{ width: '28%' }}><button className="task-title task-title-btn" onClick={(e) => { e.stopPropagation(); onEdit(task) }}>{task.title}</button></td>
       <td><StatusTag status={task.status} /></td>
       <td><PriorityTag priority={task.priority} /></td>
       <td>
@@ -177,8 +177,8 @@ function TaskRow({ task, members, sessions, currentUserId, now, canEdit, onStart
       </td>
       <td style={{ width: 70 }}>
         <div className="row-actions">
-          <button className="btn-icon" onClick={() => onEdit(task)} aria-label={canEdit ? 'Editar' : 'Ver'}><Icon name={canEdit ? 'pencil' : 'externalLink'} size={15} /></button>
-          {canEdit && <button className="btn-icon" onClick={() => onDelete(task)} aria-label="Excluir"><Icon name="trash" size={15} /></button>}
+          <button className="btn-icon" onClick={(e) => { e.stopPropagation(); onEdit(task) }} aria-label={canEdit ? 'Editar' : 'Ver'}><Icon name={canEdit ? 'pencil' : 'externalLink'} size={15} /></button>
+          {canEdit && <button className="btn-icon" onClick={(e) => { e.stopPropagation(); onDelete(task) }} aria-label="Excluir"><Icon name="trash" size={15} /></button>}
         </div>
       </td>
     </tr>
@@ -672,9 +672,6 @@ export function ProjectDetail({ project, tasks, users, sessions, currentUserId, 
             <Icon name="calendar" size={15} />{fmtMed(project.start)} — {fmtMed(project.end)}
           </div>
         </div>
-        {role && role !== 'admin' && (
-          <span className="role-badge" title="Seu acesso neste projeto">{ROLE_LABEL[role]}</span>
-        )}
         {canEdit && <button className="btn btn-secondary" onClick={() => onEdit(project)}><Icon name="pencil" size={16} />Editar</button>}
         {canEdit && <button className="btn btn-primary" onClick={() => onNewTask(project.id)}><Icon name="plus" size={17} stroke={2.2} />Nova atividade</button>}
       </div>

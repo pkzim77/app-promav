@@ -42,6 +42,8 @@
 
 .tasktable tbody tr { transition: background var(--dur); }
 
+.tasktable tbody .task-row-clickable { cursor: pointer; }
+
 .tasktable tbody tr:hover { background: var(--bg-subtle); }
 
 .task-title { font-weight: 600; color: var(--fg-1); }

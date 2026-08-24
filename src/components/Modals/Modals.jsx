@@ -37,14 +37,15 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   const isSubtask = !!parentId  // subtarefa herda o projeto da mãe → campo travado
   const [title, setTitle] = React.useState(task?.title || '')
   const [projectId, setProjectId] = React.useState(task?.projectId || defaultProjectId || projects[0]?.id || '')
-  const [assigneeId, setAssigneeId] = React.useState(task?.assigneeId || users[0]?.id || '')
+  const [assigneeId, setAssigneeId] = React.useState(task?.assigneeId || '')
   const [memberIds, setMemberIds] = React.useState(task?.memberIds ? [...task.memberIds] : [])
   const [status, setStatus] = React.useState(task?.status || defaultStatus || 'todo')
   const [priority, setPriority] = React.useState(task?.priority || 'medium')
-  const [start, setStart] = React.useState(task?.start || '2026-05-26')
-  const [end, setEnd] = React.useState(task?.end || '2026-06-05')
+  const [start, setStart] = React.useState(task?.start || '')
+  const [end, setEnd] = React.useState(task?.end || '')
   const [checklist, setChecklist] = React.useState(task?.checklist ? task.checklist.map(i => ({ ...i })) : [])
   const [newItem, setNewItem] = React.useState('')
+  const [selectedMemberId, setSelectedMemberId] = React.useState('')
   const [touched, setTouched] = React.useState(false)
 
   const ckDone = checklist.filter(i => i.done).length
@@ -63,7 +64,12 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   }
   const removeItem = (id) => setChecklist(c => c.filter(i => i.id !== id))
 
-  const toggleMember = (id) => setMemberIds(m => m.includes(id) ? m.filter(x => x !== id) : [...m, id])
+  const addMember = () => {
+    if (!selectedMemberId) return
+    setMemberIds(m => m.includes(selectedMemberId) ? m : [...m, selectedMemberId])
+    setSelectedMemberId('')
+  }
+  const removeMember = (id) => setMemberIds(m => m.filter(x => x !== id))
 
   // Auto-participação (viewers): entrar/sair só da própria participação, sem salvar o resto.
   const meAssignee = assigneeId === currentUserId
@@ -74,6 +80,9 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
     if (onToggleMembership && task) onToggleMembership(task, join)
   }
 
+  const activityMembers = users.filter(u => u.id === assigneeId || memberIds.includes(u.id))
+  const availableMembers = users.filter(u => !u.isAdmin && u.id !== assigneeId && !memberIds.includes(u.id))
+
   const dErr = dateError(start, end)
   const titleErr = touched && !title.trim() ? 'Informe um título.' : null
   const projErr = touched && !projectId ? 'Selecione um projeto.' : null
@@ -81,11 +90,11 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   const save = () => {
     setTouched(true)
     if (!title.trim() || !projectId || dErr) return
-    onSave({ ...(task || {}), title: title.trim(), projectId, parentId, assigneeId, memberIds: memberIds.filter(id => id !== assigneeId), status, priority, start, end, checklist })
+    onSave({ ...(task || {}), title: title.trim(), projectId, parentId, assigneeId, memberIds: memberIds.filter(id => id !== assigneeId), status, priority, start: start || null, end: end || null, checklist })
   }
 
   return (
-    <Modal title={ro ? 'Detalhes da atividade' : (editing ? 'Editar atividade' : 'Nova atividade')} onClose={onClose}
+    <Modal className="task-modal" title={ro ? 'Detalhes da atividade' : (editing ? 'Editar atividade' : 'Nova atividade')} onClose={onClose}
       footer={ro ? (
         <button className="btn btn-secondary" onClick={onClose}>Fechar</button>
       ) : (<>
@@ -112,6 +121,7 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
         </Field>
         <Field label="Responsável">
           <select className="control" value={assigneeId} disabled={ro} onChange={e => setAssigneeId(e.target.value)}>
+            <option value="">Sem responsável</option>
             {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
         </Field>
@@ -132,25 +142,37 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
             </button>
           )
         )}
+        {!ro && (
+          <div className="perm-add">
+            <select className="control" value={selectedMemberId} onChange={e => setSelectedMemberId(e.target.value)}>
+              <option value="">Selecionar pessoa</option>
+              {availableMembers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={!selectedMemberId} onClick={addMember}>
+              <Icon name="plus" size={15} stroke={2.2} />Adicionar
+            </button>
+          </div>
+        )}
         <div className="member-picker">
-          {users.map(u => {
+          {activityMembers.map(u => {
             const isResp = u.id === assigneeId
             const on = isResp || memberIds.includes(u.id)
             return (
               <button type="button" key={u.id}
                 className={'member-chip' + (on ? ' on' : '') + (isResp ? ' resp' : '')}
                 disabled={isResp || ro}
-                title={isResp ? 'Responsável' : (on ? 'Remover' : 'Adicionar')}
-                onClick={() => toggleMember(u.id)}>
+                title={isResp ? 'Responsável' : 'Remover'}
+                onClick={() => removeMember(u.id)}>
                 <span className="av" style={{ width: 22, height: 22, background: u.color, fontSize: 9 }}>{u.initials}</span>
                 {u.name.split(' ')[0]}
                 {isResp
                   ? <span className="member-tag">resp.</span>
-                  : on && <Icon name="check" size={13} stroke={2.6} style={{ color: 'var(--brand)' }} />}
+                  : on && <Icon name="x" size={13} stroke={2.2} style={{ color: 'var(--fg-4)' }} />}
               </button>
             )
           })}
         </div>
+        {!activityMembers.length && <div className="perm-empty">Nenhum membro adicionado.</div>}
       </div>
       <Field label="Prioridade">{ro ? <PriorityTag priority={priority} /> : <SegControl options={PRIORITIES} value={priority} onChange={setPriority} />}</Field>
 

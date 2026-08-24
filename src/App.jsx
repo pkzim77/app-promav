@@ -261,7 +261,7 @@ export default function App() {
         setTasks(ts => [...ts, saved]); flash('Atividade criada.')
       }
       setModal(null)
-    } catch (e) { flash('Erro ao salvar atividade.') }
+    } catch (e) { flash(e.message || 'Erro ao salvar atividade.') }
   }
   const askDeleteTask = (task) => setModal({
     type: 'confirm', title: 'Excluir atividade?',
@@ -395,7 +395,7 @@ export default function App() {
       {modal?.type === 'task' && (
         <TaskModal task={modal.task} projects={projects} users={users} currentUserId={currentUserId}
           defaultProjectId={modal.defaultProjectId} defaultStatus={modal.defaultStatus} defaultParentId={modal.defaultParentId}
-          canEdit={modal.task ? canEditProject(effectiveProjectRole(projects.find(p => p.id === modal.task.projectId), authUser)) : isAdmin}
+          canEdit={canEditProject(effectiveProjectRole(projects.find(p => p.id === (modal.task?.projectId || modal.defaultProjectId)), authUser))}
           onToggleChecklist={toggleChecklistItem} onToggleMembership={toggleMyMembership}
           onSave={saveTask} onClose={() => setModal(null)} />
       )}
