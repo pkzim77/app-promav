@@ -35,7 +35,6 @@ const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).cat
 const TASK_SELECT = `
   SELECT t.id,
          t.project_id  AS "projectId",
-         t.parent_id   AS "parentId",
          t.title,
          t.assignee_id AS "assigneeId",
          t.status,
@@ -587,20 +586,13 @@ app.get('/api/tasks', wrap(async (req, res) => {
 }))
 
 app.post('/api/tasks', gate((req) => req.body.projectId, CAN.edit), wrap(async (req, res) => {
-  const { projectId, title, assigneeId, status = 'todo', priority = 'medium', start, end, checklist = [], memberIds = [], parentId = null } = req.body
-  let pid = projectId
-  if (parentId) {
-    const [parent] = await q('SELECT project_id, parent_id FROM tasks WHERE id = $1', [parentId])
-    if (!parent) return res.status(400).json({ error: 'Atividade-mãe não encontrada.' })
-    if (parent.parent_id) return res.status(400).json({ error: 'Uma subtarefa não pode ter subtarefas.' })
-    pid = parent.project_id  // a subtarefa herda o projeto da mãe
-  }
+  const { projectId, title, assigneeId, status = 'todo', priority = 'medium', start, end, checklist = [], memberIds = [] } = req.body
   const id = genId('t')
   await tx(async (client) => {
     await client.query(
-      `INSERT INTO tasks (id, project_id, title, assignee_id, status, priority, start_date, end_date, parent_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [id, pid, title, assigneeId || null, status, priority, start, end, parentId]
+      `INSERT INTO tasks (id, project_id, title, assignee_id, status, priority, start_date, end_date)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [id, projectId, title, assigneeId || null, status, priority, start, end]
     )
     await replaceChildren(client, id, checklist, memberIds, assigneeId)
   })

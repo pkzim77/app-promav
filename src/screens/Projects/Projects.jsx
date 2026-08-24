@@ -434,6 +434,47 @@ function StatusPie({ slices, size = 180, hovered, onHover }) {
   )
 }
 
+// Soma meses a uma data limitando ao último dia do mês de destino: sem isso,
+// 31/01 + 1 mês viraria 03/03 (o Date estoura fevereiro) e a conta se perde.
+function addMeses(d, n) {
+  const ultimoDia = new Date(d.getFullYear(), d.getMonth() + n + 1, 0).getDate()
+  return new Date(d.getFullYear(), d.getMonth() + n, Math.min(d.getDate(), ultimoDia))
+}
+
+// Diferença de calendário entre duas datas, em anos/meses/dias reais — não em
+// médias de 30 dias, que erram meses cheios e soam falsas num cronograma.
+// Conta os meses inteiros que cabem no intervalo e mede o resto em dias.
+function diffCalendario(deISO, ateISO) {
+  const a = parseDate(deISO), b = parseDate(ateISO)
+  if (b <= a) return { anos: 0, meses: 0, dias: 0 }
+  let meses = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth())
+  if (addMeses(a, meses) > b) meses-- // passou do destino: recua um mês
+  const base = addMeses(a, meses)
+  const dias = Math.round((b - base) / 86400000)
+  return { anos: Math.floor(meses / 12), meses: meses % 12, dias }
+}
+
+// "3 meses e 6 dias", "1 ano e 2 meses", "15 dias". Usa no máximo duas unidades:
+// com anos na frente, os dias viram ruído.
+function prazoPorExtenso(deISO, ateISO) {
+  const { anos, meses, dias } = diffCalendario(deISO, ateISO)
+  const un = (n, sing, plur) => `${n} ${n === 1 ? sing : plur}`
+  const partes = []
+  if (anos > 0) {
+    partes.push(un(anos, 'ano', 'anos'))
+    if (meses > 0) partes.push(un(meses, 'mês', 'meses'))
+  } else if (meses > 0) {
+    partes.push(un(meses, 'mês', 'meses'))
+    if (dias > 0) partes.push(un(dias, 'dia', 'dias'))
+  } else if (dias > 0) {
+    partes.push(un(dias, 'dia', 'dias'))
+  }
+  if (!partes.length) return null // mesma data
+  // "Falta 1 dia" / "Faltam 3 meses e 6 dias" — evita concordar "restante(s)".
+  const singular = partes.length === 1 && /^1 /.test(partes[0])
+  return { texto: partes.join(' e '), singular }
+}
+
 // Cronograma: quanto do prazo já passou contra quanto do projeto foi executado.
 // É a leitura que importa numa reunião — 60% executado com 80% do prazo
 // consumido é atraso, mesmo o número de progresso parecendo bom sozinho.
@@ -481,10 +522,22 @@ function Cronograma({ start, end, executado }) {
 
       <div className="crono-foot">
         <span><Icon name="calendar" size={14} />{fmtFull(start)}</span>
-        <span className="crono-foot-mid">
-          {naoComecou ? `Começa em ${dayDiff(hoje, start)} dias`
-            : terminou ? 'Prazo encerrado'
-            : `${restam} ${restam === 1 ? 'dia restante' : 'dias restantes'}`}
+        {/* Prazo por extenso; o número exato de dias fica no title, para quem
+            precisar da precisão sem poluir a leitura. */}
+        <span className="crono-foot-mid" title={`${restam} ${restam === 1 ? 'dia' : 'dias'}`}>
+          {(() => {
+            if (naoComecou) {
+              const p = prazoPorExtenso(hoje, start)
+              return p ? `Começa em ${p.texto}` : 'Começa hoje'
+            }
+            if (terminou) {
+              const p = prazoPorExtenso(end, hoje)
+              return p ? `Prazo encerrado há ${p.texto}` : 'Prazo encerrado hoje'
+            }
+            const p = prazoPorExtenso(hoje, end)
+            if (!p) return 'Último dia do prazo'
+            return `${p.singular ? 'Falta' : 'Faltam'} ${p.texto}`
+          })()}
         </span>
         <span>{fmtFull(end)}<Icon name="flag" size={14} /></span>
       </div>
