@@ -8,6 +8,8 @@
 
 .project-modal { max-width: 900px; }
 
+.task-modal { max-width: 900px; }
+
 .color-swatches { display: flex; gap: 10px; }
 
 .color-swatches button { width: 30px; height: 30px; border-radius: var(--r-sm); border: 2px solid transparent; transition: transform var(--dur); }

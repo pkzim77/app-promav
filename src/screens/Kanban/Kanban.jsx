@@ -44,6 +44,7 @@ export function Kanban({ tasks, projects, users, authUser, filterProject, mine, 
   const canCreate = filterProject
     ? canEditProject(effectiveProjectRole(projOf(filterProject), authUser))
     : projects.some(p => canEditProject(effectiveProjectRole(p, authUser)))
+  const createProjectId = filterProject || projects.find(p => canEditProject(effectiveProjectRole(p, authUser)))?.id || null
 
   let visible = tasks
   if (filterProject) visible = visible.filter(t => t.projectId === filterProject)
@@ -61,7 +62,7 @@ export function Kanban({ tasks, projects, users, authUser, filterProject, mine, 
     <div className="page">
       <div className="sec-head">
         <div><h2>Kanban</h2><div className="sub">Arraste os cards entre as colunas para mudar o status.</div></div>
-        {canCreate && <button className="btn btn-primary" onClick={() => onNewTask(filterProject || null)}><Icon name="plus" size={17} stroke={2.2} />Nova atividade</button>}
+        {canCreate && <button className="btn btn-primary" onClick={() => onNewTask(createProjectId)}><Icon name="plus" size={17} stroke={2.2} />Nova atividade</button>}
       </div>
       <div className="filterbar">
           <select className="filter-select" value={filterProject || ''} aria-label="Filtrar por projeto"
@@ -99,7 +100,7 @@ export function Kanban({ tasks, projects, users, authUser, filterProject, mine, 
                 <div style={{ fontSize: 12.5, color: 'var(--fg-4)', textAlign: 'center', padding: '18px 0' }}>Nenhuma atividade</div>
               )}
               {canCreate && (
-                <button className="col-add" onClick={() => onNewTask(filterProject || null, col.id)}>
+                <button className="col-add" onClick={() => onNewTask(createProjectId, col.id)}>
                   <Icon name="plus" size={15} stroke={2.2} />Adicionar
                 </button>
               )}
