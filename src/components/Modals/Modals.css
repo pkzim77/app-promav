@@ -6,8 +6,6 @@
 
 .field-error { font-size: 12.5px; color: var(--danger); display: flex; align-items: center; gap: 5px; }
 
-.project-modal { max-width: 900px; }
-
 .color-swatches { display: flex; gap: 10px; }
 
 .color-swatches button { width: 30px; height: 30px; border-radius: var(--r-sm); border: 2px solid transparent; transition: transform var(--dur); }
@@ -88,12 +86,6 @@
 
 .perm-default-label { font-size: 13px; color: var(--fg-2); }
 
-.perm-add { display: flex; gap: 8px; margin-bottom: 12px; }
-
-.perm-add .control { flex: 1; min-width: 0; }
-
-.perm-add .btn { flex-shrink: 0; }
-
 .perm-list { display: flex; flex-direction: column; gap: 6px; }
 
 .perm-row { display: flex; align-items: center; gap: 10px; }
@@ -101,12 +93,6 @@
 .perm-name { flex: 1; min-width: 0; font-size: 13.5px; color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .perm-select { flex: 0 0 168px; width: 168px; min-width: 0; }
-
-.perm-remove { padding: 5px; color: var(--fg-4); flex-shrink: 0; }
-
-.perm-remove:hover { color: var(--danger); }
-
-.perm-empty { font-size: 13px; color: var(--fg-4); padding: 8px 0; }
 
 .perm-admin-tag { font-size: 12px; font-weight: 600; color: var(--brand); background: var(--brand-soft); padding: 4px 10px; border-radius: var(--r-full); }
 
