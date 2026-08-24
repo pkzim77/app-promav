@@ -2,6 +2,20 @@
 
 /* ---------- Lista (tabela de atividades) ---------- */
 
+/* ----- subtarefas (aninhamento de um nível) ----- */
+/* setinha de expandir/recolher; o "spacer" mantém os títulos alinhados. */
+.lv-twist { display: grid; place-items: center; width: 18px; height: 18px; flex-shrink: 0; border-radius: var(--r-xs); color: var(--fg-3); }
+.lv-twist:hover { background: var(--bg-muted); color: var(--fg-1); }
+.lv-twist-spacer { width: 18px; flex-shrink: 0; }
+/* linha da subtarefa: um filete à esquerda marca o aninhamento. */
+.lv-sub { background: var(--bg-subtle); }
+.lv-sub .lv-title { font-weight: 500; color: var(--fg-2); }
+.lv-subcount { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--fg-3); background: var(--bg-muted); padding: 0 7px; border-radius: var(--r-full); flex-shrink: 0; }
+/* botão "+ subtarefa": aparece só ao passar o mouse na linha da mãe. */
+.lv-addsub { display: grid; place-items: center; width: 20px; height: 20px; flex-shrink: 0; border-radius: var(--r-xs); color: var(--fg-4); opacity: 0; transition: opacity var(--dur), background var(--dur), color var(--dur); }
+.lv-item:hover .lv-addsub { opacity: 1; }
+.lv-addsub:hover { background: var(--brand-soft); color: var(--brand); }
+
 .listview { overflow-x: auto; }
 
 .lv-scroll { min-width: 680px; }

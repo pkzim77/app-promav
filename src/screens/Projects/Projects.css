@@ -167,7 +167,7 @@
 .proj-cover { display: flex; flex-direction: column; gap: 16px; }
 
 /* Faixa de destaque: progresso · distribuição · valor */
-.cover-hero { padding: 26px 28px; display: flex; align-items: center; gap: 34px; flex-wrap: wrap; }
+.cover-hero { padding: 28px 30px; display: flex; align-items: center; gap: 38px; flex-wrap: wrap; }
 
 .cover-pie { flex-shrink: 0; display: block; overflow: visible; }
 
@@ -186,6 +186,9 @@
 .cover-pct { display: block; font-family: var(--font-mono); font-weight: 700; font-size: 46px; line-height: 1; color: var(--fg-1); letter-spacing: -0.03em; margin-bottom: 16px; }
 
 .cover-pct i { font-style: normal; font-size: 24px; color: var(--fg-3); margin-left: 2px; }
+
+/* Deixa explícito que o número grande mede execução, não a soma das fatias. */
+.cover-pct-sub { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-4); margin: -12px 0 15px; }
 
 .cover-hero-main { flex: 1; min-width: 240px; }
 
@@ -232,7 +235,9 @@
 /* Blocos da ficha */
 .cover-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
 
-.fact { padding: 20px; display: flex; gap: 14px; align-items: flex-start; }
+.fact { padding: 20px; display: flex; gap: 14px; align-items: flex-start; transition: border-color var(--dur), box-shadow var(--dur); }
+
+.fact:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm, 0 1px 3px rgba(22,21,15,.06)); }
 
 .fact-ic { width: 38px; height: 38px; flex-shrink: 0; border-radius: var(--r-md); background: var(--brand-soft); color: var(--brand); display: flex; align-items: center; justify-content: center; }
 
@@ -295,3 +300,39 @@
   --chart-done:  #1FA463;  /* Concluído    — verde        */
 }
 
+
+/* ---------- Cronograma: prazo decorrido × executado ---------- */
+
+.crono { padding: 22px 24px; }
+
+.crono-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+
+.crono-tag { display: inline-flex; align-items: center; padding: 5px 13px; border-radius: var(--r-full); font-size: 12.5px; font-weight: 600; }
+
+.crono-bars { display: flex; flex-direction: column; gap: 12px; }
+
+.crono-row { display: flex; align-items: center; gap: 14px; }
+
+/* Largura fixa nos rótulos e nos números: as duas barras começam e terminam
+   no mesmo x, que é o que permite comparar uma com a outra de relance. */
+.crono-lab { flex: 0 0 118px; font-size: 12.5px; color: var(--fg-3); }
+
+.crono-track { flex: 1; height: 10px; border-radius: var(--r-full); background: var(--bg-muted); overflow: hidden; }
+
+.crono-fill { display: block; height: 100%; border-radius: var(--r-full); transition: width .5s var(--ease); }
+
+.crono-fill.prazo { background: var(--fg-3); }
+
+
+.crono-val { flex: 0 0 52px; text-align: right; font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--fg-1); }
+
+.crono-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--fg-3); }
+
+.crono-foot span { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); }
+
+.crono-foot-mid { font-family: var(--font-sans) !important; font-weight: 600; color: var(--fg-2); }
+
+@media (max-width: 620px) {
+  .crono-lab { flex-basis: 92px; font-size: 12px; }
+  .crono-foot { flex-wrap: wrap; justify-content: center; }
+}

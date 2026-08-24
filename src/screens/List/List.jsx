@@ -14,6 +14,14 @@ export function TaskListView({ tasks, projects, users, authUser, filterProject, 
     return next
   })
 
+  // Subtarefas recolhidas (por atividade-mãe). Vazio = todas expandidas.
+  const [subCollapsed, setSubCollapsed] = React.useState(() => new Set())
+  const toggleSub = (id) => setSubCollapsed(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+
   // Arrastar uma atividade para outro grupo muda o status (igual ao Kanban).
   const [draggingId, setDraggingId] = React.useState(null)
   const [overGroup, setOverGroup] = React.useState(null)
@@ -29,9 +37,58 @@ export function TaskListView({ tasks, projects, users, authUser, filterProject, 
     ? canEditProject(effectiveProjectRole(projOf(filterProject), authUser))
     : projects.some(p => canEditProject(effectiveProjectRole(p, authUser)))
 
+  const stOf = (id) => STATUSES.find(s => s.id === id)
+
   let visible = tasks
   if (filterProject) visible = visible.filter(t => t.projectId === filterProject)
   if (mine) visible = visible.filter(t => t.assigneeId === currentUserId)
+
+  // Subtarefas visíveis por mãe; e quem é "de topo" na lista (sem mãe visível).
+  const visibleIds = new Set(visible.map(t => t.id))
+  const childrenOf = (id) => visible.filter(t => t.parentId === id)
+  const isTopLevel = (t) => !t.parentId || !visibleIds.has(t.parentId)
+
+  // Uma linha da tabela — serve para a mãe e para a subtarefa (isChild).
+  const renderRow = (t, isChild = false) => {
+    const u = userOf(t.assigneeId)
+    const p = projOf(t.projectId)
+    const st = stOf(t.status)
+    const kids = isChild ? [] : childrenOf(t.id)   // um nível só
+    const expanded = !subCollapsed.has(t.id)
+    return (
+      <React.Fragment key={t.id}>
+        <div className={'lv-row lv-item' + (isChild ? ' lv-sub' : '') + (draggingId === t.id ? ' dragging' : '')}
+          draggable={!isChild}
+          onDragStart={isChild ? undefined : (e) => { setDraggingId(t.id); e.dataTransfer.effectAllowed = 'move' }}
+          onDragEnd={isChild ? undefined : () => { setDraggingId(null); setOverGroup(null) }}
+          onClick={() => onEditTask(t)}>
+          <div className="lv-c-name" style={isChild ? { paddingLeft: 30 } : undefined}>
+            {kids.length > 0
+              ? <button className="lv-twist" onClick={(e) => { e.stopPropagation(); toggleSub(t.id) }} aria-label={expanded ? 'Recolher' : 'Expandir'}>
+                  <Icon name={expanded ? 'chevronDown' : 'chevronRight'} size={14} />
+                </button>
+              : <span className="lv-twist-spacer" />}
+            <span className="lv-status-dot" style={{ background: st?.color }} />
+            <span className="lv-title" title={t.title}>{t.title}</span>
+            <ChecklistMini task={t} />
+            {kids.length > 0 && <span className="lv-subcount" title="subtarefas">{kids.length}</span>}
+            {!isChild && canCreate && (
+              <button className="lv-addsub" title="Adicionar subtarefa"
+                onClick={(e) => { e.stopPropagation(); onNewTask(t.projectId, undefined, t.id) }}>
+                <Icon name="plus" size={13} stroke={2.4} />
+              </button>
+            )}
+          </div>
+          <div>{p && <span className="proj-pill" style={{ fontSize: 12 }}><span className="dot" style={{ background: PROJECT_COLORS[p.color] }} />{p.name}</span>}</div>
+          <div>{u ? <span className="lv-assignee"><Avatar user={u} size={22} />{u.name.split(' ')[0]}</span> : <span className="lv-empty">—</span>}</div>
+          <div>{t.end ? <span className="lv-date"><Icon name="calendar" size={13} />{fmtShort(t.end)}</span> : <span className="lv-empty">—</span>}</div>
+          <div><PriorityTag priority={t.priority} /></div>
+          <div><StatusTag status={t.status} /></div>
+        </div>
+        {expanded && kids.map(k => renderRow(k, true))}
+      </React.Fragment>
+    )
+  }
 
   return (
     <div className="page">
@@ -64,7 +121,7 @@ export function TaskListView({ tasks, projects, users, authUser, filterProject, 
           </div>
 
           {STATUSES.map(col => {
-            const rows = visible.filter(t => t.status === col.id)
+            const rows = visible.filter(t => t.status === col.id && isTopLevel(t))
             const open = !collapsed.has(col.id)
             return (
               <div key={col.id} className={'lv-group' + (overGroup === col.id ? ' dragover' : '')}
@@ -79,32 +136,10 @@ export function TaskListView({ tasks, projects, users, authUser, filterProject, 
                   <span className="lv-group-count">{rows.length}</span>
                 </button>
 
-                {open && (rows.length ? rows.map(t => {
-                  const u = userOf(t.assigneeId)
-                  const p = projOf(t.projectId)
-                  return (
-                    <div key={t.id} className={'lv-row lv-item' + (draggingId === t.id ? ' dragging' : '')}
-                      draggable
-                      onDragStart={(e) => { setDraggingId(t.id); e.dataTransfer.effectAllowed = 'move' }}
-                      onDragEnd={() => { setDraggingId(null); setOverGroup(null) }}
-                      onClick={() => onEditTask(t)}>
-                      <div className="lv-c-name">
-                        <span className="lv-status-dot" style={{ background: col.color }} />
-                        <span className="lv-title" title={t.title}>{t.title}</span>
-                        <ChecklistMini task={t} />
-                      </div>
-                      <div>
-                        {p && <span className="proj-pill" style={{ fontSize: 12 }}><span className="dot" style={{ background: PROJECT_COLORS[p.color] }} />{p.name}</span>}
-                      </div>
-                      <div>{u ? <span className="lv-assignee"><Avatar user={u} size={22} />{u.name.split(' ')[0]}</span> : <span className="lv-empty">—</span>}</div>
-                      <div>{t.end ? <span className="lv-date"><Icon name="calendar" size={13} />{fmtShort(t.end)}</span> : <span className="lv-empty">—</span>}</div>
-                      <div><PriorityTag priority={t.priority} /></div>
-                      <div><StatusTag status={t.status} /></div>
-                    </div>
-                  )
-                }) : (
-                  <div className="lv-row lv-empty-row">Nenhuma atividade</div>
-                ))}
+                {open && (rows.length
+                  ? rows.map(t => renderRow(t))
+                  : <div className="lv-row lv-empty-row">Nenhuma atividade</div>
+                )}
 
                 {open && canCreate && (
                   <button className="lv-add" onClick={() => onNewTask(filterProject || null, col.id)}>

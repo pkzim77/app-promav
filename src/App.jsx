@@ -249,7 +249,7 @@ export default function App() {
   }
 
   // ----- tasks -----
-  const openNewTask = (projectId, status) => setModal({ type: 'task', defaultProjectId: projectId, defaultStatus: status })
+  const openNewTask = (projectId, status, parentId) => setModal({ type: 'task', defaultProjectId: projectId, defaultStatus: status, defaultParentId: parentId || null })
   const openEditTask = (task) => setModal({ type: 'task', task })
   const saveTask = async (data) => {
     try {
@@ -394,7 +394,7 @@ export default function App() {
 
       {modal?.type === 'task' && (
         <TaskModal task={modal.task} projects={projects} users={users} currentUserId={currentUserId}
-          defaultProjectId={modal.defaultProjectId} defaultStatus={modal.defaultStatus}
+          defaultProjectId={modal.defaultProjectId} defaultStatus={modal.defaultStatus} defaultParentId={modal.defaultParentId}
           canEdit={modal.task ? canEditProject(effectiveProjectRole(projects.find(p => p.id === modal.task.projectId), authUser)) : isAdmin}
           onToggleChecklist={toggleChecklistItem} onToggleMembership={toggleMyMembership}
           onSave={saveTask} onClose={() => setModal(null)} />

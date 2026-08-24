@@ -158,7 +158,12 @@ export function fmtMed(s) { const d = parseDate(s); return `${d.getDate()} de ${
 export function fmtFull(s) { const d = parseDate(s); return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` }
 export function dayDiff(a, b) { return Math.round((parseDate(b) - parseDate(a)) / 86400000) }
 export function addDays(s, n) { const d = parseDate(s); d.setDate(d.getDate()+n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
-export function todayISO() { return '2026-05-26' } // fixed "today" for the prototype
+// Data de hoje. Era fixa ('2026-05-26') na época do protótipo — com dados reais
+// isso congelava a linha "hoje" do Gantt, o marcador de atraso e o cronograma.
+export function todayISO() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 // ---------- permissões ----------
 // Papéis por projeto. 'admin' é global (user.isAdmin) e não aparece nesta lista.

@@ -81,7 +81,7 @@ export function ChecklistMini({ task }) {
   )
 }
 
-export function Modal({ title, onClose, children, footer }) {
+export function Modal({ title, onClose, children, footer, className = '' }) {
   React.useEffect(() => {
     const h = (e) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', h)
@@ -89,7 +89,7 @@ export function Modal({ title, onClose, children, footer }) {
   }, [onClose])
   return (
     <div className="scrim" onMouseDown={onClose}>
-      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+      <div className={'modal ' + className} onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h3>{title}</h3>
           <button className="btn-icon" onClick={onClose} aria-label="Fechar"><Icon name="x" size={20} /></button>

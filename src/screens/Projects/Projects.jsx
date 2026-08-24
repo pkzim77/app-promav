@@ -3,7 +3,7 @@ import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
 import { AvatarStack, StatusTag, PriorityTag, ProgressBar } from '../../components/primitives/primitives.jsx'
 import { TaskTimerButton } from '../../components/TimeTracker/TimeTracker.jsx'
-import { PROJECT_COLORS, STATUSES, projectProgress, taskProgress, checklistStats, taskMembers, fmtShort, fmtMed, fmtFull, dayDiff, formatBytes, effectiveProjectRole, canEditProject, ROLE_LABEL, RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, formatBRL, calcularProgresso } from '../../data/store.js'
+import { PROJECT_COLORS, STATUSES, projectProgress, taskProgress, checklistStats, taskMembers, fmtShort, fmtMed, fmtFull, dayDiff, parseDate, todayISO, formatBytes, effectiveProjectRole, canEditProject, ROLE_LABEL, RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, formatBRL, calcularProgresso } from '../../data/store.js'
 import { api } from '../../data/api.js'
 // Projetos — grid of project cards, and a project detail view with task table.
 
@@ -434,6 +434,64 @@ function StatusPie({ slices, size = 180, hovered, onHover }) {
   )
 }
 
+// Cronograma: quanto do prazo já passou contra quanto do projeto foi executado.
+// É a leitura que importa numa reunião — 60% executado com 80% do prazo
+// consumido é atraso, mesmo o número de progresso parecendo bom sozinho.
+function Cronograma({ start, end, executado }) {
+  if (!start || !end) return null
+  const hoje = todayISO()
+  const totalDias = dayDiff(start, end)
+  if (totalDias <= 0) return null
+
+  const decorridos = Math.min(Math.max(dayDiff(start, hoje), 0), totalDias)
+  const prazoPct = Math.round((decorridos / totalDias) * 100)
+  const restam = totalDias - decorridos
+  const folga = Math.round(executado - prazoPct) // positivo = adiantado
+
+  // Antes do início e depois do fim o comparativo não faz sentido.
+  const naoComecou = parseDate(hoje) < parseDate(start)
+  const terminou = parseDate(hoje) > parseDate(end)
+
+  const situacao =
+    naoComecou ? { label: 'Ainda não iniciado', cor: 'var(--fg-3)', fundo: 'var(--bg-muted)' }
+    : folga >= 0 ? { label: 'Dentro do prazo', cor: 'var(--success)', fundo: 'var(--success-soft)' }
+    : folga >= -10 ? { label: 'Atenção ao prazo', cor: '#A8680A', fundo: '#FDF2E2' }
+    : { label: 'Atrasado', cor: 'var(--danger)', fundo: 'var(--danger-soft, #FDECEC)' }
+
+  return (
+    <div className="card crono">
+      <div className="crono-head">
+        <span className="cover-eyebrow" style={{ margin: 0 }}>Cronograma</span>
+        <span className="crono-tag" style={{ color: situacao.cor, background: situacao.fundo }}>
+          {situacao.label}
+        </span>
+      </div>
+
+      {/* Só o prazo. O selo acima continua comparando com o percentual
+          executado — a execução em si já é o número grande do topo. */}
+      <div className="crono-bars">
+        <div className="crono-row">
+          <span className="crono-lab">Prazo decorrido</span>
+          <div className="crono-track">
+            <span className="crono-fill prazo" style={{ width: `${prazoPct}%` }} />
+          </div>
+          <span className="crono-val">{prazoPct}%</span>
+        </div>
+      </div>
+
+      <div className="crono-foot">
+        <span><Icon name="calendar" size={14} />{fmtFull(start)}</span>
+        <span className="crono-foot-mid">
+          {naoComecou ? `Começa em ${dayDiff(hoje, start)} dias`
+            : terminou ? 'Prazo encerrado'
+            : `${restam} ${restam === 1 ? 'dia restante' : 'dias restantes'}`}
+        </span>
+        <span>{fmtFull(end)}<Icon name="flag" size={14} /></span>
+      </div>
+    </div>
+  )
+}
+
 // Ficha técnica — aba de trabalho da equipe: o detalhamento que sustenta o
 // Panorama (identificação da obra, convênio, medições) e todos os materiais.
 // A seção de identificação ainda não tem campos definidos; quando existirem,
@@ -543,6 +601,8 @@ function ProjectCover({ project, tasks, users }) {
         </div>
       </div>
 
+      <Cronograma start={project.start} end={project.end} executado={prog.executado} />
+
       {/* ---- Ficha do cadastro ---- */}
       <div className="cover-facts">
         <div className="card fact">
@@ -561,32 +621,26 @@ function ProjectCover({ project, tasks, users }) {
           </div>
         </div>
         <div className="card fact">
-          <span className="fact-ic"><Icon name="calendar" size={18} /></span>
-          <div>
-            <label>Período de execução</label>
-            <div className="fact-value mono">{project.start ? fmtFull(project.start) : '—'} — {project.end ? fmtFull(project.end) : '—'}</div>
-            {dias != null && <div className="fact-sub">{dias} dias de prazo</div>}
+          <span className="fact-ic"><Icon name="users" size={18} /></span>
+          <div style={{ minWidth: 0 }}>
+            <label>Profissionais responsáveis</label>
+            {responsibles.length === 0 ? (
+              <div className="fact-sub" style={{ marginTop: 2 }}>Nenhum definido. Edite o projeto para incluir.</div>
+            ) : (
+              <div className="ds-people">
+                {responsibles.map(u => (
+                  <span className="ds-person" key={u.id} title={u.name}>
+                    <span className="av" style={{ width: 24, height: 24, background: u.color, fontSize: 9 }}>{u.initials}</span>
+                    {u.name.split(' ')[0]}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* ---- Responsáveis ---- */}
-      <div className="card cover-block">
-        <h3>Profissionais responsáveis</h3>
-        {responsibles.length === 0 ? (
-          <p className="cover-empty">Nenhum profissional definido ainda. Edite o projeto para incluir.</p>
-        ) : (
-          <div className="ds-people">
-            {responsibles.map(u => (
-              <span className="ds-person" key={u.id}>
-                <span className="av" style={{ width: 28, height: 28, background: u.color, fontSize: 10 }}>{u.initials}</span>
-                {u.name}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* ---- Observações ---- */}
       {project.notes && (
         <div className="card cover-block">
