@@ -3,7 +3,7 @@ import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
 import { AvatarStack, StatusTag, PriorityTag, ProgressBar } from '../../components/primitives/primitives.jsx'
 import { TaskTimerButton } from '../../components/TimeTracker/TimeTracker.jsx'
-import { PROJECT_COLORS, STATUSES, projectProgress, taskProgress, checklistStats, taskMembers, fmtShort, fmtMed, fmtFull, dayDiff, formatBytes, effectiveProjectRole, canEditProject, ROLE_LABEL, RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, formatBRL } from '../../data/store.js'
+import { PROJECT_COLORS, STATUSES, projectProgress, taskProgress, checklistStats, taskMembers, fmtShort, fmtMed, fmtFull, dayDiff, formatBytes, effectiveProjectRole, canEditProject, ROLE_LABEL, RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, formatBRL, calcularProgresso } from '../../data/store.js'
 import { api } from '../../data/api.js'
 // Projetos — grid of project cards, and a project detail view with task table.
 
@@ -321,21 +321,15 @@ function LinksColumn({ links, onCopy, onDelete, onAdd, canDelete }) {
   )
 }
 
-// Painel do projeto: anotações + documentos/links + imagens.
-function ProjectAbout({ notes, resources, canDelete, onCopyResource, onDeleteResource, onAddResource }) {
+// Materiais do projeto: documentos/links + imagens. Vive na Ficha técnica.
+// (As anotações ficam no Panorama — são o texto que se mostra ao cliente.)
+function ProjectAbout({ resources, canDelete, onCopyResource, onDeleteResource, onAddResource }) {
   const list = resources || []
   const docs = list.filter(r => r.type === 'doc')
   const links = list.filter(r => r.type === 'link')
   const images = list.filter(r => r.type === 'image')
   return (
     <div style={{ marginBottom: 22 }}>
-      {notes && (
-        <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-          <h3 style={{ font: 'var(--text-h4)', margin: '0 0 14px', color: 'var(--fg-1)' }}>Sobre o projeto</h3>
-          <NotesText text={notes} />
-        </div>
-      )}
-
       <div className="res-grid">
         <DocsColumn docs={docs} onCopy={onCopyResource} onDelete={onDeleteResource} onAdd={onAddResource} canDelete={canDelete} />
         <LinksColumn links={links} onCopy={onCopyResource} onDelete={onDeleteResource} onAdd={onAddResource} canDelete={canDelete} />
@@ -373,73 +367,174 @@ function ProjectAbout({ notes, resources, canDelete, onCopyResource, onDeleteRes
   )
 }
 
-// Donut de progresso: arco único (uma série → sem legenda; o número no centro
-// é o próprio rótulo). Traço arredondado e trilha neutra, como no relatório.
-function ProgressDonut({ pct, size = 148, stroke = 16 }) {
-  const r = (size - stroke) / 2
-  const c = 2 * Math.PI * r
-  const color = pct === 100 ? 'var(--success)' : 'var(--brand)'
+// Percentual em pt-BR: vírgula decimal e sem o ",0" quando é inteiro.
+const pctBR = (n) => `${Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
+
+// Fatia de pizza como path SVG. `from`/`to` vão de 0 a 1, começando às 12h.
+function pieSlice(cx, cy, r, from, to) {
+  if (to - from >= 1) {
+    // Círculo inteiro: dois arcos, porque um arco de 360° é degenerado em SVG.
+    return `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - 0.01} ${cy - r} Z`
+  }
+  const a0 = from * 2 * Math.PI - Math.PI / 2
+  const a1 = to * 2 * Math.PI - Math.PI / 2
+  const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0)
+  const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1)
+  const large = to - from > 0.5 ? 1 : 0
+  return `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`
+}
+
+// Pizza das atividades por situação.
+//  • o tamanho da fatia = fatia do projeto que aquele grupo representa (regra de 3);
+//  • o número dentro da fatia = essa mesma porcentagem;
+//  • ao passar o mouse, a fatia se destaca para fora.
+// O texto é tinta escura (contraste ≥ 4.5:1 sobre as três cores de status).
+function StatusPie({ slices, size = 180, hovered, onHover }) {
+  const total = slices.reduce((s, x) => s + x.share, 0)
+  const cx = size / 2, cy = size / 2
+  const r = size / 2 - 10 // folga para a fatia elevada não ser cortada
+
+  let acc = 0
+  const parts = slices.filter(s => s.share > 0).map(s => {
+    const from = acc / total
+    acc += s.share
+    const to = acc / total
+    const a = ((from + to) / 2) * 2 * Math.PI - Math.PI / 2
+    return {
+      ...s, from, to,
+      dx: Math.cos(a) * 7, dy: Math.sin(a) * 7,                 // deslocamento no hover
+      lx: cx + Math.cos(a) * r * 0.62, ly: cy + Math.sin(a) * r * 0.62, // posição do número
+    }
+  })
+
   return (
-    <div className="cover-donut" style={{ width: size, height: size }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}
-        role="img" aria-label={`Progresso da obra: ${pct}%`}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--bg-muted)" strokeWidth={stroke} />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke}
-          strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} strokeLinecap="round"
-          style={{ transition: 'stroke-dashoffset .7s var(--ease)' }} />
-      </svg>
-      <div className="cover-donut-center">
-        <span className="cover-donut-pct">{pct}<i>%</i></span>
-        <span className="cover-donut-cap">concluído</span>
+    <svg className="cover-pie" width={size} height={size} viewBox={`0 0 ${size} ${size}`}
+      role="img" onMouseLeave={() => onHover(null)}
+      aria-label={total > 0
+        ? `Progresso do projeto: ${slices.filter(s => s.share > 0).map(s => `${s.label} ${pctBR(s.share)}`).join(', ')}`
+        : 'Nenhuma atividade cadastrada'}>
+      {!(total > 0) && <circle cx={cx} cy={cy} r={r} fill="var(--bg-muted)" />}
+      {parts.map(s => {
+        const on = hovered === s.id
+        return (
+          <g key={s.id} className={'pie-slice' + (on ? ' on' : '')}
+            style={{ transform: on ? `translate(${s.dx}px, ${s.dy}px)` : 'none' }}
+            onMouseEnter={() => onHover(s.id)}>
+            <path d={pieSlice(cx, cy, r, s.from, s.to)} fill={s.color}
+              stroke="var(--surface)" strokeWidth="2" />
+            {s.share >= 8 && (
+              <text className="pie-label" x={s.lx} y={s.ly} textAnchor="middle" dominantBaseline="central">
+                {pctBR(s.share)}
+              </text>
+            )}
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+// Ficha técnica — aba de trabalho da equipe: o detalhamento que sustenta o
+// Panorama (identificação da obra, convênio, medições) e todos os materiais.
+// A seção de identificação ainda não tem campos definidos; quando existirem,
+// entram no mesmo padrão do bloco `tech-grid` abaixo.
+function ProjectTechSheet({ project, canEdit, onCopyResource, onDeleteResource, onAddResource }) {
+  return (
+    <div className="proj-tech">
+      <div className="card tech-section">
+        <div className="tech-section-head">
+          <span className="fact-ic"><Icon name="file" size={18} /></span>
+          <div>
+            <h3>Identificação da obra</h3>
+            <p>Dados contratuais e técnicos que não aparecem no Panorama.</p>
+          </div>
+        </div>
+        <div className="tech-empty">
+          <Icon name="sparkles" size={18} />
+          <div>
+            <strong>Campos ainda não definidos</strong>
+            <p>Aqui entram os dados técnicos do convênio — número, processo, objeto,
+              área de intervenção, contrapartida, vigência e responsabilidade técnica.
+              Assim que a lista for fechada, eles passam a ser preenchidos no cadastro do projeto.</p>
+          </div>
+        </div>
       </div>
+
+      <ProjectAbout resources={project.resources} canDelete={canEdit}
+        onCopyResource={onCopyResource} onDeleteResource={onDeleteResource} onAddResource={onAddResource} />
     </div>
   )
 }
 
-// Capa do projeto: primeira aba, pensada para ser projetada numa reunião —
-// progresso da obra em destaque + a ficha do cadastro em blocos legíveis.
+// Panorama — primeira aba, pensada para ser projetada numa reunião:
+// progresso do projeto em destaque + a ficha do cadastro em blocos legíveis.
 function ProjectCover({ project, tasks, users }) {
   const list = tasks.filter(t => t.projectId === project.id)
-  const pct = projectProgress(tasks, project.id)
   const origem = RESOURCE_ORIGIN_MAP[project.origemRecurso]
   const st = PROJECT_STATUS_MAP[project.status] || PROJECT_STATUS_MAP.planejamento
   const responsibles = (project.responsibleIds || []).map(id => users.find(u => u.id === id)).filter(Boolean)
   const dash = (v) => (v && String(v).trim() ? v : '—')
+  const [hovered, setHovered] = React.useState(null)
 
-  // Distribuição por status — cada fatia recebe rótulo e contagem (nunca só cor).
-  const breakdown = STATUSES.map(s => ({ ...s, n: list.filter(t => t.status === s.id).length }))
+  // src/data/progresso.js: toda atividade pesa igual (100/N) e a fatia vem do
+  // status — checklist 100% marcado promove para Concluído. O percentual grande
+  // é o `executado`, que conta só a parte do checklist já marcada nas demais.
+  // Recalcula sozinho a cada marcação, porque `tasks` vem do estado do App.
+  const prog = calcularProgresso(list)
+  const pct = Math.round(prog.executado)
+  const breakdown = [
+    { id: 'aFazer', label: 'A fazer', color: 'var(--chart-todo)', share: prog.aFazer,
+      hint: 'das atividades ainda não iniciadas' },
+    { id: 'emAndamento', label: 'Em andamento', color: 'var(--chart-doing)', share: prog.emAndamento,
+      hint: 'das atividades em execução — a barra grande conta só o que já foi marcado nelas' },
+    { id: 'concluido', label: 'Concluído', color: 'var(--chart-done)', share: prog.concluido,
+      hint: 'das atividades finalizadas — status Concluído ou checklist inteiro marcado' },
+  ]
+  const detail = breakdown.find(s => s.id === hovered) || null
   const dias = project.start && project.end ? dayDiff(project.start, project.end) : null
 
   return (
     <div className="proj-cover">
       {/* ---- Faixa de destaque: progresso + valor + status ---- */}
       <div className="card cover-hero">
-        <ProgressDonut pct={pct} />
+        <StatusPie slices={breakdown} hovered={hovered} onHover={setHovered} />
 
         <div className="cover-hero-main">
-          <span className="cover-eyebrow">Progresso da obra</span>
+          <span className="cover-eyebrow">Progresso do projeto</span>
+          <span className="cover-pct">{pct}<i>%</i></span>
+          <span className="cover-pct-sub">executado</span>
+          {/* A legenda nomeia as fatias e abre a conta: quanto do projeto cada
+              situação ocupa, quanto dela já foi executado e o que isso soma. */}
           <div className="cover-breakdown">
             {breakdown.map(s => (
-              <div className="cover-bd-item" key={s.id}>
+              <div key={s.id}
+                className={'cover-bd-item' + (hovered === s.id ? ' on' : '') + (s.share ? '' : ' off')}
+                onMouseEnter={() => setHovered(s.share ? s.id : null)}
+                onMouseLeave={() => setHovered(null)}>
                 <span className="cover-bd-dot" style={{ background: s.color }} />
-                <span className="cover-bd-num">{s.n}</span>
                 <span className="cover-bd-lab">{s.label}</span>
+                <span className="cover-bd-share">{pctBR(s.share)}</span>
               </div>
             ))}
           </div>
-          <div className="cover-bd-bar">
-            {breakdown.filter(s => s.n > 0).map(s => (
-              <span key={s.id} style={{ flex: s.n, background: s.color }} title={`${s.label}: ${s.n}`} />
-            ))}
-            {list.length === 0 && <span style={{ flex: 1, background: 'var(--bg-muted)' }} />}
+          {/* Altura reservada: o texto troca no hover sem empurrar o layout. */}
+          <div className="cover-bd-detail">
+            {detail
+              ? <><strong>{pctBR(detail.share)}</strong> {detail.hint}.</>
+              : prog.total > 0
+                ? <span className="muted">{prog.total} {prog.total === 1 ? 'atividade' : 'atividades'}, cada uma valendo {pctBR(prog.peso)} do projeto.</span>
+                : <span className="muted">Nenhuma atividade cadastrada ainda.</span>}
           </div>
-          <span className="cover-bd-total">{list.length} {list.length === 1 ? 'atividade' : 'atividades'} no total</span>
         </div>
 
         <div className="cover-hero-side">
           <div className="cover-money">
-            <span className="cover-eyebrow">Valor do projeto</span>
-            <strong>{formatBRL(project.valorConvenio)}</strong>
+            <span className="cover-eyebrow">Valor estimado</span>
+            <strong>{formatBRL(project.valorEstimado)}</strong>
+          </div>
+          <div className="cover-money alt">
+            <span className="cover-eyebrow">Valor orçado</span>
+            <strong>{formatBRL(project.valorOrcado)}</strong>
             {origem && <span className="cover-money-sub">{origem.label}</span>}
           </div>
           <span className="proj-status-badge lg" style={{ color: st.color, background: st.color + '1f' }}>
@@ -504,8 +599,8 @@ function ProjectCover({ project, tasks, users }) {
 }
 
 export function ProjectDetail({ project, tasks, users, sessions, currentUserId, now, canEdit = true, role, onStartTimer, onStopTimer, onBack, onEdit, onNewTask, onEditTask, onDeleteTask, onCopyResource, onDeleteResource, onAddResource }) {
-  // A capa ("Dados do projeto") abre primeiro: é o que se mostra numa reunião.
-  const [tab, setTab] = React.useState('data') // 'data' | 'overview'
+  // O Panorama abre primeiro: é o que se mostra numa reunião com o cliente.
+  const [tab, setTab] = React.useState('panorama') // 'panorama' | 'tecnica' | 'atividades'
   const list = tasks.filter(t => t.projectId === project.id)
   const pct = projectProgress(tasks, project.id)
   const color = PROJECT_COLORS[project.color]
@@ -530,18 +625,24 @@ export function ProjectDetail({ project, tasks, users, sessions, currentUserId, 
         {canEdit && <button className="btn btn-primary" onClick={() => onNewTask(project.id)}><Icon name="plus" size={17} stroke={2.2} />Nova atividade</button>}
       </div>
 
-      {/* Abas: a capa (Dados do projeto) vem primeiro; depois as atividades. */}
+      {/* Abas: Panorama (cliente) → Ficha técnica (equipe) → Atividades. */}
       <div className="proj-tabs">
-        <button className={'proj-tab' + (tab === 'data' ? ' on' : '')} onClick={() => setTab('data')}>
-          <Icon name="landmark" size={15} />Dados do projeto
+        <button className={'proj-tab' + (tab === 'panorama' ? ' on' : '')} onClick={() => setTab('panorama')}>
+          <Icon name="landmark" size={15} />Panorama
         </button>
-        <button className={'proj-tab' + (tab === 'overview' ? ' on' : '')} onClick={() => setTab('overview')}>
+        <button className={'proj-tab' + (tab === 'tecnica' ? ' on' : '')} onClick={() => setTab('tecnica')}>
+          <Icon name="file" size={15} />Ficha técnica
+        </button>
+        <button className={'proj-tab' + (tab === 'atividades' ? ' on' : '')} onClick={() => setTab('atividades')}>
           <Icon name="list" size={15} />Atividades
         </button>
       </div>
 
-      {tab === 'data' ? (
+      {tab === 'panorama' ? (
         <ProjectCover project={project} tasks={tasks} users={users} />
+      ) : tab === 'tecnica' ? (
+        <ProjectTechSheet project={project} canEdit={canEdit}
+          onCopyResource={onCopyResource} onDeleteResource={onDeleteResource} onAddResource={onAddResource} />
       ) : (
       <>
       <div className="card" style={{ padding: 18, marginBottom: 22, display: 'flex', alignItems: 'center', gap: 20 }}>
@@ -561,8 +662,6 @@ export function ProjectDetail({ project, tasks, users, sessions, currentUserId, 
           ))}
         </div>
       </div>
-
-      <ProjectAbout notes={project.notes} resources={project.resources} canDelete={canEdit} onCopyResource={onCopyResource} onDeleteResource={onDeleteResource} onAddResource={onAddResource} />
 
       {list.length === 0 ? (
         <EmptyState icon="list" title="Nenhuma atividade por aqui ainda"

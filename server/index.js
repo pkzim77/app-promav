@@ -62,7 +62,11 @@ const PROJECT_SELECT = `
          prefeitura,
          secretaria,
          origem_recurso AS "origemRecurso",
-         valor_convenio::float8 AS "valorConvenio",
+         -- As colunas guardam os nomes antigos; a API expõe os atuais.
+         -- valor_convenio   → valor estimado (primeira estimativa)
+         -- valor_disponivel → valor orçado   (orçamento fechado)
+         valor_convenio::float8   AS "valorEstimado",
+         valor_disponivel::float8 AS "valorOrcado",
          status,
          responsible_ids AS "responsibleIds",
          default_role AS "defaultRole",
@@ -348,16 +352,16 @@ app.get('/api/projects', wrap(async (req, res) => {
 app.post('/api/projects', requireAdmin, wrap(async (req, res) => {
   const {
     name, desc = '', color = 'indigo', folderId = null, start, end, notes = '', resources = [], defaultRole = 'full', members = [],
-    prefeitura = '', secretaria = '', origemRecurso, valorConvenio, status, responsibleIds = [],
+    prefeitura = '', secretaria = '', origemRecurso, valorEstimado, valorOrcado, status, responsibleIds = [],
   } = req.body
   const id = genId('p')
   await tx(async (client) => {
     await client.query(
       `INSERT INTO projects (id, name, description, color, folder_id, start_date, end_date, notes, resources, default_role,
-                             prefeitura, secretaria, origem_recurso, valor_convenio, status, responsible_ids)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+                             prefeitura, secretaria, origem_recurso, valor_convenio, valor_disponivel, status, responsible_ids)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
       [id, name, desc, color, folderId || null, start, end, notes, JSON.stringify(normalizeResources(resources)), normDefaultRole(defaultRole),
-       String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso), normValor(valorConvenio), normProjStatus(status), JSON.stringify(normResponsibles(responsibleIds))]
+       String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso), normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status), JSON.stringify(normResponsibles(responsibleIds))]
     )
     await replaceMembers(client, id, members)
   })
@@ -387,17 +391,17 @@ app.put('/api/projects/reorder', requireAdmin, wrap(async (req, res) => {
 app.put('/api/projects/:id', gate((req) => req.params.id, CAN.edit), wrap(async (req, res) => {
   const {
     name, desc = '', color, folderId = null, start, end, notes = '', resources = [], defaultRole, members,
-    prefeitura = '', secretaria = '', origemRecurso, valorConvenio, status, responsibleIds = [],
+    prefeitura = '', secretaria = '', origemRecurso, valorEstimado, valorOrcado, status, responsibleIds = [],
   } = req.body
   const clean = normalizeResources(resources)
   const isAdmin = req.projectRole === 'admin'
   const ok = await tx(async (client) => {
     const r = await client.query(
       `UPDATE projects SET name = $2, description = $3, color = $4, folder_id = $5, start_date = $6, end_date = $7, notes = $8, resources = $9,
-                           prefeitura = $10, secretaria = $11, origem_recurso = $12, valor_convenio = $13, status = $14, responsible_ids = $15
+                           prefeitura = $10, secretaria = $11, origem_recurso = $12, valor_convenio = $13, valor_disponivel = $14, status = $15, responsible_ids = $16
        WHERE id = $1 RETURNING id`,
       [req.params.id, name, desc, color, folderId || null, start, end, notes, JSON.stringify(clean),
-       String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso), normValor(valorConvenio), normProjStatus(status), JSON.stringify(normResponsibles(responsibleIds))]
+       String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso), normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status), JSON.stringify(normResponsibles(responsibleIds))]
     )
     if (!r.rows.length) return false
     await pruneOrphanFiles(client, req.params.id, clean) // remove arquivos não referenciados
@@ -726,8 +730,10 @@ async function ensureSchema() {
   await q("ALTER TABLE projects ADD COLUMN IF NOT EXISTS secretaria text NOT NULL DEFAULT ''")
   // Origem do recurso: federal | estadual | municipal | emenda | outro.
   await q("ALTER TABLE projects ADD COLUMN IF NOT EXISTS origem_recurso text NOT NULL DEFAULT 'federal'")
-  // Valor do convênio em reais. NULL = não informado.
+  // Valor ESTIMADO do projeto, em reais (coluna com o nome antigo). NULL = não informado.
   await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS valor_convenio numeric(14,2)')
+  // Valor ORÇADO do projeto, em reais (coluna com o nome antigo). NULL = não informado.
+  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS valor_disponivel numeric(14,2)')
   // Status do projeto: planejamento | andamento | paralisado | concluido.
   await q("ALTER TABLE projects ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'planejamento'")
   // Profissionais responsáveis: lista (jsonb) de ids de usuários.

@@ -2,8 +2,28 @@ import './Modals.css'
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field, SegControl, StatusTag, PriorityTag } from '../primitives/primitives.jsx'
-import { STATUSES, PRIORITIES, PROJECT_HEX, MAX_FILE_BYTES, formatBytes, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, parseBRL } from '../../data/store.js'
+import { STATUSES, PRIORITIES, PROJECT_HEX, MAX_FILE_BYTES, formatBytes, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, parseBRL, maskBRL } from '../../data/store.js'
 // Create/edit modals for tasks and projects + confirm dialog. Includes validation.
+
+// Campo de dinheiro: formata a cada tecla (2.500,00) e mantém o cursor no fim,
+// já que a máscara faz o número crescer sempre pela direita.
+function MoneyInput({ value, onChange, placeholder }) {
+  const ref = React.useRef(null)
+  const handle = (e) => {
+    onChange(maskBRL(e.target.value))
+    requestAnimationFrame(() => {
+      const el = ref.current
+      if (el) el.setSelectionRange(el.value.length, el.value.length)
+    })
+  }
+  return (
+    <div className="money-field">
+      <span className="money-prefix">R$</span>
+      <input ref={ref} className="control" inputMode="numeric" placeholder={placeholder}
+        value={value} onChange={handle} />
+    </div>
+  )
+}
 
 function dateError(start, end) {
   if (start && end && new Date(end) < new Date(start)) return 'A data de término não pode ser anterior à de início.'
@@ -129,6 +149,7 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
         </div>
       </div>
       <Field label="Prioridade">{ro ? <PriorityTag priority={priority} /> : <SegControl options={PRIORITIES} value={priority} onChange={setPriority} />}</Field>
+
       <div className="field-row">
         <Field label="Data de início"><input type="date" className="control" value={start} disabled={ro} onChange={e => setStart(e.target.value)} /></Field>
         <Field label="Data de término"><input type="date" className="control" value={end} disabled={ro} onChange={e => setEnd(e.target.value)} /></Field>
@@ -504,12 +525,10 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const [secretaria, setSecretaria] = React.useState(project?.secretaria || '')
   const [responsibleIds, setResponsibleIds] = React.useState(project?.responsibleIds ? [...project.responsibleIds] : [])
   const [origemRecurso, setOrigemRecurso] = React.useState(project?.origemRecurso || 'federal')
-  // Valor do convênio: mantido como texto enquanto digita; convertido ao salvar.
-  const [valorText, setValorText] = React.useState(
-    project?.valorConvenio != null
-      ? Number(project.valorConvenio).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-      : ''
-  )
+  // Valores em R$: mantidos como texto enquanto digita; convertidos ao salvar.
+  const moneyText = (v) => (v != null ? Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '')
+  const [estimadoText, setEstimadoText] = React.useState(moneyText(project?.valorEstimado))
+  const [orcadoText, setOrcadoText] = React.useState(moneyText(project?.valorOrcado))
   const [projStatus, setProjStatus] = React.useState(project?.status || 'planejamento')
   const [touched, setTouched] = React.useState(false)
 
@@ -517,16 +536,18 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const nameErr = touched && !name.trim() ? 'Informe um nome.' : null
   const prefErr = touched && !prefeitura.trim() ? 'Informe a prefeitura.' : null
   const respErr = touched && responsibleIds.length === 0 ? 'Selecione ao menos um profissional responsável.' : null
-  const valorErr = touched && valorText.trim() && parseBRL(valorText) === null ? 'Valor inválido. Ex.: 250000,00' : null
+  const badMoney = (t) => !!t.trim() && parseBRL(t) === null
+  const estimadoErr = touched && badMoney(estimadoText) ? 'Valor inválido. Ex.: 250000,00' : null
+  const orcadoErr = touched && badMoney(orcadoText) ? 'Valor inválido. Ex.: 250000,00' : null
 
   const save = () => {
     setTouched(true)
     if (!name.trim() || !prefeitura.trim() || responsibleIds.length === 0 || dErr) return
-    if (valorText.trim() && parseBRL(valorText) === null) return
+    if (badMoney(estimadoText) || badMoney(orcadoText)) return
     onSave({
       ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start, end, notes: notes.trim(), resources, members,
       prefeitura: prefeitura.trim(), secretaria: secretaria.trim(), responsibleIds,
-      origemRecurso, valorConvenio: parseBRL(valorText), status: projStatus,
+      origemRecurso, valorEstimado: parseBRL(estimadoText), valorOrcado: parseBRL(orcadoText), status: projStatus,
     })
   }
 
@@ -559,23 +580,28 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
         isAdmin={isAdmin} error={respErr} />
 
       <div className="field-row">
+        <Field label="Valor estimado">
+          <MoneyInput value={estimadoText} onChange={setEstimadoText} placeholder="0,00" />
+          {estimadoErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{estimadoErr}</span>}
+        </Field>
+        <Field label="Valor orçado">
+          <MoneyInput value={orcadoText} onChange={setOrcadoText} placeholder="0,00" />
+          {orcadoErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{orcadoErr}</span>}
+        </Field>
+      </div>
+
+      <div className="field-row">
         <Field label="Origem do recurso">
           <select className="control" value={origemRecurso} onChange={e => setOrigemRecurso(e.target.value)}>
             {RESOURCE_ORIGINS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
           </select>
         </Field>
-        <Field label="Valor do projeto (R$)">
-          <input className="control" value={valorText} placeholder="Ex.: 250000,00" inputMode="decimal"
-            onChange={e => setValorText(e.target.value)} />
-          {valorErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{valorErr}</span>}
+        <Field label="Status do projeto">
+          <select className="control" value={projStatus} onChange={e => setProjStatus(e.target.value)}>
+            {PROJECT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
         </Field>
       </div>
-
-      <Field label="Status do projeto">
-        <select className="control" value={projStatus} onChange={e => setProjStatus(e.target.value)}>
-          {PROJECT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-        </select>
-      </Field>
 
       <Field label="Pasta">
         <select className="control" value={folderId} onChange={e => setFolderId(e.target.value)}>

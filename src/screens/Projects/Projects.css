@@ -169,46 +169,59 @@
 /* Faixa de destaque: progresso · distribuição · valor */
 .cover-hero { padding: 26px 28px; display: flex; align-items: center; gap: 34px; flex-wrap: wrap; }
 
-.cover-donut { position: relative; flex-shrink: 0; }
+.cover-pie { flex-shrink: 0; display: block; overflow: visible; }
 
-.cover-donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+/* Fatia: sobe (destaca para fora) ao passar o mouse. */
+.pie-slice { transition: transform .18s var(--ease); transform-origin: center; cursor: default; }
 
-.cover-donut-pct { font-family: var(--font-mono); font-weight: 700; font-size: 34px; line-height: 1; color: var(--fg-1); letter-spacing: -0.02em; }
+.pie-slice path { transition: filter .18s var(--ease); }
 
-.cover-donut-pct i { font-style: normal; font-size: 18px; color: var(--fg-3); margin-left: 1px; }
+.pie-slice.on path { filter: drop-shadow(0 3px 7px rgba(22, 21, 15, .28)); }
 
-.cover-donut-cap { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-4); margin-top: 5px; }
+/* Número dentro da fatia: preto puro — 5.1:1 no taupe, 5.5:1 no azul, 6.6:1 no
+   verde. A tinta --fg-1 ficaria em 4.43:1 sobre o taupe, abaixo do mínimo. */
+.pie-label { font-family: var(--font-mono); font-size: 14px; font-weight: 700; fill: #000; pointer-events: none; }
+
+/* Percentual como manchete, ao lado da pizza. */
+.cover-pct { display: block; font-family: var(--font-mono); font-weight: 700; font-size: 46px; line-height: 1; color: var(--fg-1); letter-spacing: -0.03em; margin-bottom: 16px; }
+
+.cover-pct i { font-style: normal; font-size: 24px; color: var(--fg-3); margin-left: 2px; }
 
 .cover-hero-main { flex: 1; min-width: 240px; }
 
 .cover-eyebrow { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-4); margin-bottom: 12px; }
 
-.cover-breakdown { display: flex; flex-wrap: wrap; gap: 22px; margin-bottom: 14px; }
+.cover-breakdown { display: flex; flex-wrap: wrap; gap: 16px; }
 
-.cover-bd-item { display: flex; align-items: baseline; gap: 7px; }
+/* Linha da composição: altura fixa para o hover não mexer no layout. */
+.cover-bd-detail { margin-top: 12px; min-height: 20px; font-size: 13px; color: var(--fg-2); line-height: 20px; }
+
+.cover-bd-detail strong { font-weight: 700; color: var(--fg-1); }
+
+.cover-bd-detail .muted { color: var(--fg-4); }
+
+.cover-bd-item { display: flex; align-items: center; gap: 8px; padding: 3px 9px; margin: -3px -9px; border-radius: var(--r-full); transition: background var(--dur); }
+
+.cover-bd-item.on { background: var(--bg-muted); }
+
+.cover-bd-item.off { opacity: .45; }
+
+.cover-bd-share { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--fg-1); }
 
 .cover-bd-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; align-self: center; }
 
-.cover-bd-num { font-family: var(--font-mono); font-weight: 700; font-size: 22px; color: var(--fg-1); line-height: 1; }
+.cover-bd-lab { font-size: 13.5px; font-weight: 600; color: var(--fg-2); }
 
-.cover-bd-lab { font-size: 13px; color: var(--fg-3); }
-
-/* Barra proporcional: 2px de respiro entre as fatias, como manda o design system */
-.cover-bd-bar { display: flex; gap: 2px; height: 8px; border-radius: var(--r-full); overflow: hidden; background: var(--bg-muted); }
-
-.cover-bd-bar > span:first-child { border-radius: var(--r-full) 0 0 var(--r-full); }
-
-.cover-bd-bar > span:last-child { border-radius: 0 var(--r-full) var(--r-full) 0; }
-
-.cover-bd-bar > span:only-child { border-radius: var(--r-full); }
-
-.cover-bd-total { display: block; font-size: 12.5px; color: var(--fg-4); margin-top: 9px; }
-
-.cover-hero-side { display: flex; flex-direction: column; align-items: flex-end; gap: 14px; padding-left: 30px; border-left: 1px solid var(--border); align-self: stretch; justify-content: center; }
+.cover-hero-side { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; min-width: 210px; padding-left: 30px; border-left: 1px solid var(--border); align-self: stretch; justify-content: center; }
 
 .cover-money { text-align: right; }
 
-.cover-money strong { display: block; font-family: var(--font-mono); font-size: 27px; font-weight: 700; color: var(--fg-1); letter-spacing: -0.02em; line-height: 1.15; }
+.cover-money strong { display: block; font-family: var(--font-mono); font-size: 25px; font-weight: 700; color: var(--fg-1); letter-spacing: -0.02em; line-height: 1.15; }
+
+/* Segundo valor (disponível): mesma leitura, peso visual um passo abaixo. */
+.cover-money.alt strong { font-size: 21px; color: var(--fg-2); }
+
+.cover-money + .cover-money { padding-top: 13px; border-top: 1px solid var(--border); width: 100%; }
 
 .cover-money-sub { display: block; font-size: 12.5px; color: var(--fg-3); margin-top: 5px; }
 
@@ -246,3 +259,39 @@
   .cover-hero-side { padding-left: 0; border-left: 0; border-top: 1px solid var(--border); padding-top: 18px; width: 100%; align-items: flex-start; }
   .cover-money { text-align: left; }
 }
+
+/* ---------- Ficha técnica (aba de trabalho da equipe) ---------- */
+
+.proj-tech { display: flex; flex-direction: column; gap: 16px; }
+
+.tech-section { padding: 22px; }
+
+.tech-section-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 18px; }
+
+.tech-section-head h3 { font: var(--text-h4); margin: 0; color: var(--fg-1); }
+
+.tech-section-head p { margin: 4px 0 0; font-size: 13px; color: var(--fg-3); }
+
+/* Espaço reservado para os campos técnicos ainda não definidos. */
+.tech-empty { display: flex; gap: 13px; align-items: flex-start; padding: 18px; border: 1.5px dashed var(--border-strong); border-radius: var(--r-md); background: var(--bg-subtle); color: var(--fg-4); }
+
+.tech-empty strong { display: block; font-size: 13.5px; color: var(--fg-2); margin-bottom: 4px; }
+
+.tech-empty p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--fg-3); max-width: 62ch; }
+
+/* Grade para os campos técnicos, quando existirem (mesmo padrão do Panorama). */
+.tech-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 18px 26px; }
+
+/* ---------- Cores do gráfico de progresso ----------
+   Paleta própria do gráfico (cinza / laranja / verde), separada dos tokens de
+   status do Kanban: aqui as fatias vêm do CHECKLIST, não da coluna do quadro.
+   Validadas contra a superfície clara — a separação cinza↔laranja fica em
+   ΔE 19,6 (visão normal) e laranja↔verde em 6,8 (protanopia), dentro do piso
+   permitido porque toda fatia leva rótulo escrito, número dentro e filete de
+   2px separando as cores. */
+:root {
+  --chart-todo:  #77767B;  /* A fazer      — cinza neutro */
+  --chart-doing: #D9820A;  /* Em andamento — laranja      */
+  --chart-done:  #1FA463;  /* Concluído    — verde        */
+}
+
