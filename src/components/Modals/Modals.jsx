@@ -423,34 +423,51 @@ function ResourceEditor({ resources, onChange }) {
 // entrada: quem estiver como "Sem acesso" NÃO enxerga o projeto no sistema.
 // Administradores têm acesso total a tudo e não entram na lista.
 function PermissionsEditor({ users, members, onChangeMembers }) {
+  const [selectedUserId, setSelectedUserId] = React.useState('')
   const roleOf = (userId) => members.find(x => x.userId === userId)?.role || 'none'
   const setRole = (userId, value) => {
     const others = members.filter(x => x.userId !== userId)
     onChangeMembers(value === 'none' ? others : [...others, { userId, role: value }])
   }
+  const addMember = () => {
+    if (!selectedUserId) return
+    onChangeMembers([...members, { userId: selectedUserId, role: 'view' }])
+    setSelectedUserId('')
+  }
+  const removeMember = (userId) => onChangeMembers(members.filter(x => x.userId !== userId))
+  const availableUsers = users.filter(u => !u.isAdmin && roleOf(u.id) === 'none')
+  const memberUsers = users.filter(u => !u.isAdmin && roleOf(u.id) !== 'none')
   const comAcesso = users.filter(u => !u.isAdmin && roleOf(u.id) !== 'none').length
   return (
     <div className="field">
       <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        Quem participa
-        <span style={{ fontWeight: 400, color: 'var(--fg-4)', fontSize: 12.5 }}>só quem estiver aqui enxerga o projeto</span>
+        Participantes
+        <span style={{ fontWeight: 400, color: 'var(--fg-4)', fontSize: 12.5 }}>adicione quem poderá acessar o projeto</span>
       </label>
+      <div className="perm-add">
+        <select className="control" value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)}>
+          <option value="">Selecionar pessoa</option>
+          {availableUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+        <button type="button" className="btn btn-secondary btn-sm" disabled={!selectedUserId} onClick={addMember}>
+          <Icon name="plus" size={15} stroke={2.2} />Adicionar
+        </button>
+      </div>
       <div className="perm-list">
-        {users.map(u => (
+        {memberUsers.map(u => (
           <div className="perm-row" key={u.id}>
             <span className="av" style={{ width: 26, height: 26, background: u.color, fontSize: 10 }}>{u.initials}</span>
-            <span className="perm-name">{u.name}{u.isAdmin ? ' · admin' : ''}</span>
-            {u.isAdmin ? (
-              <span className="perm-admin-tag">Acesso total</span>
-            ) : (
-              <select className="control perm-select" value={roleOf(u.id)} onChange={e => setRole(u.id, e.target.value)}>
-                <option value="none">Sem acesso</option>
-                {PROJECT_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
-              </select>
-            )}
+            <span className="perm-name">{u.name}</span>
+            <select className="control perm-select" value={roleOf(u.id)} onChange={e => setRole(u.id, e.target.value)}>
+              {PROJECT_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+            </select>
+            <button type="button" className="btn-icon perm-remove" onClick={() => removeMember(u.id)} aria-label={`Remover ${u.name}`} title="Remover participante">
+              <Icon name="x" size={15} />
+            </button>
           </div>
         ))}
       </div>
+      {!memberUsers.length && <div className="perm-empty">Nenhum participante adicionado.</div>}
       <div className="perm-default-label" style={{ marginTop: 10 }}>
         {comAcesso === 0
           ? 'Ninguém além dos administradores vê este projeto.'
