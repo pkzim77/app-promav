@@ -103,6 +103,14 @@ export const api = {
   deleteTask: (id) => req('DELETE', `/tasks/${id}`),
   moveTask: (id, status) => req('PATCH', `/tasks/${id}/status`, { status }),
 
+  // ----- mudanças do projeto (orientações) -----
+  publishChange: (projectId, data) => req('POST', `/projects/${projectId}/changes`, data),
+  updateChange: (id, data) => req('PUT', `/changes/${id}`, data),
+  ackChange: (id) => req('POST', `/changes/${id}/ack`),
+  decideChange: (id, accept, reason) => req('POST', `/changes/${id}/decide`, { accept, reason }),
+  setUserSector: (id, sector) => req('PUT', `/users/${id}/sector`, { sector }),
+  setMySector: (sector) => req('POST', '/auth/sector', { sector }),
+
   startTimer: (userId, taskId) => req('POST', '/sessions/start', { userId, taskId }),
   stopTimer: (userId) => req('POST', '/sessions/stop', { userId }),
 }

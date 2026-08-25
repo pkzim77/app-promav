@@ -264,7 +264,7 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
 }
 
 // Menu do usuário logado: dados da conta + trocar senha + sair.
-export function UserMenu({ user, onChangePassword, onLogout }) {
+export function UserMenu({ user, onChangePassword, onMySector, onLogout }) {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef(null)
   React.useEffect(() => {
@@ -288,6 +288,11 @@ export function UserMenu({ user, onChangePassword, onLogout }) {
               <div className="menu-account-email">{user.email}</div>
             </div>
           </div>
+          {onMySector && (
+            <button className="menu-item" onClick={() => { setOpen(false); onMySector() }}>
+              <Icon name="users" size={17} />Meu setor
+            </button>
+          )}
           <button className="menu-item" onClick={() => { setOpen(false); onChangePassword() }}>
             <Icon name="lock" size={17} />Trocar senha
           </button>
@@ -300,7 +305,7 @@ export function UserMenu({ user, onChangePassword, onLogout }) {
   )
 }
 
-export function TopBar({ title, currentUser, canNewProject = true, onToggleMobileNav, onChangePassword, onLogout, onNewProject, tasks, projects, sessions, now, onStartTimer, onStopTimer }) {
+export function TopBar({ title, currentUser, canNewProject = true, onToggleMobileNav, onChangePassword, onMySector, onLogout, onNewProject, tasks, projects, sessions, now, onStartTimer, onStopTimer }) {
   return (
     <header className="topbar">
       <button className="tb-hamburger" title="Menu" onClick={onToggleMobileNav}>
@@ -318,7 +323,7 @@ export function TopBar({ title, currentUser, canNewProject = true, onToggleMobil
           <Icon name="plus" size={17} stroke={2.2} />Novo projeto
         </button>
       )}
-      <UserMenu user={currentUser} onChangePassword={onChangePassword} onLogout={onLogout} />
+      <UserMenu user={currentUser} onChangePassword={onChangePassword} onMySector={onMySector} onLogout={onLogout} />
     </header>
   )
 }

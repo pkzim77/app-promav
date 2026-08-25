@@ -1,7 +1,7 @@
 import React from 'react'
 import { Sidebar, TopBar } from './components/Chrome/Chrome.jsx'
 import { Toast } from './components/primitives/primitives.jsx'
-import { TaskModal, ProjectModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal } from './components/Modals/Modals.jsx'
+import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal } from './components/Modals/Modals.jsx'
 import { Hub } from './screens/Hub/Hub.jsx'
 import { ProjectList, ProjectDetail } from './screens/Projects/Projects.jsx'
 import { Kanban } from './screens/Kanban/Kanban.jsx'
@@ -23,6 +23,7 @@ export default function App() {
   const [projects, setProjects] = React.useState([])
   const [folders, setFolders] = React.useState([])
   const [tasks, setTasks] = React.useState([])
+  const [changes, setChanges] = React.useState([])
   const [route, setRoute] = React.useState({ view: 'hub' })
   const [filterProject, setFilterProject] = React.useState(null)
   const [mine, setMine] = React.useState(false)
@@ -47,6 +48,7 @@ export default function App() {
     try {
       const data = await api.bootstrap()
       setUsers(data.users); setProjects(data.projects); setTasks(data.tasks); setSessions(data.sessions); setFolders(data.folders || [])
+      setChanges(data.changes || [])
       setDataReady(true)
     } catch (err) { setLoadError(err.message) }
   }, [])
@@ -55,7 +57,7 @@ export default function App() {
   const handleLogout = React.useCallback(() => {
     api.logout()
     setAuthUser(null); setDataReady(false)
-    setUsers([]); setProjects([]); setTasks([]); setSessions([]); setFolders([])
+    setUsers([]); setProjects([]); setTasks([]); setSessions([]); setFolders([]); setChanges([])
     setRoute({ view: 'hub' }); setModal(null)
   }, [])
 
@@ -101,6 +103,65 @@ export default function App() {
     if (r.view === 'list') setFilterProject(r.projectId || null)
     if (r.view === 'kanban') setMine(!!r.mine)
     if (r.mine) setMine(true)
+  }
+
+  // A própria pessoa liga a conta ao setor em que trabalha.
+  const saveMySector = async (sector) => {
+    try {
+      await api.setMySector(sector)
+      setAuthUser(u => u ? { ...u, sector } : u)
+      setUsers(us => us.map(u => u.id === currentUserId ? { ...u, sector } : u))
+      setModal(null); flash('Setor atualizado.')
+    } catch (e) { flash(e.message || 'Erro ao salvar o setor.') }
+  }
+
+  // Setor da pessoa — define quem é cobrado quando a mudança vai para um setor.
+  const setUserSector = async (user, sector) => {
+    try {
+      await api.setUserSector(user.id, sector)
+      setUsers(us => us.map(u => u.id === user.id ? { ...u, sector } : u))
+      flash('Setor atualizado.')
+    } catch (e) { flash(e.message || 'Erro ao definir o setor.') }
+  }
+
+  // ----- mudanças do projeto (orientações) -----
+  const openNewChange = (projectId) => setModal({ type: 'change', projectId })
+  const openEditChange = (change) => setModal({ type: 'change', change, projectId: change.projectId })
+
+  // Publicar recarrega as atividades também: a mudança cria um cartão no quadro.
+  const saveChange = async (data) => {
+    try {
+      const saved = data.id
+        ? await api.updateChange(data.id, data)
+        : await api.publishChange(data.projectId, data)
+      setChanges(cs => data.id ? cs.map(c => c.id === saved.id ? saved : c) : [saved, ...cs])
+      if (!data.id) await loadData() // traz a atividade recém-criada
+      setModal(null)
+      flash(data.id ? 'Mudança atualizada — a equipe precisa confirmar de novo.' : 'Mudança publicada e equipe avisada.')
+    } catch (e) { flash(e.message || 'Erro ao salvar a mudança.') }
+  }
+
+  // Aceitar cria a atividade; por isso recarrega tudo depois de aceitar.
+  const decideChange = async (change, accept) => {
+    let reason = ''
+    if (!accept) {
+      reason = window.prompt('Por que esta sugestão está sendo recusada?') || ''
+      if (!reason.trim()) return
+    }
+    try {
+      const saved = await api.decideChange(change.id, accept, reason.trim())
+      setChanges(cs => cs.map(c => c.id === saved.id ? saved : c))
+      if (accept) await loadData()
+      flash(accept ? 'Sugestão aceita — atividade criada no quadro.' : 'Sugestão recusada.')
+    } catch (e) { flash(e.message || 'Erro ao decidir a sugestão.') }
+  }
+
+  const ackChange = async (change) => {
+    try {
+      const saved = await api.ackChange(change.id)
+      setChanges(cs => cs.map(c => c.id === saved.id ? saved : c))
+      flash('Ciência confirmada.')
+    } catch (e) { flash(e.message || 'Erro ao confirmar.') }
   }
 
   // ----- projects -----
@@ -261,7 +322,7 @@ export default function App() {
         setTasks(ts => [...ts, saved]); flash('Atividade criada.')
       }
       setModal(null)
-    } catch (e) { flash(e.message || 'Erro ao salvar atividade.') }
+    } catch (e) { flash('Erro ao salvar atividade.') }
   }
   const askDeleteTask = (task) => setModal({
     type: 'confirm', title: 'Excluir atividade?',
@@ -343,14 +404,15 @@ export default function App() {
   if (route.view === 'hub') {
     screen = <Hub projects={projects} tasks={tasks} onNavigate={navigate} sessions={sessions} currentUserId={currentUserId} now={now} />
   } else if (route.view === 'projects' && currentProject) {
-    screen = <ProjectDetail project={currentProject} tasks={tasks} users={users}
+    screen = <ProjectDetail project={currentProject} tasks={tasks} users={users} changes={changes}
       sessions={sessions} currentUserId={currentUserId} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
       canEdit={canEditCurrent} role={currentRole}
       onBack={() => setRoute({ view: 'projects' })} onEdit={openEditProject}
       onNewTask={openNewTask} onEditTask={openEditTask} onDeleteTask={askDeleteTask}
       onToggleChecklist={toggleChecklistItem}
       onCopyResource={copyResourceLink} onDeleteResource={(resource) => askDeleteResource(currentProject, resource)}
-      onAddResource={openAddResource} />
+      onAddResource={openAddResource}
+      onNewChange={openNewChange} onEditChange={openEditChange} onAckChange={ackChange} onDecideChange={decideChange} />
   } else if (route.view === 'projects') {
     screen = <ProjectList projects={projects} tasks={tasks} folders={folders} authUser={authUser} canCreate={isAdmin}
       onOpen={(id) => setRoute({ view: 'projects', projectId: id })}
@@ -369,7 +431,7 @@ export default function App() {
   } else if (route.view === 'reports') {
     screen = <Reports projects={projects} tasks={tasks} users={users} />
   } else if (route.view === 'team') {
-    screen = <TeamReport users={users} tasks={tasks} projects={projects} sessions={sessions} now={now} />
+    screen = <TeamReport users={users} tasks={tasks} projects={projects} sessions={sessions} now={now} isAdmin={isAdmin} onSetSector={setUserSector} />
   }
 
   return (
@@ -387,17 +449,26 @@ export default function App() {
       <div className="main">
         <TopBar title={currentProject ? currentProject.name : TITLES[route.view]} currentUser={authUser}
           canNewProject={isAdmin} onToggleMobileNav={() => setMobileNavOpen(o => !o)}
-          onChangePassword={() => setModal({ type: 'password' })} onLogout={handleLogout} onNewProject={openNewProject}
+          onChangePassword={() => setModal({ type: 'password' })} onMySector={() => setModal({ type: 'mysector' })}
+          onLogout={handleLogout} onNewProject={openNewProject}
           tasks={tasks} projects={projects} sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer} />
         <div className="content">{screen}</div>
       </div>
 
       {modal?.type === 'task' && (
         <TaskModal task={modal.task} projects={projects} users={users} currentUserId={currentUserId}
-          defaultProjectId={modal.defaultProjectId} defaultStatus={modal.defaultStatus} defaultParentId={modal.defaultParentId}
-          canEdit={canEditProject(effectiveProjectRole(projects.find(p => p.id === (modal.task?.projectId || modal.defaultProjectId)), authUser))}
+          defaultProjectId={modal.defaultProjectId} defaultStatus={modal.defaultStatus}
+          canEdit={modal.task ? canEditProject(effectiveProjectRole(projects.find(p => p.id === modal.task.projectId), authUser)) : isAdmin}
           onToggleChecklist={toggleChecklistItem} onToggleMembership={toggleMyMembership}
           onSave={saveTask} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'mysector' && (
+        <MySectorModal current={authUser?.sector} onSubmit={saveMySector} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'change' && (
+        <ChangeModal change={modal.change} projectId={modal.projectId} users={users} currentUserId={currentUserId}
+          members={projects.find(p => p.id === modal.projectId)?.members || []}
+          onSave={saveChange} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'project' && (
         <ProjectModal project={modal.project} users={users} folders={folders} defaultFolderId={modal.defaultFolderId} isAdmin={isAdmin} onSave={saveProject} onClose={() => setModal(null)} />

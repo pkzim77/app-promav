@@ -3,7 +3,7 @@ import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
 import { AvatarStack, StatusTag, PriorityTag, ProgressBar } from '../../components/primitives/primitives.jsx'
 import { TaskTimerButton } from '../../components/TimeTracker/TimeTracker.jsx'
-import { PROJECT_COLORS, STATUSES, projectProgress, taskProgress, checklistStats, taskMembers, fmtShort, fmtMed, fmtFull, dayDiff, parseDate, todayISO, formatBytes, effectiveProjectRole, canEditProject, ROLE_LABEL, RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, formatBRL, calcularProgresso } from '../../data/store.js'
+import { PROJECT_COLORS, STATUSES, projectProgress, taskProgress, checklistStats, taskMembers, fmtShort, fmtMed, fmtFull, dayDiff, parseDate, todayISO, formatBytes, effectiveProjectRole, canEditProject, ROLE_LABEL, RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, formatBRL, calcularProgresso, CHANGE_KIND_MAP, URGENCY_MAP, ladoDaMudanca } from '../../data/store.js'
 import { api } from '../../data/api.js'
 // Projetos — grid of project cards, and a project detail view with task table.
 
@@ -578,6 +578,236 @@ function ProjectTechSheet({ project, canEdit, onCopyResource, onDeleteResource, 
   )
 }
 
+// Dias sem confirmar a partir dos quais a ciência é cobrada em destaque.
+const DIAS_PARA_COBRAR_CIENCIA = 2
+
+// "há 3 dias", "há 2 meses" — para datas de publicação/edição.
+function haQuantoTempo(ms) {
+  const dias = Math.floor((Date.now() - ms) / 86400000)
+  if (dias <= 0) return 'hoje'
+  if (dias === 1) return 'ontem'
+  if (dias < 30) return `há ${dias} dias`
+  const meses = Math.floor(dias / 30)
+  if (meses < 12) return `há ${meses} ${meses === 1 ? 'mês' : 'meses'}`
+  const anos = Math.floor(meses / 12)
+  return `há ${anos} ${anos === 1 ? 'ano' : 'anos'}`
+}
+
+const cienciaAtrasada = (ack) =>
+  !ack.confirmedAt && (Date.now() - ack.sentAt) / 86400000 >= DIAS_PARA_COBRAR_CIENCIA
+
+// Chips de quem já viu e quem ainda deve. É o registro que responde ao
+// "eu não fui avisado" — não trava nada, só mostra.
+function Ciencia({ acks, users }) {
+  if (!acks.length) return null
+  const nome = (id) => users.find(u => u.id === id)?.name || 'Alguém'
+  return (
+    <div className="mud-ciencia">
+      {acks.map(a => {
+        const atrasada = cienciaAtrasada(a)
+        return (
+          <span key={a.userId}
+            className={'mud-ack' + (a.confirmedAt ? ' ok' : atrasada ? ' late' : '')}
+            title={a.confirmedAt ? `Confirmou ${haQuantoTempo(a.confirmedAt)}` : `Avisado ${haQuantoTempo(a.sentAt)}`}>
+            {a.confirmedAt && <Icon name="check" size={12} stroke={3} />}
+            {nome(a.userId)}{a.confirmedAt ? '' : ' ainda não viu'}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+// Selos da mudança: tipo, urgência e o "altera orçamento ou prazo".
+function SelosDaMudanca({ change }) {
+  const tipo = CHANGE_KIND_MAP[change.kind] || CHANGE_KIND_MAP.requisicao
+  const urg = URGENCY_MAP[change.urgency] || URGENCY_MAP.medium
+  return (
+    <>
+      <span className={'mud-selo tipo-' + change.kind} title={tipo.hint}>{tipo.label}</span>
+      {/* Urgência normal não vira selo: só o que foge do padrão merece destaque. */}
+      {change.urgency !== 'medium' && (
+        <span className="mud-selo" style={{ color: urg.color, background: urg.color + '1a' }}>{urg.label}</span>
+      )}
+      {change.affectsBudget && (
+        <span className="mud-selo" title="Marcada por quem publicou. Não trava o trabalho.">
+          <Icon name="banknote" size={13} />Altera orçamento ou prazo
+        </span>
+      )}
+    </>
+  )
+}
+
+// Emissor → destinatário. Pessoa mostra avatar; setor mostra ícone de grupo.
+function LadoChip({ lado }) {
+  if (!lado.tipo) return <span className="mud-lado vazio">—</span>
+  return (
+    <span className="mud-lado">
+      {lado.tipo === 'pessoa' && lado.user
+        ? <span className="av" style={{ width: 22, height: 22, background: lado.user.color, fontSize: 9 }}>{lado.user.initials}</span>
+        : <span className="mud-lado-ic"><Icon name="users" size={13} /></span>}
+      {lado.nome}
+    </span>
+  )
+}
+
+function DeParaMudanca({ change, users }) {
+  const de = ladoDaMudanca({ userId: change.emitterUserId, sector: change.emitterSector }, users)
+  // Destinatário: um setor, ou uma ou mais pessoas.
+  const paras = change.targetSector
+    ? [ladoDaMudanca({ sector: change.targetSector }, users)]
+    : (change.targetUserIds?.length ? change.targetUserIds : [change.responsibleId].filter(Boolean))
+        .map(id => ladoDaMudanca({ userId: id }, users))
+  return (
+    <div className="mud-depara">
+      <span className="mud-depara-lab">De</span><LadoChip lado={de} />
+      <Icon name="arrowRight" size={16} style={{ color: 'var(--fg-4)' }} />
+      <span className="mud-depara-lab">Para</span>
+      {paras.length ? paras.map((p, i) => <LadoChip lado={p} key={i} />) : <LadoChip lado={{ tipo: null, nome: '—' }} />}
+    </div>
+  )
+}
+
+// Destinatários de uma mudança, como lista de ids (compatível com o formato
+// antigo, que guardava um responsável só).
+const alvosDaMudanca = (c) =>
+  c.targetUserIds?.length ? c.targetUserIds : [c.responsibleId].filter(Boolean)
+
+// A pessoa é o destinatário? Endereçada diretamente, ou está no setor endereçado.
+// É esta checagem que libera aceitar/recusar uma sugestão.
+function ehDestinatario(change, user) {
+  if (!user) return false
+  if (change.targetSector) return user.sector === change.targetSector
+  return alvosDaMudanca(change).includes(user.id)
+}
+
+// Um registro de mudança do projeto. A aba é um histórico corrido do que já
+// mudou — não existe "o que vale agora": toda mudança registrada continua
+// valendo como fato ocorrido.
+function CartaoMudanca({ change, users, tasks, currentUser, canEdit, onEdit, onAck, onDecide, onOpenTask }) {
+  const autor = users.find(u => u.id === change.publishedBy)
+  const decisor = users.find(u => u.id === change.decidedBy)
+  const tarefa = tasks.find(t => t.id === change.taskId)
+  const minhaCiencia = change.acks.find(a => a.userId === currentUser?.id && !a.confirmedAt)
+  const souDestinatario = ehDestinatario(change, currentUser)
+  const pendente = change.kind === 'sugestao' && !change.decision
+
+  return (
+    <div className={'card mud-card' + (pendente ? ' pendente' : '')}>
+      <div className="mud-card-topo">
+        <span className="mud-data">{fmtFull(change.changeDate)}</span>
+        <div className="mud-selos"><SelosDaMudanca change={change} /></div>
+        {canEdit && (
+          <button className="btn-icon" onClick={() => onEdit(change)} aria-label="Editar mudança">
+            <Icon name="pencil" size={16} />
+          </button>
+        )}
+      </div>
+
+      <h3 className="mud-titulo">{change.title}</h3>
+
+      <div className="mud-meta">
+        {autor && <span>Registrada por {autor.name} {haQuantoTempo(change.publishedAt)}</span>}
+        {change.editedAt && <span className="mud-editada">· editada {haQuantoTempo(change.editedAt)}</span>}
+      </div>
+
+      <DeParaMudanca change={change} users={users} />
+      <NotesText text={change.description} />
+      {change.requester && <p className="mud-origem"><strong>Solicitante:</strong> {change.requester}</p>}
+
+      {/* Sugestão pendente: só o destinatário decide. Os demais veem o estado. */}
+      {pendente && (
+        <div className="mud-decisao pendente">
+          <div>
+            <strong>Sugestão aguardando decisão</strong>
+            <p>{souDestinatario
+              ? 'Você é o destinatário. Aceitar cria a atividade no quadro; recusar exige um motivo.'
+              : 'Aguardando o destinatário aceitar ou recusar.'}</p>
+          </div>
+          {souDestinatario && (
+            <div className="mud-decisao-acoes">
+              <button className="btn btn-primary btn-sm" onClick={() => onDecide(change, true)}>
+                <Icon name="check" size={15} stroke={2.4} />Aceitar
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => onDecide(change, false)}>
+                <Icon name="x" size={15} stroke={2.4} />Recusar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {change.decision === 'aceita' && (
+        <div className="mud-decisao aceita">
+          <div><strong>Sugestão aceita{decisor ? ` por ${decisor.name}` : ''}</strong></div>
+        </div>
+      )}
+      {change.decision === 'recusada' && (
+        <div className="mud-decisao recusada">
+          <div>
+            <strong>Sugestão recusada{decisor ? ` por ${decisor.name}` : ''}</strong>
+            <p>{change.decisionReason}</p>
+          </div>
+        </div>
+      )}
+
+      {(minhaCiencia || tarefa) && (
+        <div className="mud-acoes">
+          {minhaCiencia && (
+            <button className="btn btn-primary btn-sm" onClick={() => onAck(change)}>
+              <Icon name="check" size={15} stroke={2.4} />Confirmo que vi esta mudança
+            </button>
+          )}
+          {tarefa && (
+            <button className="btn btn-ghost btn-sm" onClick={() => onOpenTask(tarefa)}>
+              Ver a atividade<Icon name="arrowRight" size={15} />
+            </button>
+          )}
+        </div>
+      )}
+
+      <Ciencia acks={change.acks} users={users} />
+    </div>
+  )
+}
+
+// Aba "Mudanças": registro do que já mudou no projeto, do mais recente ao mais
+// antigo. Cada mudança fica na lista para sempre — é histórico, não versão.
+function ProjectChanges({ project, changes, tasks, users, currentUserId, canEdit, onNew, onEdit, onAck, onDecide, onOpenTask }) {
+  const lista = changes
+    .filter(c => c.projectId === project.id)
+    .sort((a, b) => b.publishedAt - a.publishedAt)
+  const currentUser = users.find(u => u.id === currentUserId) || null
+
+  if (!lista.length) {
+    return (
+      <EmptyState icon="history" title="Nenhuma mudança registrada"
+        text="Registre aqui o que mudou no projeto — escopo, estrutura, prazo. A equipe é avisada e uma requisição já vira atividade no quadro."
+        action={canEdit ? <button className="btn btn-primary" onClick={() => onNew(project.id)}><Icon name="plus" size={17} stroke={2.2} />Registrar mudança</button> : null} />
+    )
+  }
+
+  return (
+    <div className="proj-mudancas">
+      <div className="mud-topo">
+        <span className="mud-contagem">
+          {lista.length} {lista.length === 1 ? 'mudança registrada' : 'mudanças registradas'}
+        </span>
+        {canEdit && (
+          <button className="btn btn-primary btn-sm" onClick={() => onNew(project.id)}>
+            <Icon name="plus" size={16} stroke={2.2} />Registrar mudança
+          </button>
+        )}
+      </div>
+
+      {lista.map(c => (
+        <CartaoMudanca key={c.id} change={c} users={users} tasks={tasks}
+          currentUser={currentUser} canEdit={canEdit}
+          onEdit={onEdit} onAck={onAck} onDecide={onDecide} onOpenTask={onOpenTask} />
+      ))}
+    </div>
+  )
+}
+
 // Panorama — primeira aba, pensada para ser projetada numa reunião:
 // progresso do projeto em destaque + a ficha do cadastro em blocos legíveis.
 function ProjectCover({ project, tasks, users }) {
@@ -709,9 +939,13 @@ function ProjectCover({ project, tasks, users }) {
   )
 }
 
-export function ProjectDetail({ project, tasks, users, sessions, currentUserId, now, canEdit = true, role, onStartTimer, onStopTimer, onBack, onEdit, onNewTask, onEditTask, onDeleteTask, onCopyResource, onDeleteResource, onAddResource }) {
+export function ProjectDetail({ project, tasks, users, sessions, changes = [], currentUserId, now, canEdit = true, role, onStartTimer, onStopTimer, onBack, onEdit, onNewTask, onEditTask, onDeleteTask, onCopyResource, onDeleteResource, onAddResource, onNewChange, onEditChange, onAckChange, onDecideChange }) {
   // O Panorama abre primeiro: é o que se mostra numa reunião com o cliente.
-  const [tab, setTab] = React.useState('panorama') // 'panorama' | 'tecnica' | 'atividades'
+  const [tab, setTab] = React.useState('panorama') // 'panorama' | 'tecnica' | 'atividades' | 'mudancas'
+  // Ciências pendentes minhas neste projeto — viram um ponto na aba.
+  const cienciasPendentes = changes
+    .filter(c => c.projectId === project.id)
+    .reduce((n, c) => n + (c.acks.some(a => a.userId === currentUserId && !a.confirmedAt) ? 1 : 0), 0)
   const list = tasks.filter(t => t.projectId === project.id)
   const pct = projectProgress(tasks, project.id)
   const color = PROJECT_COLORS[project.color]
@@ -747,6 +981,10 @@ export function ProjectDetail({ project, tasks, users, sessions, currentUserId, 
         <button className={'proj-tab' + (tab === 'atividades' ? ' on' : '')} onClick={() => setTab('atividades')}>
           <Icon name="list" size={15} />Atividades
         </button>
+        <button className={'proj-tab' + (tab === 'mudancas' ? ' on' : '')} onClick={() => setTab('mudancas')}>
+          <Icon name="history" size={15} />Mudanças
+          {cienciasPendentes > 0 && <span className="proj-tab-dot" title="Você ainda não confirmou que viu" />}
+        </button>
       </div>
 
       {tab === 'panorama' ? (
@@ -754,6 +992,10 @@ export function ProjectDetail({ project, tasks, users, sessions, currentUserId, 
       ) : tab === 'tecnica' ? (
         <ProjectTechSheet project={project} canEdit={canEdit}
           onCopyResource={onCopyResource} onDeleteResource={onDeleteResource} onAddResource={onAddResource} />
+      ) : tab === 'mudancas' ? (
+        <ProjectChanges project={project} changes={changes} tasks={tasks} users={users}
+          currentUserId={currentUserId} canEdit={canEdit}
+          onNew={onNewChange} onEdit={onEditChange} onAck={onAckChange} onDecide={onDecideChange} onOpenTask={onEditTask} />
       ) : (
       <>
       <div className="card" style={{ padding: 18, marginBottom: 22, display: 'flex', alignItems: 'center', gap: 20 }}>

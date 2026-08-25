@@ -6,10 +6,6 @@
 
 .field-error { font-size: 12.5px; color: var(--danger); display: flex; align-items: center; gap: 5px; }
 
-.project-modal { max-width: 900px; }
-
-.task-modal { max-width: 900px; }
-
 .color-swatches { display: flex; gap: 10px; }
 
 .color-swatches button { width: 30px; height: 30px; border-radius: var(--r-sm); border: 2px solid transparent; transition: transform var(--dur); }
@@ -100,12 +96,6 @@
 
 .perm-admin-tag { font-size: 12px; font-weight: 600; color: var(--brand); background: var(--brand-soft); padding: 4px 10px; border-radius: var(--r-full); }
 
-.perm-add { display: flex; gap: 8px; margin-bottom: 12px; }
-
-.perm-add .control { flex: 1; min-width: 0; }
-
-.perm-add .btn { flex-shrink: 0; }
-
 /* Seletor de arquivo (modais de documento/imagem) */
 
 .filepicker { display: flex; width: 100%; align-items: center; padding: 14px; border: 1.5px dashed var(--border); border-radius: var(--r-md); background: var(--bg-subtle); color: var(--fg-2); transition: border-color var(--dur), background var(--dur); }
@@ -156,3 +146,21 @@
 .money-field .control { padding-left: 38px; font-family: var(--font-mono); font-weight: 600; text-align: right; }
 
 .money-prefix { position: absolute; left: 13px; font-size: 13px; font-weight: 600; color: var(--fg-4); pointer-events: none; }
+
+/* ---------- Marcação "altera orçamento ou prazo" ---------- */
+
+.change-check { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; color: var(--fg-1); }
+
+.change-check-box { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid var(--border-strong); border-radius: var(--r-sm); color: #fff; transition: background var(--dur), border-color var(--dur); }
+
+.change-check:hover .change-check-box { border-color: var(--brand); }
+
+.change-check.on .change-check-box { background: var(--brand); border-color: var(--brand); }
+
+/* ---------- Destinatários múltiplos ---------- */
+
+.dest-lista { display: flex; flex-direction: column; gap: 8px; }
+
+.dest-linha { display: flex; align-items: center; gap: 6px; }
+
+.dest-linha .control { flex: 1; min-width: 0; }
