@@ -50,6 +50,8 @@
 
 .tasktable tbody tr:hover .row-actions { opacity: 1; }
 
+.tasktable tbody .task-row-clickable { cursor: pointer; }
+
 /* ---------- Project "about" panel (detail screen) ---------- */
 
 .proj-notes { font-size: 14px; color: var(--fg-2); line-height: 1.6; }
