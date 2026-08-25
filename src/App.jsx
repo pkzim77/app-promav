@@ -249,7 +249,7 @@ export default function App() {
   }
 
   // ----- tasks -----
-  const openNewTask = (projectId, status, parentId) => setModal({ type: 'task', defaultProjectId: projectId, defaultStatus: status, defaultParentId: parentId || null })
+  const openNewTask = (projectId, status) => setModal({ type: 'task', defaultProjectId: projectId, defaultStatus: status })
   const openEditTask = (task) => setModal({ type: 'task', task })
   const saveTask = async (data) => {
     try {
