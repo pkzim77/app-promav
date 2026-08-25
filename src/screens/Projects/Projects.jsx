@@ -153,8 +153,8 @@ export function EmptyState({ icon, title, text, action }) {
 function TaskRow({ task, members, sessions, currentUserId, now, canEdit, onStartTimer, onStopTimer, onEdit, onDelete }) {
   const resp = members[0]
   return (
-    <tr className="task-row-clickable" onClick={() => onEdit(task)}>
-      <td style={{ width: '28%' }}><button className="task-title task-title-btn" onClick={(e) => { e.stopPropagation(); onEdit(task) }}>{task.title}</button></td>
+    <tr>
+      <td style={{ width: '28%' }}><button className="task-title task-title-btn" onClick={() => onEdit(task)}>{task.title}</button></td>
       <td><StatusTag status={task.status} /></td>
       <td><PriorityTag priority={task.priority} /></td>
       <td>
@@ -177,8 +177,8 @@ function TaskRow({ task, members, sessions, currentUserId, now, canEdit, onStart
       </td>
       <td style={{ width: 70 }}>
         <div className="row-actions">
-          <button className="btn-icon" onClick={(e) => { e.stopPropagation(); onEdit(task) }} aria-label={canEdit ? 'Editar' : 'Ver'}><Icon name={canEdit ? 'pencil' : 'externalLink'} size={15} /></button>
-          {canEdit && <button className="btn-icon" onClick={(e) => { e.stopPropagation(); onDelete(task) }} aria-label="Excluir"><Icon name="trash" size={15} /></button>}
+          <button className="btn-icon" onClick={() => onEdit(task)} aria-label={canEdit ? 'Editar' : 'Ver'}><Icon name={canEdit ? 'pencil' : 'externalLink'} size={15} /></button>
+          {canEdit && <button className="btn-icon" onClick={() => onDelete(task)} aria-label="Excluir"><Icon name="trash" size={15} /></button>}
         </div>
       </td>
     </tr>
@@ -423,7 +423,8 @@ function StatusPie({ slices, size = 180, hovered, onHover }) {
             <path d={pieSlice(cx, cy, r, s.from, s.to)} fill={s.color}
               stroke="var(--surface)" strokeWidth="2" />
             {s.share >= 8 && (
-              <text className="pie-label" x={s.lx} y={s.ly} textAnchor="middle" dominantBaseline="central">
+              <text className="pie-label" x={s.lx} y={s.ly} fill={s.ink}
+                textAnchor="middle" dominantBaseline="central">
                 {pctBR(s.share)}
               </text>
             )}
@@ -593,12 +594,15 @@ function ProjectCover({ project, tasks, users }) {
   // Recalcula sozinho a cada marcação, porque `tasks` vem do estado do App.
   const prog = calcularProgresso(list)
   const pct = Math.round(prog.executado)
+  // `ink` é a cor do número dentro da fatia. Nenhuma tinta única passa em
+  // contraste sobre as três cores da marca, então cada fatia leva a que a atende:
+  // cinza 6,66:1 no branco · dourado 6,57:1 no preto · verde 5,03:1 no branco.
   const breakdown = [
-    { id: 'aFazer', label: 'A fazer', color: 'var(--chart-todo)', share: prog.aFazer,
+    { id: 'aFazer', label: 'A fazer', color: 'var(--chart-todo)', ink: '#fff', share: prog.aFazer,
       hint: 'das atividades ainda não iniciadas' },
-    { id: 'emAndamento', label: 'Em andamento', color: 'var(--chart-doing)', share: prog.emAndamento,
+    { id: 'emAndamento', label: 'Em andamento', color: 'var(--chart-doing)', ink: '#000', share: prog.emAndamento,
       hint: 'das atividades em execução — a barra grande conta só o que já foi marcado nelas' },
-    { id: 'concluido', label: 'Concluído', color: 'var(--chart-done)', share: prog.concluido,
+    { id: 'concluido', label: 'Concluído', color: 'var(--chart-done)', ink: '#fff', share: prog.concluido,
       hint: 'das atividades finalizadas — status Concluído ou checklist inteiro marcado' },
   ]
   const detail = breakdown.find(s => s.id === hovered) || null
@@ -633,7 +637,7 @@ function ProjectCover({ project, tasks, users }) {
             {detail
               ? <><strong>{pctBR(detail.share)}</strong> {detail.hint}.</>
               : prog.total > 0
-                ? <span className="muted">{prog.total} {prog.total === 1 ? 'atividade' : 'atividades'}, cada uma valendo {pctBR(prog.peso)} do projeto.</span>
+                ? <span className="muted">Passe o mouse sobre uma fatia para ver o que ela representa.</span>
                 : <span className="muted">Nenhuma atividade cadastrada ainda.</span>}
           </div>
         </div>
@@ -725,6 +729,9 @@ export function ProjectDetail({ project, tasks, users, sessions, currentUserId, 
             <Icon name="calendar" size={15} />{fmtMed(project.start)} — {fmtMed(project.end)}
           </div>
         </div>
+        {role && role !== 'admin' && (
+          <span className="role-badge" title="Seu acesso neste projeto">{ROLE_LABEL[role]}</span>
+        )}
         {canEdit && <button className="btn btn-secondary" onClick={() => onEdit(project)}><Icon name="pencil" size={16} />Editar</button>}
         {canEdit && <button className="btn btn-primary" onClick={() => onNewTask(project.id)}><Icon name="plus" size={17} stroke={2.2} />Nova atividade</button>}
       </div>

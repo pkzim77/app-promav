@@ -43,11 +43,14 @@ export const RESOURCE_ORIGINS = [
 export const RESOURCE_ORIGIN_MAP = Object.fromEntries(RESOURCE_ORIGINS.map(o => [o.id, o]))
 
 // Status geral do projeto (diferente do status das atividades).
+// Tons da identidade PROMAV, escurecidos até passarem 4.5:1 como TEXTO sobre
+// fundo claro — o selo pinta a própria cor sobre um véu dela mesma, então o
+// dourado #AD8A5C puro (3,12:1) não serviria aqui, só como preenchimento.
 export const PROJECT_STATUSES = [
-  { id: 'planejamento', label: 'Planejamento',  color: '#6E6A9B' },
-  { id: 'andamento',    label: 'Em andamento',  color: '#1f64cc' },
-  { id: 'paralisado',   label: 'Paralisado',    color: '#B0603F' },
-  { id: 'concluido',    label: 'Concluído',     color: '#157a49' },
+  { id: 'planejamento', label: 'Planejamento',  color: '#5F5C56' }, // cinza profundo · 6,49:1
+  { id: 'andamento',    label: 'Em andamento',  color: '#8A6A3F' }, // dourado escurecido · 4,85:1
+  { id: 'paralisado',   label: 'Paralisado',    color: '#9A4F32' }, // terracota · 5,78:1
+  { id: 'concluido',    label: 'Concluído',     color: '#276B46' }, // verde profundo · 6,24:1
 ]
 export const PROJECT_STATUS_MAP = Object.fromEntries(PROJECT_STATUSES.map(s => [s.id, s]))
 

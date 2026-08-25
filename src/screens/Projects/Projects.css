@@ -42,8 +42,6 @@
 
 .tasktable tbody tr { transition: background var(--dur); }
 
-.tasktable tbody .task-row-clickable { cursor: pointer; }
-
 .tasktable tbody tr:hover { background: var(--bg-subtle); }
 
 .task-title { font-weight: 600; color: var(--fg-1); }
@@ -180,12 +178,13 @@
 
 .pie-slice.on path { filter: drop-shadow(0 3px 7px rgba(22, 21, 15, .28)); }
 
-/* Número dentro da fatia: preto puro — 5.1:1 no taupe, 5.5:1 no azul, 6.6:1 no
-   verde. A tinta --fg-1 ficaria em 4.43:1 sobre o taupe, abaixo do mínimo. */
-.pie-label { font-family: var(--font-mono); font-size: 14px; font-weight: 700; fill: #000; pointer-events: none; }
+/* Número dentro da fatia. A cor vem por fatia (prop `ink` no JSX): nenhuma tinta
+   única passa em contraste sobre as três — preto reprova no azul (3,75:1) e
+   branco reprova no verde (3,21:1). */
+.pie-label { font-family: var(--font-brand); font-size: 14px; font-weight: 700; pointer-events: none; }
 
 /* Percentual como manchete, ao lado da pizza. */
-.cover-pct { display: block; font-family: var(--font-mono); font-weight: 700; font-size: 46px; line-height: 1; color: var(--fg-1); letter-spacing: -0.03em; margin-bottom: 16px; }
+.cover-pct { display: block; font-family: var(--font-brand); font-weight: 700; font-size: 46px; line-height: 1; color: var(--fg-1); letter-spacing: -0.03em; margin-bottom: 16px; }
 
 .cover-pct i { font-style: normal; font-size: 24px; color: var(--fg-3); margin-left: 2px; }
 
@@ -211,7 +210,7 @@
 
 .cover-bd-item.off { opacity: .45; }
 
-.cover-bd-share { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--fg-1); }
+.cover-bd-share { font-family: var(--font-brand); font-size: 13px; font-weight: 700; color: var(--fg-1); }
 
 .cover-bd-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; align-self: center; }
 
@@ -221,7 +220,7 @@
 
 .cover-money { text-align: right; }
 
-.cover-money strong { display: block; font-family: var(--font-mono); font-size: 25px; font-weight: 700; color: var(--fg-1); letter-spacing: -0.02em; line-height: 1.15; }
+.cover-money strong { display: block; font-family: var(--font-brand); font-size: 25px; font-weight: 700; color: var(--fg-1); letter-spacing: -0.02em; line-height: 1.15; }
 
 /* Segundo valor (disponível): mesma leitura, peso visual um passo abaixo. */
 .cover-money.alt strong { font-size: 21px; color: var(--fg-2); }
@@ -292,14 +291,16 @@
 /* ---------- Cores do gráfico de progresso ----------
    Paleta própria do gráfico (cinza / laranja / verde), separada dos tokens de
    status do Kanban: aqui as fatias vêm do CHECKLIST, não da coluna do quadro.
-   Validadas contra a superfície clara — a separação cinza↔laranja fica em
-   ΔE 19,6 (visão normal) e laranja↔verde em 6,8 (protanopia), dentro do piso
-   permitido porque toda fatia leva rótulo escrito, número dentro e filete de
-   2px separando as cores. */
+   Alinhadas à identidade da PROMAV: o dourado #AD8A5C é o oficial das propostas,
+   sem alteração; cinza e verde vêm da família neutra/terrosa da marca. A marca é
+   propositalmente monocromática (bege/dourado/preto) — ótima em documento, mas
+   num gráfico exige afastar o cinza do dourado, senão as fatias se confundem.
+   Validadas: pior par adjacente em ΔE 17,4 (visão normal) e 8,1 (protanopia),
+   com rótulo escrito, número dentro e filete de 2px separando as cores. */
 :root {
-  --chart-todo:  #77767B;  /* A fazer      — cinza neutro */
-  --chart-doing: #D9820A;  /* Em andamento — laranja      */
-  --chart-done:  #1FA463;  /* Concluído    — verde        */
+  --chart-todo:  #5F5C56;  /* A fazer      — cinza profundo da paleta neutra */
+  --chart-doing: #AD8A5C;  /* Em andamento — DOURADO OFICIAL da PROMAV       */
+  --chart-done:  #2E7D52;  /* Concluído    — verde profundo, tom terroso     */
 }
 
 
@@ -323,10 +324,10 @@
 
 .crono-fill { display: block; height: 100%; border-radius: var(--r-full); transition: width .5s var(--ease); }
 
-.crono-fill.prazo { background: var(--fg-3); }
+.crono-fill.prazo { background: var(--chart-doing); }
 
 
-.crono-val { flex: 0 0 52px; text-align: right; font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--fg-1); }
+.crono-val { flex: 0 0 52px; text-align: right; font-family: var(--font-brand); font-size: 13px; font-weight: 700; color: var(--fg-1); }
 
 .crono-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--fg-3); }
 
