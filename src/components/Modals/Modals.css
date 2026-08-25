@@ -100,6 +100,12 @@
 
 .perm-admin-tag { font-size: 12px; font-weight: 600; color: var(--brand); background: var(--brand-soft); padding: 4px 10px; border-radius: var(--r-full); }
 
+.perm-add { display: flex; gap: 8px; margin-bottom: 12px; }
+
+.perm-add .control { flex: 1; min-width: 0; }
+
+.perm-add .btn { flex-shrink: 0; }
+
 /* Seletor de arquivo (modais de documento/imagem) */
 
 .filepicker { display: flex; width: 100%; align-items: center; padding: 14px; border: 1.5px dashed var(--border); border-radius: var(--r-md); background: var(--bg-subtle); color: var(--fg-2); transition: border-color var(--dur), background var(--dur); }

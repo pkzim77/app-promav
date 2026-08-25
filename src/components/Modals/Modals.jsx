@@ -458,13 +458,68 @@ function ResourceEditor({ resources, onChange }) {
   )
 }
 
+function PermissionsEditor({ users, members, onChangeMembers }) {
+  const [selectedUserId, setSelectedUserId] = React.useState('')
+  const roleOf = (userId) => members.find(x => x.userId === userId)?.role || 'none'
+  const setRole = (userId, value) => {
+    const others = members.filter(x => x.userId !== userId)
+    onChangeMembers(value === 'none' ? others : [...others, { userId, role: value }])
+  }
+  const addMember = () => {
+    if (!selectedUserId) return
+    onChangeMembers([...members, { userId: selectedUserId, role: 'view' }])
+    setSelectedUserId('')
+  }
+  const removeMember = (userId) => onChangeMembers(members.filter(x => x.userId !== userId))
+  const availableUsers = users.filter(u => !u.isAdmin && roleOf(u.id) === 'none')
+  const memberUsers = users.filter(u => !u.isAdmin && roleOf(u.id) !== 'none')
+  const comAcesso = users.filter(u => !u.isAdmin && roleOf(u.id) !== 'none').length
+  return (
+    <div className="field">
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        Participantes
+        <span style={{ fontWeight: 400, color: 'var(--fg-4)', fontSize: 12.5 }}>adicione quem poderá acessar o projeto</span>
+      </label>
+      <div className="perm-add">
+        <select className="control" value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)}>
+          <option value="">Selecionar pessoa</option>
+          {availableUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+        <button type="button" className="btn btn-secondary btn-sm" disabled={!selectedUserId} onClick={addMember}>
+          <Icon name="plus" size={15} stroke={2.2} />Adicionar
+        </button>
+      </div>
+      <div className="perm-list">
+        {memberUsers.map(u => (
+          <div className="perm-row" key={u.id}>
+            <span className="av" style={{ width: 26, height: 26, background: u.color, fontSize: 10 }}>{u.initials}</span>
+            <span className="perm-name">{u.name}</span>
+            <select className="control perm-select" value={roleOf(u.id)} onChange={e => setRole(u.id, e.target.value)}>
+              {PROJECT_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+            </select>
+            <button type="button" className="btn-icon perm-remove" onClick={() => removeMember(u.id)} aria-label={`Remover ${u.name}`} title="Remover participante">
+              <Icon name="x" size={15} />
+            </button>
+          </div>
+        ))}
+      </div>
+      {!memberUsers.length && <div className="perm-empty">Nenhum participante adicionado.</div>}
+      <div className="perm-default-label" style={{ marginTop: 10 }}>
+        {comAcesso === 0
+          ? 'Ninguém além dos administradores vê este projeto.'
+          : `${comAcesso} ${comAcesso === 1 ? 'pessoa vê' : 'pessoas veem'} este projeto (além dos administradores).`}
+      </div>
+    </div>
+  )
+}
 // Equipe do projeto — lista única que resolve duas coisas de uma vez:
 //  • acesso: quem estiver como "Sem acesso" NÃO enxerga o projeto no sistema
 //    (administradores têm acesso total e não têm seletor);
 //  • responsabilidade: o check da esquerda marca quem responde pelo projeto.
 // O seletor de acesso só aparece para administradores; os demais veem o papel
 // como texto (o backend também ignora alterações de permissão de não-admins).
-function ProjectTeamEditor({ users, members, responsibleIds, onChangeMembers, onChangeResponsibles, isAdmin, error }) {
+
+/*function ProjectTeamEditor({ users, members, responsibleIds, onChangeMembers, onChangeResponsibles, isAdmin, error }) {
   const roleOf = (userId) => members.find(x => x.userId === userId)?.role || 'none'
   const setRole = (userId, value) => {
     const others = members.filter(x => x.userId !== userId)
@@ -529,7 +584,7 @@ function ProjectTeamEditor({ users, members, responsibleIds, onChangeMembers, on
       </div>
     </div>
   )
-}
+}*/
 
 export function ProjectModal({ project, users = [], folders = [], defaultFolderId = null, isAdmin = false, onSave, onClose }) {
   const editing = !!project
@@ -537,8 +592,8 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const [desc, setDesc] = React.useState(project?.desc || '')
   const [color, setColor] = React.useState(project?.color || 'indigo')
   const [folderId, setFolderId] = React.useState(project?.folderId || defaultFolderId || '')
-  const [start, setStart] = React.useState(project?.start || '2026-05-26')
-  const [end, setEnd] = React.useState(project?.end || '2026-07-01')
+  const [start, setStart] = React.useState(project?.start || null)
+  const [end, setEnd] = React.useState(project?.end || null)
   const [notes, setNotes] = React.useState(project?.notes || '')
   const [resources, setResources] = React.useState(project?.resources ? project.resources.map(r => ({ ...r })) : [])
   const [members, setMembers] = React.useState(project?.members ? project.members.map(m => ({ ...m })) : [])
@@ -574,7 +629,7 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   }
 
   return (
-    <Modal title={editing ? 'Editar projeto' : 'Novo projeto'} onClose={onClose}
+    <Modal className='project-modal' title={editing ? 'Editar projeto' : 'Novo projeto'} onClose={onClose}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
         <button className="btn btn-primary" onClick={save}>{editing ? 'Salvar alterações' : 'Criar projeto'}</button>
@@ -597,9 +652,9 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
         </Field>
       </div>
 
-      <ProjectTeamEditor users={users} members={members} responsibleIds={responsibleIds}
-        onChangeMembers={setMembers} onChangeResponsibles={setResponsibleIds}
-        isAdmin={isAdmin} error={respErr} />
+      {isAdmin && (
+        <PermissionsEditor users={users} members={members} onChangeMembers={setMembers} />
+      )}
 
       <div className="field-row">
         <Field label="Valor estimado">
