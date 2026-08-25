@@ -90,12 +90,6 @@
 
 .perm-default-label { font-size: 13px; color: var(--fg-2); }
 
-.perm-add { display: flex; gap: 8px; margin-bottom: 12px; }
-
-.perm-add .control { flex: 1; min-width: 0; }
-
-.perm-add .btn { flex-shrink: 0; }
-
 .perm-list { display: flex; flex-direction: column; gap: 6px; }
 
 .perm-row { display: flex; align-items: center; gap: 10px; }
@@ -104,13 +98,13 @@
 
 .perm-select { flex: 0 0 168px; width: 168px; min-width: 0; }
 
-.perm-remove { padding: 5px; color: var(--fg-4); flex-shrink: 0; }
-
-.perm-remove:hover { color: var(--danger); }
-
-.perm-empty { font-size: 13px; color: var(--fg-4); padding: 8px 0; }
-
 .perm-admin-tag { font-size: 12px; font-weight: 600; color: var(--brand); background: var(--brand-soft); padding: 4px 10px; border-radius: var(--r-full); }
+
+.perm-add { display: flex; gap: 8px; margin-bottom: 12px; }
+
+.perm-add .control { flex: 1; min-width: 0; }
+
+.perm-add .btn { flex-shrink: 0; }
 
 /* Seletor de arquivo (modais de documento/imagem) */
 
@@ -133,3 +127,32 @@
 .img-modal-preview { margin: 0 0 14px; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--bg-muted); max-height: 180px; display: flex; align-items: center; justify-content: center; }
 
 .img-modal-preview img { max-width: 100%; max-height: 180px; object-fit: contain; }
+
+/* ---------- Equipe do projeto (acesso + responsáveis na mesma lista) ---------- */
+
+.perm-head { display: flex; align-items: center; gap: 10px; padding: 0 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-4); }
+
+.perm-head-resp { flex: 0 0 20px; }
+
+.perm-head > span:nth-child(2) { flex: 1; padding-left: 36px; }
+
+.perm-head-role { flex: 0 0 168px; }
+
+/* Caixa de marcação "é responsável pelo projeto" */
+.resp-check { flex: 0 0 20px; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid var(--border-strong, var(--border)); border-radius: var(--r-sm); color: #fff; background: transparent; transition: background var(--dur), border-color var(--dur); }
+
+.resp-check:hover { border-color: var(--brand); }
+
+.resp-check.on { background: var(--brand); border-color: var(--brand); }
+
+.perm-row.is-resp .perm-name { font-weight: 600; }
+
+.perm-role-static { flex: 0 0 168px; font-size: 12.5px; color: var(--fg-3); }
+
+/* ---------- Campo de dinheiro (máscara ao digitar) ---------- */
+
+.money-field { position: relative; display: flex; align-items: center; }
+
+.money-field .control { padding-left: 38px; font-family: var(--font-mono); font-weight: 600; text-align: right; }
+
+.money-prefix { position: absolute; left: 13px; font-size: 13px; font-weight: 600; color: var(--fg-4); pointer-events: none; }

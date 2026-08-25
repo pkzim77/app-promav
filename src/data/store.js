@@ -4,6 +4,8 @@
 // every screen so they read/write the same data shape.
 // ============================================================
 
+import { progressoExecutado } from './progresso.js'
+
 export const PROJECT_COLORS = {
   indigo: 'var(--proj-indigo)', blue: 'var(--proj-blue)', teal: 'var(--proj-teal)',
   green: 'var(--proj-green)', amber: 'var(--proj-amber)', coral: 'var(--proj-coral)',
@@ -28,6 +30,51 @@ export const PRIORITIES = [
   { id: 'high',   label: 'Alta',  color: 'var(--prio-high)',   hex: '#E5484D', soft: 'var(--prio-high-soft)',   text: '#c5333a' },
 ]
 export const PRIORITY_MAP = Object.fromEntries(PRIORITIES.map(p => [p.id, p]))
+
+// ---------- ficha do projeto (dados do convênio) ----------
+// Origem do recurso do convênio (espelha o backend).
+export const RESOURCE_ORIGINS = [
+  { id: 'federal',   label: 'Governo Federal' },
+  { id: 'estadual',  label: 'Governo Estadual' },
+  { id: 'municipal', label: 'Prefeitura (recurso próprio)' },
+  { id: 'emenda',    label: 'Emenda parlamentar' },
+  { id: 'outro',     label: 'Outro' },
+]
+export const RESOURCE_ORIGIN_MAP = Object.fromEntries(RESOURCE_ORIGINS.map(o => [o.id, o]))
+
+// Status geral do projeto (diferente do status das atividades).
+// Tons da identidade PROMAV, escurecidos até passarem 4.5:1 como TEXTO sobre
+// fundo claro — o selo pinta a própria cor sobre um véu dela mesma, então o
+// dourado #AD8A5C puro (3,12:1) não serviria aqui, só como preenchimento.
+export const PROJECT_STATUSES = [
+  { id: 'planejamento', label: 'Planejamento',  color: '#5F5C56' }, // cinza profundo · 6,49:1
+  { id: 'andamento',    label: 'Em andamento',  color: '#8A6A3F' }, // dourado escurecido · 4,85:1
+  { id: 'paralisado',   label: 'Paralisado',    color: '#9A4F32' }, // terracota · 5,78:1
+  { id: 'concluido',    label: 'Concluído',     color: '#276B46' }, // verde profundo · 6,24:1
+]
+export const PROJECT_STATUS_MAP = Object.fromEntries(PROJECT_STATUSES.map(s => [s.id, s]))
+
+// Formata um número como moeda brasileira (R$ 250.000,00). null/undefined → '—'.
+export function formatBRL(value) {
+  if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) return '—'
+  return Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+// Máscara de digitação: os dígitos entram pela direita, como numa calculadora.
+// "2" → 0,02 · "250" → 2,50 · "25000000" → 250.000,00. Sempre devolve um texto
+// válido (descarta o que não for dígito), então nunca cria estado inconsistente.
+export function maskBRL(raw) {
+  const digits = String(raw ?? '').replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(0, 13)
+  if (!digits) return ''
+  return (Number(digits) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// Converte texto digitado ("250000,00", "R$ 250.000,00") em número. Vazio/inválido → null.
+export function parseBRL(text) {
+  const s = String(text || '').replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.')
+  if (!s) return null
+  const n = Number(s)
+  return Number.isFinite(n) && n >= 0 ? n : null
+}
 
 export const SEED_USERS = [
   { id: 'u1', name: 'Marina Souza',  initials: 'MS', color: 'var(--proj-blue)' },
@@ -114,7 +161,12 @@ export function fmtMed(s) { const d = parseDate(s); return `${d.getDate()} de ${
 export function fmtFull(s) { const d = parseDate(s); return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` }
 export function dayDiff(a, b) { return Math.round((parseDate(b) - parseDate(a)) / 86400000) }
 export function addDays(s, n) { const d = parseDate(s); d.setDate(d.getDate()+n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
-export function todayISO() { return '2026-05-26' } // fixed "today" for the prototype
+// Data de hoje. Era fixa ('2026-05-26') na época do protótipo — com dados reais
+// isso congelava a linha "hoje" do Gantt, o marcador de atraso e o cronograma.
+export function todayISO() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 // ---------- permissões ----------
 // Papéis por projeto. 'admin' é global (user.isAdmin) e não aparece nesta lista.
@@ -147,21 +199,29 @@ export function formatBytes(bytes) {
 }
 
 // ---------- checklist / progress helpers ----------
+// O cálculo ponderado por peso vive em progresso.js (função pura, testada).
+export { calcularProgresso, progressoExecutado } from './progresso.js'
 export function checklistStats(task) {
   const list = task.checklist || []
   const total = list.length
   const done = list.filter(i => i.done).length
   return { total, done, remaining: total - done, pct: total ? Math.round(done / total * 100) : null }
 }
-// Progresso fino de uma atividade: usa o checklist se houver; senão, infere do status.
+// Progresso de uma atividade, em três camadas:
+//  1. Concluído vale 100% — o status é a palavra final de quem executou,
+//     mesmo que algum item do checklist tenha ficado sem marcar.
+//  2. Havendo checklist, ele é a medida: cada item vale 100/total.
+//  3. Sem checklist, resta inferir do status (em andamento = metade).
 export function taskProgress(task) {
+  if (task.status === 'done') return 100
   const { total, pct } = checklistStats(task)
   if (total) return pct
-  return task.status === 'done' ? 100 : task.status === 'progress' ? 50 : 0
+  return task.status === 'progress' ? 50 : 0
 }
 
+// Progresso do projeto: percentual executado segundo os PESOS das atividades
+// (ver src/data/progresso.js). Antes era a média simples do progresso de cada
+// atividade — o que fazia um serviço de 3 dias pesar igual a um de 3 meses.
 export function projectProgress(tasks, projectId) {
-  const list = tasks.filter(t => t.projectId === projectId)
-  if (!list.length) return 0
-  return Math.round(list.reduce((s, t) => s + taskProgress(t), 0) / list.length)
+  return Math.round(progressoExecutado(tasks.filter(t => t.projectId === projectId)))
 }

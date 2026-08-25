@@ -9,12 +9,15 @@
    TELA   #F6F4EF   WELL   #EEEAE0   BORDA  #E4DED1
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Poppins:wght@400;500;600;700&display=swap');
 
 :root {
   /* ---------- Font families ---------- */
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* Fonte institucional da PROMAV — a mesma das propostas entregues ao cliente.
+     Usada nos números do Panorama, que é a tela mostrada em reunião. */
+  --font-brand: "Poppins", var(--font-sans);
 
   /* ---------- Brand: tinta (ação primária = preto) ---------- */
   --brand:          #16150F;  /* TINTA — primary action    */

@@ -42,8 +42,6 @@
 
 .tasktable tbody tr { transition: background var(--dur); }
 
-.tasktable tbody .task-row-clickable { cursor: pointer; }
-
 .tasktable tbody tr:hover { background: var(--bg-subtle); }
 
 .task-title { font-weight: 600; color: var(--fg-1); }
@@ -51,6 +49,8 @@
 .row-actions { display: flex; gap: 4px; opacity: 0; transition: opacity var(--dur); }
 
 .tasktable tbody tr:hover .row-actions { opacity: 1; }
+
+.tasktable tbody .task-row-clickable { cursor: pointer; }
 
 /* ---------- Project "about" panel (detail screen) ---------- */
 
@@ -153,3 +153,191 @@
 .res-menu-btn:hover, .res-menu-btn.on { background: var(--bg-muted); color: var(--fg-2); }
 
 @media (max-width: 720px) { .res-grid { grid-template-columns: 1fr; } }
+
+/* ---------- Abas do detalhe do projeto ---------- */
+
+.proj-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 22px; }
+
+.proj-tab { display: inline-flex; align-items: center; gap: 7px; padding: 10px 14px; font-size: 13.5px; font-weight: 600; color: var(--fg-3); border-bottom: 2px solid transparent; margin-bottom: -1px; border-radius: var(--r-sm) var(--r-sm) 0 0; transition: background var(--dur), color var(--dur); }
+
+.proj-tab:hover { background: var(--bg-muted); color: var(--fg-1); }
+
+.proj-tab.on { color: var(--brand); border-bottom-color: var(--brand); }
+
+/* ---------- Capa do projeto (aba "Dados do projeto") ---------- */
+
+.proj-cover { display: flex; flex-direction: column; gap: 16px; }
+
+/* Faixa de destaque: progresso · distribuição · valor */
+.cover-hero { padding: 28px 30px; display: flex; align-items: center; gap: 38px; flex-wrap: wrap; }
+
+.cover-pie { flex-shrink: 0; display: block; overflow: visible; }
+
+/* Fatia: sobe (destaca para fora) ao passar o mouse. */
+.pie-slice { transition: transform .18s var(--ease); transform-origin: center; cursor: default; }
+
+.pie-slice path { transition: filter .18s var(--ease); }
+
+.pie-slice.on path { filter: drop-shadow(0 3px 7px rgba(22, 21, 15, .28)); }
+
+/* Número dentro da fatia. A cor vem por fatia (prop `ink` no JSX): nenhuma tinta
+   única passa em contraste sobre as três — preto reprova no azul (3,75:1) e
+   branco reprova no verde (3,21:1). */
+.pie-label { font-family: var(--font-brand); font-size: 14px; font-weight: 700; pointer-events: none; }
+
+/* Percentual como manchete, ao lado da pizza. */
+.cover-pct { display: block; font-family: var(--font-brand); font-weight: 700; font-size: 46px; line-height: 1; color: var(--fg-1); letter-spacing: -0.03em; margin-bottom: 16px; }
+
+.cover-pct i { font-style: normal; font-size: 24px; color: var(--fg-3); margin-left: 2px; }
+
+/* Deixa explícito que o número grande mede execução, não a soma das fatias. */
+.cover-pct-sub { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-4); margin: -12px 0 15px; }
+
+.cover-hero-main { flex: 1; min-width: 240px; }
+
+.cover-eyebrow { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-4); margin-bottom: 12px; }
+
+.cover-breakdown { display: flex; flex-wrap: wrap; gap: 16px; }
+
+/* Linha da composição: altura fixa para o hover não mexer no layout. */
+.cover-bd-detail { margin-top: 12px; min-height: 20px; font-size: 13px; color: var(--fg-2); line-height: 20px; }
+
+.cover-bd-detail strong { font-weight: 700; color: var(--fg-1); }
+
+.cover-bd-detail .muted { color: var(--fg-4); }
+
+.cover-bd-item { display: flex; align-items: center; gap: 8px; padding: 3px 9px; margin: -3px -9px; border-radius: var(--r-full); transition: background var(--dur); }
+
+.cover-bd-item.on { background: var(--bg-muted); }
+
+.cover-bd-item.off { opacity: .45; }
+
+.cover-bd-share { font-family: var(--font-brand); font-size: 13px; font-weight: 700; color: var(--fg-1); }
+
+.cover-bd-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; align-self: center; }
+
+.cover-bd-lab { font-size: 13.5px; font-weight: 600; color: var(--fg-2); }
+
+.cover-hero-side { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; min-width: 210px; padding-left: 30px; border-left: 1px solid var(--border); align-self: stretch; justify-content: center; }
+
+.cover-money { text-align: right; }
+
+.cover-money strong { display: block; font-family: var(--font-brand); font-size: 25px; font-weight: 700; color: var(--fg-1); letter-spacing: -0.02em; line-height: 1.15; }
+
+/* Segundo valor (disponível): mesma leitura, peso visual um passo abaixo. */
+.cover-money.alt strong { font-size: 21px; color: var(--fg-2); }
+
+.cover-money + .cover-money { padding-top: 13px; border-top: 1px solid var(--border); width: 100%; }
+
+.cover-money-sub { display: block; font-size: 12.5px; color: var(--fg-3); margin-top: 5px; }
+
+.proj-status-badge { display: inline-flex; align-items: center; gap: 7px; padding: 4px 12px; border-radius: var(--r-full); font-size: 12.5px; font-weight: 600; }
+
+.proj-status-badge.lg { padding: 7px 16px; font-size: 13.5px; }
+
+/* Blocos da ficha */
+.cover-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+
+.fact { padding: 20px; display: flex; gap: 14px; align-items: flex-start; transition: border-color var(--dur), box-shadow var(--dur); }
+
+.fact:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm, 0 1px 3px rgba(22,21,15,.06)); }
+
+.fact-ic { width: 38px; height: 38px; flex-shrink: 0; border-radius: var(--r-md); background: var(--brand-soft); color: var(--brand); display: flex; align-items: center; justify-content: center; }
+
+.fact label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-4); margin-bottom: 6px; }
+
+.fact-value { font-size: 16px; font-weight: 600; color: var(--fg-1); line-height: 1.35; overflow-wrap: anywhere; }
+
+.fact-value.mono { font-family: var(--font-mono); font-size: 13.5px; font-weight: 600; }
+
+.fact-sub { font-size: 12.5px; color: var(--fg-3); margin-top: 4px; }
+
+.cover-block { padding: 22px; }
+
+.cover-block h3 { font: var(--text-h4); margin: 0 0 14px; color: var(--fg-1); }
+
+.cover-empty { margin: 0; font-size: 13.5px; color: var(--fg-4); }
+
+.ds-people { display: flex; flex-wrap: wrap; gap: 9px; }
+
+.ds-person { display: inline-flex; align-items: center; gap: 9px; padding: 5px 14px 5px 5px; border: 1px solid var(--border); border-radius: var(--r-full); font-size: 13.5px; font-weight: 600; color: var(--fg-2); }
+
+@media (max-width: 720px) {
+  .cover-hero { gap: 22px; }
+  .cover-hero-side { padding-left: 0; border-left: 0; border-top: 1px solid var(--border); padding-top: 18px; width: 100%; align-items: flex-start; }
+  .cover-money { text-align: left; }
+}
+
+/* ---------- Ficha técnica (aba de trabalho da equipe) ---------- */
+
+.proj-tech { display: flex; flex-direction: column; gap: 16px; }
+
+.tech-section { padding: 22px; }
+
+.tech-section-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 18px; }
+
+.tech-section-head h3 { font: var(--text-h4); margin: 0; color: var(--fg-1); }
+
+.tech-section-head p { margin: 4px 0 0; font-size: 13px; color: var(--fg-3); }
+
+/* Espaço reservado para os campos técnicos ainda não definidos. */
+.tech-empty { display: flex; gap: 13px; align-items: flex-start; padding: 18px; border: 1.5px dashed var(--border-strong); border-radius: var(--r-md); background: var(--bg-subtle); color: var(--fg-4); }
+
+.tech-empty strong { display: block; font-size: 13.5px; color: var(--fg-2); margin-bottom: 4px; }
+
+.tech-empty p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--fg-3); max-width: 62ch; }
+
+/* Grade para os campos técnicos, quando existirem (mesmo padrão do Panorama). */
+.tech-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 18px 26px; }
+
+/* ---------- Cores do gráfico de progresso ----------
+   Paleta própria do gráfico (cinza / laranja / verde), separada dos tokens de
+   status do Kanban: aqui as fatias vêm do CHECKLIST, não da coluna do quadro.
+   Alinhadas à identidade da PROMAV: o dourado #AD8A5C é o oficial das propostas,
+   sem alteração; cinza e verde vêm da família neutra/terrosa da marca. A marca é
+   propositalmente monocromática (bege/dourado/preto) — ótima em documento, mas
+   num gráfico exige afastar o cinza do dourado, senão as fatias se confundem.
+   Validadas: pior par adjacente em ΔE 17,4 (visão normal) e 8,1 (protanopia),
+   com rótulo escrito, número dentro e filete de 2px separando as cores. */
+:root {
+  --chart-todo:  #5F5C56;  /* A fazer      — cinza profundo da paleta neutra */
+  --chart-doing: #AD8A5C;  /* Em andamento — DOURADO OFICIAL da PROMAV       */
+  --chart-done:  #2E7D52;  /* Concluído    — verde profundo, tom terroso     */
+}
+
+
+/* ---------- Cronograma: prazo decorrido × executado ---------- */
+
+.crono { padding: 22px 24px; }
+
+.crono-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+
+.crono-tag { display: inline-flex; align-items: center; padding: 5px 13px; border-radius: var(--r-full); font-size: 12.5px; font-weight: 600; }
+
+.crono-bars { display: flex; flex-direction: column; gap: 12px; }
+
+.crono-row { display: flex; align-items: center; gap: 14px; }
+
+/* Largura fixa nos rótulos e nos números: as duas barras começam e terminam
+   no mesmo x, que é o que permite comparar uma com a outra de relance. */
+.crono-lab { flex: 0 0 118px; font-size: 12.5px; color: var(--fg-3); }
+
+.crono-track { flex: 1; height: 10px; border-radius: var(--r-full); background: var(--bg-muted); overflow: hidden; }
+
+.crono-fill { display: block; height: 100%; border-radius: var(--r-full); transition: width .5s var(--ease); }
+
+.crono-fill.prazo { background: var(--chart-doing); }
+
+
+.crono-val { flex: 0 0 52px; text-align: right; font-family: var(--font-brand); font-size: 13px; font-weight: 700; color: var(--fg-1); }
+
+.crono-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--fg-3); }
+
+.crono-foot span { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); }
+
+.crono-foot-mid { font-family: var(--font-sans) !important; font-weight: 600; color: var(--fg-2); }
+
+@media (max-width: 620px) {
+  .crono-lab { flex-basis: 92px; font-size: 12px; }
+  .crono-foot { flex-wrap: wrap; justify-content: center; }
+}

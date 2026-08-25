@@ -27,3 +27,11 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 *.local
+
+# Testes locais (não versionados — rodam só na máquina de quem desenvolve)
+*.test.js
+*.test.jsx
+*.spec.js
+*.spec.jsx
+coverage/
+.vitest/

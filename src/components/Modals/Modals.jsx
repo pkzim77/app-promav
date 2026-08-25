@@ -2,19 +2,37 @@ import './Modals.css'
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field, SegControl, StatusTag, PriorityTag } from '../primitives/primitives.jsx'
-import { STATUSES, PRIORITIES, PROJECT_HEX, MAX_FILE_BYTES, formatBytes, PROJECT_ROLES } from '../../data/store.js'
+import { STATUSES, PRIORITIES, PROJECT_HEX, MAX_FILE_BYTES, formatBytes, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, parseBRL, maskBRL } from '../../data/store.js'
 // Create/edit modals for tasks and projects + confirm dialog. Includes validation.
+
+// Campo de dinheiro: formata a cada tecla (2.500,00) e mantém o cursor no fim,
+// já que a máscara faz o número crescer sempre pela direita.
+function MoneyInput({ value, onChange, placeholder }) {
+  const ref = React.useRef(null)
+  const handle = (e) => {
+    onChange(maskBRL(e.target.value))
+    requestAnimationFrame(() => {
+      const el = ref.current
+      if (el) el.setSelectionRange(el.value.length, el.value.length)
+    })
+  }
+  return (
+    <div className="money-field">
+      <span className="money-prefix">R$</span>
+      <input ref={ref} className="control" inputMode="numeric" placeholder={placeholder}
+        value={value} onChange={handle} />
+    </div>
+  )
+}
 
 function dateError(start, end) {
   if (start && end && new Date(end) < new Date(start)) return 'A data de término não pode ser anterior à de início.'
   return null
 }
 
-export function TaskModal({ task, projects, users, currentUserId, defaultProjectId, defaultStatus, defaultParentId = null, canEdit = true, onToggleChecklist, onToggleMembership, onSave, onClose }) {
+export function TaskModal({ task, projects, users, currentUserId, defaultProjectId, defaultStatus, canEdit = true, onToggleChecklist, onToggleMembership, onSave, onClose }) {
   const editing = !!task
   const ro = !canEdit // somente leitura (papel 'Só exibição'): só checklist + entrar/sair
-  const parentId = task?.parentId ?? defaultParentId ?? null
-  const isSubtask = !!parentId  // subtarefa herda o projeto da mãe → campo travado
   const [title, setTitle] = React.useState(task?.title || '')
   const [projectId, setProjectId] = React.useState(task?.projectId || defaultProjectId || projects[0]?.id || '')
   const [assigneeId, setAssigneeId] = React.useState(task?.assigneeId || '')
@@ -91,13 +109,11 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
       </Field>
       <div className="field-row">
         <Field label="Projeto">
-          <select className="control" value={projectId} disabled={ro || isSubtask} onChange={e => setProjectId(e.target.value)}>
+          <select className="control" value={projectId} disabled={ro} onChange={e => setProjectId(e.target.value)}>
             <option value="" disabled>Selecione</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          {isSubtask
-            ? <span style={{ fontSize: 12, color: 'var(--fg-4)' }}>Subtarefa — herda o projeto da atividade-mãe.</span>
-            : projErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{projErr}</span>}
+          {projErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{projErr}</span>}
         </Field>
         <Field label="Responsável">
           <select className="control" value={assigneeId} disabled={ro} onChange={e => setAssigneeId(e.target.value)}>
@@ -155,6 +171,7 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
         {!activityMembers.length && <div className="perm-empty">Nenhum membro adicionado.</div>}
       </div>
       <Field label="Prioridade">{ro ? <PriorityTag priority={priority} /> : <SegControl options={PRIORITIES} value={priority} onChange={setPriority} />}</Field>
+
       <div className="field-row">
         <Field label="Data de início"><input type="date" className="control" value={start} disabled={ro} onChange={e => setStart(e.target.value)} /></Field>
         <Field label="Data de término"><input type="date" className="control" value={end} disabled={ro} onChange={e => setEnd(e.target.value)} /></Field>
@@ -441,9 +458,6 @@ function ResourceEditor({ resources, onChange }) {
   )
 }
 
-// Quem participa do projeto (só administradores veem). A lista é a porta de
-// entrada: quem estiver como "Sem acesso" NÃO enxerga o projeto no sistema.
-// Administradores têm acesso total a tudo e não entram na lista.
 function PermissionsEditor({ users, members, onChangeMembers }) {
   const [selectedUserId, setSelectedUserId] = React.useState('')
   const roleOf = (userId) => members.find(x => x.userId === userId)?.role || 'none'
@@ -498,6 +512,79 @@ function PermissionsEditor({ users, members, onChangeMembers }) {
     </div>
   )
 }
+// Equipe do projeto — lista única que resolve duas coisas de uma vez:
+//  • acesso: quem estiver como "Sem acesso" NÃO enxerga o projeto no sistema
+//    (administradores têm acesso total e não têm seletor);
+//  • responsabilidade: o check da esquerda marca quem responde pelo projeto.
+// O seletor de acesso só aparece para administradores; os demais veem o papel
+// como texto (o backend também ignora alterações de permissão de não-admins).
+
+/*function ProjectTeamEditor({ users, members, responsibleIds, onChangeMembers, onChangeResponsibles, isAdmin, error }) {
+  const roleOf = (userId) => members.find(x => x.userId === userId)?.role || 'none'
+  const setRole = (userId, value) => {
+    const others = members.filter(x => x.userId !== userId)
+    onChangeMembers(value === 'none' ? others : [...others, { userId, role: value }])
+  }
+  const isResp = (userId) => responsibleIds.includes(userId)
+  // Marcar alguém como responsável garante que ele enxergue o projeto:
+  // se estiver "Sem acesso", passa a ter Edição total automaticamente.
+  const toggleResp = (u) => {
+    if (isResp(u.id)) { onChangeResponsibles(responsibleIds.filter(x => x !== u.id)); return }
+    onChangeResponsibles([...responsibleIds, u.id])
+    if (isAdmin && !u.isAdmin && roleOf(u.id) === 'none') setRole(u.id, 'full')
+  }
+
+  const comAcesso = users.filter(u => !u.isAdmin && roleOf(u.id) !== 'none').length
+  const nResp = users.filter(u => isResp(u.id)).length
+
+  return (
+    <div className="field">
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        Equipe do projeto
+        <span style={{ fontWeight: 400, color: 'var(--fg-4)', fontSize: 12.5 }}>marque quem responde pelo projeto</span>
+      </label>
+      <div className="perm-head">
+        <span className="perm-head-resp">Resp.</span>
+        <span>Pessoa</span>
+        {isAdmin && <span className="perm-head-role">Acesso ao projeto</span>}
+      </div>
+      <div className="perm-list">
+        {users.map(u => {
+          const resp = isResp(u.id)
+          return (
+            <div className={'perm-row' + (resp ? ' is-resp' : '')} key={u.id}>
+              <button type="button" role="checkbox" aria-checked={resp}
+                className={'resp-check' + (resp ? ' on' : '')}
+                title={resp ? 'Remover como responsável' : 'Marcar como responsável'}
+                onClick={() => toggleResp(u)}>
+                {resp && <Icon name="check" size={13} stroke={3} />}
+              </button>
+              <span className="av" style={{ width: 26, height: 26, background: u.color, fontSize: 10 }}>{u.initials}</span>
+              <span className="perm-name">{u.name}{u.isAdmin ? ' · admin' : ''}</span>
+              {u.isAdmin ? (
+                <span className="perm-admin-tag">Acesso total</span>
+              ) : isAdmin ? (
+                <select className="control perm-select" value={roleOf(u.id)} onChange={e => setRole(u.id, e.target.value)}>
+                  <option value="none">Sem acesso</option>
+                  {PROJECT_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+                </select>
+              ) : (
+                <span className="perm-role-static">{ROLE_LABEL[roleOf(u.id)] || 'Sem acesso'}</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      {error && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{error}</span>}
+      <div className="perm-default-label" style={{ marginTop: 10 }}>
+        {comAcesso === 0
+          ? 'Ninguém além dos administradores vê este projeto.'
+          : `${comAcesso} ${comAcesso === 1 ? 'pessoa vê' : 'pessoas veem'} este projeto (além dos administradores).`}
+        {nResp > 0 && ` · ${nResp} ${nResp === 1 ? 'responsável' : 'responsáveis'}.`}
+      </div>
+    </div>
+  )
+}*/
 
 export function ProjectModal({ project, users = [], folders = [], defaultFolderId = null, isAdmin = false, onSave, onClose }) {
   const editing = !!project
@@ -505,24 +592,44 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const [desc, setDesc] = React.useState(project?.desc || '')
   const [color, setColor] = React.useState(project?.color || 'indigo')
   const [folderId, setFolderId] = React.useState(project?.folderId || defaultFolderId || '')
-  const [start, setStart] = React.useState(project?.start || '2026-05-26')
-  const [end, setEnd] = React.useState(project?.end || '2026-07-01')
+  const [start, setStart] = React.useState(project?.start || null)
+  const [end, setEnd] = React.useState(project?.end || null)
   const [notes, setNotes] = React.useState(project?.notes || '')
   const [resources, setResources] = React.useState(project?.resources ? project.resources.map(r => ({ ...r })) : [])
   const [members, setMembers] = React.useState(project?.members ? project.members.map(m => ({ ...m })) : [])
+  // ----- ficha do projeto (dados do convênio) -----
+  const [prefeitura, setPrefeitura] = React.useState(project?.prefeitura || '')
+  const [secretaria, setSecretaria] = React.useState(project?.secretaria || '')
+  const [responsibleIds, setResponsibleIds] = React.useState(project?.responsibleIds ? [...project.responsibleIds] : [])
+  const [origemRecurso, setOrigemRecurso] = React.useState(project?.origemRecurso || 'federal')
+  // Valores em R$: mantidos como texto enquanto digita; convertidos ao salvar.
+  const moneyText = (v) => (v != null ? Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '')
+  const [estimadoText, setEstimadoText] = React.useState(moneyText(project?.valorEstimado))
+  const [orcadoText, setOrcadoText] = React.useState(moneyText(project?.valorOrcado))
+  const [projStatus, setProjStatus] = React.useState(project?.status || 'planejamento')
   const [touched, setTouched] = React.useState(false)
 
   const dErr = dateError(start, end)
   const nameErr = touched && !name.trim() ? 'Informe um nome.' : null
+  const prefErr = touched && !prefeitura.trim() ? 'Informe a prefeitura.' : null
+  const respErr = touched && responsibleIds.length === 0 ? 'Selecione ao menos um profissional responsável.' : null
+  const badMoney = (t) => !!t.trim() && parseBRL(t) === null
+  const estimadoErr = touched && badMoney(estimadoText) ? 'Valor inválido. Ex.: 250000,00' : null
+  const orcadoErr = touched && badMoney(orcadoText) ? 'Valor inválido. Ex.: 250000,00' : null
 
   const save = () => {
     setTouched(true)
-    if (!name.trim() || dErr) return
-    onSave({ ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start, end, notes: notes.trim(), resources, members })
+    if (!name.trim() || !prefeitura.trim() || responsibleIds.length === 0 || dErr) return
+    if (badMoney(estimadoText) || badMoney(orcadoText)) return
+    onSave({
+      ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start, end, notes: notes.trim(), resources, members,
+      prefeitura: prefeitura.trim(), secretaria: secretaria.trim(), responsibleIds,
+      origemRecurso, valorEstimado: parseBRL(estimadoText), valorOrcado: parseBRL(orcadoText), status: projStatus,
+    })
   }
 
   return (
-    <Modal className="project-modal" title={editing ? 'Editar projeto' : 'Novo projeto'} onClose={onClose}
+    <Modal className='project-modal' title={editing ? 'Editar projeto' : 'Novo projeto'} onClose={onClose}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
         <button className="btn btn-primary" onClick={save}>{editing ? 'Salvar alterações' : 'Criar projeto'}</button>
@@ -534,6 +641,45 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
       <Field label="Descrição">
         <textarea className="control" value={desc} placeholder="Sobre o que é este projeto?" onChange={e => setDesc(e.target.value)} />
       </Field>
+
+      <div className="field-row">
+        <Field label="Prefeitura">
+          <input className="control" value={prefeitura} placeholder="Ex.: Umari" onChange={e => setPrefeitura(e.target.value)} />
+          {prefErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{prefErr}</span>}
+        </Field>
+        <Field label="Secretaria">
+          <input className="control" value={secretaria} placeholder="Ex.: Educação" onChange={e => setSecretaria(e.target.value)} />
+        </Field>
+      </div>
+
+      {isAdmin && (
+        <PermissionsEditor users={users} members={members} onChangeMembers={setMembers} />
+      )}
+
+      <div className="field-row">
+        <Field label="Valor estimado">
+          <MoneyInput value={estimadoText} onChange={setEstimadoText} placeholder="0,00" />
+          {estimadoErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{estimadoErr}</span>}
+        </Field>
+        <Field label="Valor orçado">
+          <MoneyInput value={orcadoText} onChange={setOrcadoText} placeholder="0,00" />
+          {orcadoErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{orcadoErr}</span>}
+        </Field>
+      </div>
+
+      <div className="field-row">
+        <Field label="Origem do recurso">
+          <select className="control" value={origemRecurso} onChange={e => setOrigemRecurso(e.target.value)}>
+            {RESOURCE_ORIGINS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
+        </Field>
+        <Field label="Status do projeto">
+          <select className="control" value={projStatus} onChange={e => setProjStatus(e.target.value)}>
+            {PROJECT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+        </Field>
+      </div>
+
       <Field label="Pasta">
         <select className="control" value={folderId} onChange={e => setFolderId(e.target.value)}>
           <option value="">Sem pasta</option>
@@ -551,9 +697,6 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
           placeholder="Contexto, objetivos, observações… O que ajuda a entender o projeto. Links colados aqui viram clicáveis."
           onChange={e => setNotes(e.target.value)} />
       </Field>
-      {isAdmin && (
-        <PermissionsEditor users={users} members={members} onChangeMembers={setMembers} />
-      )}
       <Field label="Cor">
         <div className="color-swatches">
           {Object.keys(PROJECT_HEX).map(k => (
