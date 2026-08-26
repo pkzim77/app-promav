@@ -111,7 +111,7 @@ function normalizeResources(input) {
 // ----- dados do convênio (ficha do projeto) -----
 // Origem do recurso e status do projeto: listas fixas (espelham store.js).
 const ORIGENS_RECURSO = ['federal', 'estadual', 'municipal', 'emenda', 'outro']
-const PROJ_STATUSES = ['planejamento', 'andamento', 'paralisado', 'concluido']
+const PROJ_STATUSES = ['planejamento', 'andamento', 'revisao', 'pendente', 'diligencia', 'paralisado', 'concluido']
 const normOrigem = (v) => (ORIGENS_RECURSO.includes(v) ? v : 'federal')
 const normProjStatus = (v) => (PROJ_STATUSES.includes(v) ? v : 'planejamento')
 // Valor do convênio: número >= 0 ou null (não informado).
@@ -734,7 +734,10 @@ async function ensureSchema() {
   await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS valor_convenio numeric(14,2)')
   // Valor ORÇADO do projeto, em reais (coluna com o nome antigo). NULL = não informado.
   await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS valor_disponivel numeric(14,2)')
-  // Status do projeto: planejamento | andamento | paralisado | concluido.
+  // Status do projeto: mesma lista de PROJ_STATUSES, em ordem de criticidade
+  // (planejamento | andamento | revisao | pendente | diligencia | paralisado | concluido).
+  // A coluna é text livre, então status novos não pedem migração: basta entrar
+  // na lista aqui e em PROJECT_STATUSES (store.js), que é quem dá rótulo e cor.
   await q("ALTER TABLE projects ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'planejamento'")
   // Profissionais responsáveis: lista (jsonb) de ids de usuários.
   await q(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS responsible_ids jsonb NOT NULL DEFAULT '[]'::jsonb`)

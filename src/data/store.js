@@ -46,11 +46,20 @@ export const RESOURCE_ORIGIN_MAP = Object.fromEntries(RESOURCE_ORIGINS.map(o => 
 // Tons da identidade PROMAV, escurecidos até passarem 4.5:1 como TEXTO sobre
 // fundo claro — o selo pinta a própria cor sobre um véu dela mesma, então o
 // dourado #AD8A5C puro (3,12:1) não serviria aqui, só como preenchimento.
+//
+// A lista está em ordem de criticidade e a cor sobe junto, para o selo ser lido
+// pela cor antes da palavra: neutro (cinza) → em curso (dourado, azul) →
+// pede providência (ouro, laranja) → travado (terracota) → encerrado (verde).
+// Cada tom fica a ΔE > 19 do vizinho mais próximo da lista, senão dois status
+// diferentes leriam como a mesma tarja num selo de 12px.
 export const PROJECT_STATUSES = [
-  { id: 'planejamento', label: 'Planejamento',  color: '#5F5C56' }, // cinza profundo · 6,49:1
-  { id: 'andamento',    label: 'Em andamento',  color: '#8A6A3F' }, // dourado escurecido · 4,85:1
-  { id: 'paralisado',   label: 'Paralisado',    color: '#9A4F32' }, // terracota · 5,78:1
-  { id: 'concluido',    label: 'Concluído',     color: '#276B46' }, // verde profundo · 6,24:1
+  { id: 'planejamento', label: 'Planejamento',  color: '#5F5C56' }, // cinza profundo · 6,66:1 · nada em execução ainda
+  { id: 'andamento',    label: 'Em andamento',  color: '#8A6A3F' }, // dourado escurecido · 4,98:1 · em execução
+  { id: 'revisao',      label: 'Em revisão',    color: '#41607F' }, // azul-ardósia · 6,55:1 · em análise, sem pendência
+  { id: 'pendente',     label: 'Pendente',      color: '#7A6410' }, // ouro escuro · 5,74:1 · parado aguardando providência
+  { id: 'diligencia',   label: 'Em diligência', color: '#AE4B12' }, // laranja-tijolo · 5,50:1 · exigência do órgão, tem prazo
+  { id: 'paralisado',   label: 'Paralisado',    color: '#9A4F32' }, // terracota · 5,93:1 · execução interrompida
+  { id: 'concluido',    label: 'Concluído',     color: '#276B46' }, // verde profundo · 6,41:1 · encerrado
 ]
 export const PROJECT_STATUS_MAP = Object.fromEntries(PROJECT_STATUSES.map(s => [s.id, s]))
 

@@ -149,6 +149,14 @@
 
 .perm-role-static { flex: 0 0 168px; font-size: 12.5px; color: var(--fg-3); }
 
+/* Botão de tirar alguém do projeto — alinhado à direita do seletor de acesso. */
+.perm-remove { flex: 0 0 31px; padding: 8px 6px; }
+
+/* Reserva no cabeçalho a coluna que o botão de remover ocupa nas linhas. */
+.perm-head-spacer { flex: 0 0 31px; }
+
+.perm-empty { padding: 10px 0; font-size: 13px; color: var(--fg-3); }
+
 /* ---------- Campo de dinheiro (máscara ao digitar) ---------- */
 
 .money-field { position: relative; display: flex; align-items: center; }

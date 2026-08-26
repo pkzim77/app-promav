@@ -458,7 +458,15 @@ function ResourceEditor({ resources, onChange }) {
   )
 }
 
-function PermissionsEditor({ users, members, onChangeMembers }) {
+// Equipe do projeto — lista única que resolve duas coisas de uma vez:
+//  • acesso: quem não estiver na lista NÃO enxerga o projeto no sistema
+//    (administradores têm acesso total e não ocupam vaga de participante);
+//  • responsabilidade: o check da esquerda marca quem responde pelo projeto.
+// O seletor de acesso e o "Adicionar" só aparecem para administradores; os
+// demais veem o papel como texto (o backend também ignora alterações de
+// permissão de não-admins) mas ainda podem marcar os responsáveis, porque
+// PUT /api/projects/:id aceita responsibleIds de quem tem Edição total.
+function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, onChangeResponsibles, isAdmin, error }) {
   const [selectedUserId, setSelectedUserId] = React.useState('')
   const roleOf = (userId) => members.find(x => x.userId === userId)?.role || 'none'
   const setRole = (userId, value) => {
@@ -470,86 +478,52 @@ function PermissionsEditor({ users, members, onChangeMembers }) {
     onChangeMembers([...members, { userId: selectedUserId, role: 'view' }])
     setSelectedUserId('')
   }
-  const removeMember = (userId) => onChangeMembers(members.filter(x => x.userId !== userId))
-  const availableUsers = users.filter(u => !u.isAdmin && roleOf(u.id) === 'none')
-  const memberUsers = users.filter(u => !u.isAdmin && roleOf(u.id) !== 'none')
-  const comAcesso = users.filter(u => !u.isAdmin && roleOf(u.id) !== 'none').length
-  return (
-    <div className="field">
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        Participantes
-        <span style={{ fontWeight: 400, color: 'var(--fg-4)', fontSize: 12.5 }}>adicione quem poderá acessar o projeto</span>
-      </label>
-      <div className="perm-add">
-        <select className="control" value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)}>
-          <option value="">Selecionar pessoa</option>
-          {availableUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
-        <button type="button" className="btn btn-secondary btn-sm" disabled={!selectedUserId} onClick={addMember}>
-          <Icon name="plus" size={15} stroke={2.2} />Adicionar
-        </button>
-      </div>
-      <div className="perm-list">
-        {memberUsers.map(u => (
-          <div className="perm-row" key={u.id}>
-            <span className="av" style={{ width: 26, height: 26, background: u.color, fontSize: 10 }}>{u.initials}</span>
-            <span className="perm-name">{u.name}</span>
-            <select className="control perm-select" value={roleOf(u.id)} onChange={e => setRole(u.id, e.target.value)}>
-              {PROJECT_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
-            </select>
-            <button type="button" className="btn-icon perm-remove" onClick={() => removeMember(u.id)} aria-label={`Remover ${u.name}`} title="Remover participante">
-              <Icon name="x" size={15} />
-            </button>
-          </div>
-        ))}
-      </div>
-      {!memberUsers.length && <div className="perm-empty">Nenhum participante adicionado.</div>}
-      <div className="perm-default-label" style={{ marginTop: 10 }}>
-        {comAcesso === 0
-          ? 'Ninguém além dos administradores vê este projeto.'
-          : `${comAcesso} ${comAcesso === 1 ? 'pessoa vê' : 'pessoas veem'} este projeto (além dos administradores).`}
-      </div>
-    </div>
-  )
-}
-// Equipe do projeto — lista única que resolve duas coisas de uma vez:
-//  • acesso: quem estiver como "Sem acesso" NÃO enxerga o projeto no sistema
-//    (administradores têm acesso total e não têm seletor);
-//  • responsabilidade: o check da esquerda marca quem responde pelo projeto.
-// O seletor de acesso só aparece para administradores; os demais veem o papel
-// como texto (o backend também ignora alterações de permissão de não-admins).
-
-/*function ProjectTeamEditor({ users, members, responsibleIds, onChangeMembers, onChangeResponsibles, isAdmin, error }) {
-  const roleOf = (userId) => members.find(x => x.userId === userId)?.role || 'none'
-  const setRole = (userId, value) => {
-    const others = members.filter(x => x.userId !== userId)
-    onChangeMembers(value === 'none' ? others : [...others, { userId, role: value }])
+  // Tirar alguém do projeto também o tira da responsabilidade: um responsável
+  // sem acesso apareceria no Panorama sem conseguir abrir o projeto.
+  const removeMember = (userId) => {
+    onChangeMembers(members.filter(x => x.userId !== userId))
+    onChangeResponsibles(responsibleIds.filter(x => x !== userId))
   }
+
   const isResp = (userId) => responsibleIds.includes(userId)
-  // Marcar alguém como responsável garante que ele enxergue o projeto:
-  // se estiver "Sem acesso", passa a ter Edição total automaticamente.
   const toggleResp = (u) => {
     if (isResp(u.id)) { onChangeResponsibles(responsibleIds.filter(x => x !== u.id)); return }
     onChangeResponsibles([...responsibleIds, u.id])
+    // Marcar alguém como responsável garante que ele enxergue o projeto.
     if (isAdmin && !u.isAdmin && roleOf(u.id) === 'none') setRole(u.id, 'full')
   }
 
+  const availableUsers = users.filter(u => !u.isAdmin && roleOf(u.id) === 'none')
+  // Admins entram na lista mesmo sem vínculo: têm acesso total e são elegíveis
+  // a responsável (normalmente é o engenheiro responsável quem responde).
+  const teamUsers = users.filter(u => u.isAdmin || roleOf(u.id) !== 'none')
   const comAcesso = users.filter(u => !u.isAdmin && roleOf(u.id) !== 'none').length
   const nResp = users.filter(u => isResp(u.id)).length
-
   return (
     <div className="field">
       <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         Equipe do projeto
         <span style={{ fontWeight: 400, color: 'var(--fg-4)', fontSize: 12.5 }}>marque quem responde pelo projeto</span>
       </label>
+      {isAdmin && (
+        <div className="perm-add">
+          <select className="control" value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)}>
+            <option value="">Selecionar pessoa</option>
+            {availableUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+          <button type="button" className="btn btn-secondary btn-sm" disabled={!selectedUserId} onClick={addMember}>
+            <Icon name="plus" size={15} stroke={2.2} />Adicionar
+          </button>
+        </div>
+      )}
       <div className="perm-head">
         <span className="perm-head-resp">Resp.</span>
         <span>Pessoa</span>
-        {isAdmin && <span className="perm-head-role">Acesso ao projeto</span>}
+        <span className="perm-head-role">Acesso ao projeto</span>
+        {isAdmin && <span className="perm-head-spacer" />}
       </div>
       <div className="perm-list">
-        {users.map(u => {
+        {teamUsers.map(u => {
           const resp = isResp(u.id)
           return (
             <div className={'perm-row' + (resp ? ' is-resp' : '')} key={u.id}>
@@ -564,10 +538,14 @@ function PermissionsEditor({ users, members, onChangeMembers }) {
               {u.isAdmin ? (
                 <span className="perm-admin-tag">Acesso total</span>
               ) : isAdmin ? (
-                <select className="control perm-select" value={roleOf(u.id)} onChange={e => setRole(u.id, e.target.value)}>
-                  <option value="none">Sem acesso</option>
-                  {PROJECT_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
-                </select>
+                <>
+                  <select className="control perm-select" value={roleOf(u.id)} onChange={e => setRole(u.id, e.target.value)}>
+                    {PROJECT_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+                  </select>
+                  <button type="button" className="btn-icon perm-remove" onClick={() => removeMember(u.id)} aria-label={`Remover ${u.name}`} title="Remover participante">
+                    <Icon name="x" size={15} />
+                  </button>
+                </>
               ) : (
                 <span className="perm-role-static">{ROLE_LABEL[roleOf(u.id)] || 'Sem acesso'}</span>
               )}
@@ -575,6 +553,7 @@ function PermissionsEditor({ users, members, onChangeMembers }) {
           )
         })}
       </div>
+      {!teamUsers.length && <div className="perm-empty">Nenhum participante adicionado.</div>}
       {error && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{error}</span>}
       <div className="perm-default-label" style={{ marginTop: 10 }}>
         {comAcesso === 0
@@ -584,7 +563,7 @@ function PermissionsEditor({ users, members, onChangeMembers }) {
       </div>
     </div>
   )
-}*/
+}
 
 export function ProjectModal({ project, users = [], folders = [], defaultFolderId = null, isAdmin = false, onSave, onClose }) {
   const editing = !!project
@@ -652,9 +631,9 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
         </Field>
       </div>
 
-      {isAdmin && (
-        <PermissionsEditor users={users} members={members} onChangeMembers={setMembers} />
-      )}
+      <PermissionsEditor users={users} members={members} responsibleIds={responsibleIds}
+        onChangeMembers={setMembers} onChangeResponsibles={setResponsibleIds}
+        isAdmin={isAdmin} error={respErr} />
 
       <div className="field-row">
         <Field label="Valor estimado">
