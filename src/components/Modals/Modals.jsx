@@ -619,7 +619,7 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
 
   const save = () => {
     setTouched(true)
-    if (!name.trim() || !prefeitura.trim() || responsibleIds.length === 0 || dErr) return
+    if (!name.trim() || !prefeitura.trim() || dErr) return
     if (badMoney(estimadoText) || badMoney(orcadoText)) return
     onSave({
       ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start, end, notes: notes.trim(), resources, members,
@@ -635,20 +635,20 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
         <button className="btn btn-primary" onClick={save}>{editing ? 'Salvar alterações' : 'Criar projeto'}</button>
       </>}>
       <Field label="Nome do projeto">
-        <input className="control" value={name} autoFocus placeholder="Ex.: Rebrand 2026" onChange={e => setName(e.target.value)} />
+        <input className="control" value={name?? ''} autoFocus placeholder="Ex.: Rebrand 2026" onChange={e => setName(e.target.value)} />
         {nameErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{nameErr}</span>}
       </Field>
       <Field label="Descrição">
-        <textarea className="control" value={desc} placeholder="Sobre o que é este projeto?" onChange={e => setDesc(e.target.value)} />
+        <textarea className="control" value={desc?? ''} placeholder="Sobre o que é este projeto?" onChange={e => setDesc(e.target.value)} />
       </Field>
 
       <div className="field-row">
         <Field label="Prefeitura">
-          <input className="control" value={prefeitura} placeholder="Ex.: Umari" onChange={e => setPrefeitura(e.target.value)} />
+          <input className="control" value={prefeitura?? ''} placeholder="Ex.: Umari" onChange={e => setPrefeitura(e.target.value)} />
           {prefErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{prefErr}</span>}
         </Field>
         <Field label="Secretaria">
-          <input className="control" value={secretaria} placeholder="Ex.: Educação" onChange={e => setSecretaria(e.target.value)} />
+          <input className="control" value={secretaria?? ''} placeholder="Ex.: Educação" onChange={e => setSecretaria(e.target.value)} />
         </Field>
       </div>
 
@@ -658,30 +658,30 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
 
       <div className="field-row">
         <Field label="Valor estimado">
-          <MoneyInput value={estimadoText} onChange={setEstimadoText} placeholder="0,00" />
+          <MoneyInput value={estimadoText?? ''} onChange={setEstimadoText} placeholder="0,00" />
           {estimadoErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{estimadoErr}</span>}
         </Field>
         <Field label="Valor orçado">
-          <MoneyInput value={orcadoText} onChange={setOrcadoText} placeholder="0,00" />
+          <MoneyInput value={orcadoText?? ''} onChange={setOrcadoText} placeholder="0,00" />
           {orcadoErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{orcadoErr}</span>}
         </Field>
       </div>
 
       <div className="field-row">
         <Field label="Origem do recurso">
-          <select className="control" value={origemRecurso} onChange={e => setOrigemRecurso(e.target.value)}>
+          <select className="control" value={origemRecurso?? ''} onChange={e => setOrigemRecurso(e.target.value)}>
             {RESOURCE_ORIGINS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
           </select>
         </Field>
         <Field label="Status do projeto">
-          <select className="control" value={projStatus} onChange={e => setProjStatus(e.target.value)}>
+          <select className="control" value={projStatus?? ''} onChange={e => setProjStatus(e.target.value)}>
             {PROJECT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </Field>
       </div>
 
       <Field label="Pasta">
-        <select className="control" value={folderId} onChange={e => setFolderId(e.target.value)}>
+        <select className="control" value={folderId??''} onChange={e => setFolderId(e.target.value)}>
           <option value="">Sem pasta</option>
           {folders.map(f => {
             // Caminho completo da pasta (ex: "Obras / São Paulo") para distinguir subpastas.
@@ -693,7 +693,7 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
         </select>
       </Field>
       <Field label="Anotações">
-        <textarea className="control" value={notes} style={{ minHeight: 110 }}
+        <textarea className="control" value={notes?? ''} style={{ minHeight: 110 }}
           placeholder="Contexto, objetivos, observações… O que ajuda a entender o projeto. Links colados aqui viram clicáveis."
           onChange={e => setNotes(e.target.value)} />
       </Field>
@@ -705,8 +705,8 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
         </div>
       </Field>
       <div className="field-row">
-        <Field label="Data de início"><input type="date" className="control" value={start} onChange={e => setStart(e.target.value)} /></Field>
-        <Field label="Data de término"><input type="date" className="control" value={end} onChange={e => setEnd(e.target.value)} /></Field>
+        <Field label="Data de início"><input type="date" className="control" value={start??''} onChange={e => setStart(e.target.value)} /></Field>
+        <Field label="Data de término"><input type="date" className="control" value={end??''} onChange={e => setEnd(e.target.value)} /></Field>
       </div>
       {dErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{dErr}</span>}
     </Modal>

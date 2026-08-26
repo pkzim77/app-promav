@@ -354,19 +354,37 @@ app.post('/api/projects', requireAdmin, wrap(async (req, res) => {
     name, desc = '', color = 'indigo', folderId = null, start, end, notes = '', resources = [], defaultRole = 'full', members = [],
     prefeitura = '', secretaria = '', origemRecurso, valorEstimado, valorOrcado, status, responsibleIds = [],
   } = req.body
+  try {
   const id = genId('p')
+  
   await tx(async (client) => {
+    const [{ position }] = await client.query(
+      'SELECT COALESCE(max(position), -1) + 1 AS position FROM projects WHERE folder_id IS NOT DISTINCT FROM $1',
+      [folderId || null]
+    ).then(result => result.rows)
+    const clean = normalizeResources(resources)
     await client.query(
-      `INSERT INTO projects (id, name, description, color, folder_id, start_date, end_date, notes, resources, default_role,
-                             prefeitura, secretaria, origem_recurso, valor_convenio, valor_disponivel, status, responsible_ids)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
-      [id, name, desc, color, folderId || null, start, end, notes, JSON.stringify(normalizeResources(resources)), normDefaultRole(defaultRole),
-       String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso), normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status), JSON.stringify(normResponsibles(responsibleIds))]
+      `INSERT INTO projects (id, name, description, color, folder_id, position, start_date, end_date, notes, resources,
+                            prefeitura, secretaria, origem_recurso, valor_convenio, valor_disponivel, status, responsible_ids, default_role)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+      [id, name, desc, color, folderId || null, position, start, end, notes, JSON.stringify(clean),
+       String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso),
+       normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status),
+       JSON.stringify(normResponsibles(responsibleIds)), normDefaultRole(defaultRole)]
     )
     await replaceMembers(client, id, members)
   })
+
   const [row] = await q(`${PROJECT_SELECT} WHERE id = $1`, [id])
-  res.status(201).json(row)
+  return res.status(201).json(row)
+
+} catch (error) {
+  console.error('Erro ao criar projeto:', error)
+  return res.status(500).json({ 
+    error: 'Erro interno ao salvar o projeto.',
+    details: error.message 
+  })
+}
 }))
 
 // Mover/reordenar projetos: só administradores. Recebe a pasta de destino
