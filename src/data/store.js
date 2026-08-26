@@ -63,6 +63,48 @@ export const PROJECT_STATUSES = [
 ]
 export const PROJECT_STATUS_MAP = Object.fromEntries(PROJECT_STATUSES.map(s => [s.id, s]))
 
+// ---------- mudanças do projeto (orientações) ----------
+// Setores da PROMAV. Cada usuário pertence a um (users.sector); é isso que faz
+// "destinatário: Engenharia" resolver para pessoas de verdade.
+export const SECTORS = [
+  { id: 'engenharia',  label: 'Engenharia' },
+  { id: 'arquitetura', label: 'Arquitetura' },
+  { id: 'orcamento',   label: 'Orçamento' },
+  { id: 'coordenacao', label: 'Coordenação' },
+  { id: 'direcao',     label: 'Direção' },
+  { id: 'estagio',     label: 'Estágio' },
+]
+export const SECTOR_MAP = Object.fromEntries(SECTORS.map(s => [s.id, s]))
+export const sectorLabel = (id) => SECTOR_MAP[id]?.label || null
+
+// Tipo da mudança. Requisição obriga; sugestão é proposta e só vira trabalho
+// depois de aceita — por isso ela nasce sem atividade no quadro.
+export const CHANGE_KINDS = [
+  { id: 'requisicao', label: 'Requisição', hint: 'Precisa ser feito' },
+  { id: 'sugestao',   label: 'Sugestão',   hint: 'Proposta, pode ser recusada' },
+]
+export const CHANGE_KIND_MAP = Object.fromEntries(CHANGE_KINDS.map(k => [k.id, k]))
+
+// Urgência. Os ids são os mesmos de PRIORITIES de propósito: a urgência da
+// mudança vira, sem tradução, a prioridade da atividade criada.
+export const URGENCIES = [
+  { id: 'low',    label: 'Baixa',   color: '#5F5C56' },
+  { id: 'medium', label: 'Normal',  color: '#8A6A3F' },
+  { id: 'high',   label: 'Urgente', color: '#9A4F32' },
+]
+export const URGENCY_MAP = Object.fromEntries(URGENCIES.map(u => [u.id, u]))
+
+// Um lado da mudança (emissor ou destinatário): pessoa OU setor.
+// Devolve { tipo: 'pessoa'|'setor'|null, nome }.
+export function ladoDaMudanca({ userId, sector }, users = []) {
+  if (userId) {
+    const u = users.find(x => x.id === userId)
+    return { tipo: 'pessoa', nome: u?.name || 'Alguém', user: u || null }
+  }
+  if (sector) return { tipo: 'setor', nome: sectorLabel(sector) || sector, user: null }
+  return { tipo: null, nome: '—', user: null }
+}
+
 // Formata um número como moeda brasileira (R$ 250.000,00). null/undefined → '—'.
 export function formatBRL(value) {
   if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) return '—'

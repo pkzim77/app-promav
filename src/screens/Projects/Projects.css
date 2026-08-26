@@ -305,7 +305,6 @@
   --chart-done:  #2E7D52;  /* Concluído    — verde profundo, tom terroso     */
 }
 
-
 /* ---------- Cronograma: prazo decorrido × executado ---------- */
 
 .crono { padding: 22px 24px; }
@@ -328,7 +327,6 @@
 
 .crono-fill.prazo { background: var(--chart-doing); }
 
-
 .crono-val { flex: 0 0 52px; text-align: right; font-family: var(--font-brand); font-size: 13px; font-weight: 700; color: var(--fg-1); }
 
 .crono-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--fg-3); }
@@ -341,3 +339,86 @@
   .crono-lab { flex-basis: 92px; font-size: 12px; }
   .crono-foot { flex-wrap: wrap; justify-content: center; }
 }
+
+/* ---------- Aba Mudanças (orientações do projeto) ---------- */
+
+.proj-mudancas { display: flex; flex-direction: column; gap: 16px; }
+
+/* Ponto na aba quando há ciência pendente minha. */
+.proj-tab-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--danger); margin-left: 2px; }
+
+.mud-selo { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: var(--r-full); font-size: 12.5px; font-weight: 600; color: #8A6A3F; background: #F6EFE4; }
+
+.mud-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; font-size: 13px; color: var(--fg-3); margin-bottom: 14px; }
+
+.mud-meta span { display: inline-flex; align-items: center; gap: 6px; }
+
+.mud-meta strong { color: var(--fg-2); }
+
+.mud-editada { color: #8A6A3F; }
+
+.mud-origem { margin: 12px 0 0; font-size: 13.5px; color: var(--fg-3); }
+
+.mud-origem strong { color: var(--fg-2); }
+
+.mud-acoes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+
+/* Ciência: quem já disse "eu vi" e quem ainda deve. */
+.mud-ciencia { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+.mud-ack { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: var(--r-full); font-size: 12.5px; font-weight: 600; color: var(--fg-3); background: var(--bg-muted); }
+
+.mud-ack.ok { color: var(--chart-done); background: var(--success-soft); }
+
+.mud-ack.late { color: var(--danger); background: var(--danger-soft, #FDECEC); }
+
+/* Histórico: escolher uma mudança anterior para comparar. */
+/* Selo de tipo: requisição obriga, sugestão propõe. */
+.mud-selo.tipo-requisicao { color: #276B46; background: var(--success-soft); }
+
+.mud-selo.tipo-sugestao { color: #5F5C56; background: var(--bg-muted); }
+
+/* Emissor → destinatário */
+.mud-depara { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-bottom: 16px; padding: 10px 14px; border-radius: var(--r-md); background: var(--bg-subtle); }
+
+.mud-depara-lab { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-4); }
+
+.mud-lado { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--fg-1); }
+
+.mud-lado.vazio { color: var(--fg-4); font-weight: 400; }
+
+.mud-lado-ic { width: 22px; height: 22px; border-radius: var(--r-sm); background: var(--brand-soft); color: var(--brand); display: inline-flex; align-items: center; justify-content: center; }
+
+/* Decisão da sugestão */
+.mud-decisao { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 15px 18px; border-radius: var(--r-md); margin-top: 18px; }
+
+.mud-decisao strong { display: block; font-size: 13.5px; margin-bottom: 3px; }
+
+.mud-decisao p { margin: 0; font-size: 12.5px; line-height: 1.55; }
+
+.mud-decisao-acoes { display: flex; gap: 8px; flex-shrink: 0; }
+
+.mud-decisao.pendente { border: 1px dashed var(--border-strong); background: var(--bg-subtle); color: var(--fg-2); }
+
+.mud-decisao.recusada { background: var(--danger-soft, #FDECEC); color: #9A4F32; }
+
+/* ---------- Registro de mudanças: lista corrida, mais recente no topo ---------- */
+
+.mud-topo { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 2px; }
+
+.mud-contagem { font-size: 12.5px; color: var(--fg-3); }
+
+.mud-card { padding: 22px 24px; }
+
+/* Sugestão sem decisão fica marcada na lateral — é o que ainda pede ação. */
+.mud-card.pendente { border-left: 3px solid var(--chart-doing); }
+
+.mud-card-topo { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+
+.mud-data { font-family: var(--font-brand); font-size: 12.5px; font-weight: 600; color: var(--fg-3); }
+
+.mud-selos { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; flex: 1; }
+
+.mud-titulo { font: var(--text-h4); margin: 0 0 8px; color: var(--fg-1); letter-spacing: var(--tracking-snug); }
+
+.mud-decisao.aceita { background: var(--success-soft); color: #276B46; }
