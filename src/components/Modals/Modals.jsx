@@ -88,7 +88,7 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   const save = () => {
     setTouched(true)
     if (!title.trim() || !projectId || dErr) return
-    onSave({ ...(task || {}), title: title.trim(), projectId, parentId, assigneeId, memberIds: memberIds.filter(id => id !== assigneeId), status, priority, start: start || null, end: end || null, checklist })
+    onSave({ ...(task || {}), title: title.trim(), projectId, assigneeId, memberIds: memberIds.filter(id => id !== assigneeId), status, priority, start: start || null, end: end || null, checklist })
   }
 
   return (

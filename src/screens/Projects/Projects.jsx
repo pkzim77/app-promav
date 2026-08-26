@@ -178,7 +178,7 @@ function TaskRow({ task, members, sessions, currentUserId, now, canEdit, onStart
       <td style={{ width: 70 }}>
         <div className="row-actions">
           <button className="btn-icon" onClick={() => onEdit(task)} aria-label={canEdit ? 'Editar' : 'Ver'}><Icon name={canEdit ? 'pencil' : 'externalLink'} size={15} /></button>
-          {canEdit && <button className="btn-icon" onClick={() => onDelete(task)} aria-label="Excluir"><Icon name="trash" size={15} /></button>}
+          {canEdit && <button className="btn-icon" onClick={(e) => { e.stopPropagation(); onDelete(task) }} aria-label="Excluir"><Icon name="trash" size={15} /></button>}
         </div>
       </td>
     </tr>
