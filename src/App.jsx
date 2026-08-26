@@ -16,6 +16,15 @@ import { effectiveProjectRole, canEditProject } from './data/store.js'
 
 const TITLES = { hub: 'Visão geral', projects: 'Projetos', list: 'Lista', kanban: 'Kanban', gantt: 'Gantt', reports: 'Relatórios', team: 'Equipe' }
 
+// "Meu setor" (a pessoa escolhendo o próprio setor no menu da conta) está
+// pausado: entra numa próxima leva, junto do resto da gestão de setores.
+// Nada foi removido — MySectorModal, saveMySector e a rota PUT /api/me/sector
+// seguem prontos; ligar de novo é só voltar esta chave para true.
+// Enquanto isso, quem define o setor de cada pessoa é o administrador, no
+// painel "Setores" da tela de Equipe — que é o que a aba de Mudanças precisa
+// para endereçar uma mudança a um setor inteiro.
+const MY_SECTOR_ENABLED = false
+
 export default function App() {
   const [authUser, setAuthUser] = React.useState(null)   // usuário logado (ou null)
   const [booting, setBooting] = React.useState(true)     // checagem inicial do token
@@ -449,7 +458,8 @@ export default function App() {
       <div className="main">
         <TopBar title={currentProject ? currentProject.name : TITLES[route.view]} currentUser={authUser}
           canNewProject={isAdmin} onToggleMobileNav={() => setMobileNavOpen(o => !o)}
-          onChangePassword={() => setModal({ type: 'password' })} onMySector={() => setModal({ type: 'mysector' })}
+          onChangePassword={() => setModal({ type: 'password' })}
+          onMySector={MY_SECTOR_ENABLED ? () => setModal({ type: 'mysector' }) : undefined}
           onLogout={handleLogout} onNewProject={openNewProject}
           tasks={tasks} projects={projects} sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer} />
         <div className="content">{screen}</div>
