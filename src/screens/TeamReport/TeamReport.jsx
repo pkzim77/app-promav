@@ -89,7 +89,10 @@ function SetoresDaEquipe({ users, isAdmin, onSetSector }) {
   )
 }
 
-export function TeamReport({ users, tasks, projects, sessions, now, isAdmin = false, onSetSector }) {
+export function TeamReport({ users: todosUsers, tasks, projects, sessions, now, isAdmin = false, onSetSector }) {
+  // Contas de manutenção do sistema não são equipe: nem entram no relatório de
+  // horas, nem têm setor a definir (setor só serve para receber mudança).
+  const users = todosUsers.filter(u => !u.isDev)
   const [mode, setMode] = React.useState('week')
   const [anchor, setAnchor] = React.useState(Date.now())
   const [projFilter, setProjFilter] = React.useState(null)

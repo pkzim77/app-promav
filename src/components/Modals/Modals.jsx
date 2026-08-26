@@ -2,7 +2,7 @@ import './Modals.css'
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field, SegControl, StatusTag, PriorityTag } from '../primitives/primitives.jsx'
-import { STATUSES, PRIORITIES, PROJECT_HEX, MAX_FILE_BYTES, formatBytes, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, parseBRL, maskBRL, SECTORS, CHANGE_KINDS, URGENCIES } from '../../data/store.js'
+import { STATUSES, PRIORITIES, PROJECT_HEX, MAX_FILE_BYTES, formatBytes, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, PREFEITURAS, SECRETARIAS, canonizar, paraAtribuir, parseBRL, maskBRL, SECTORS, CHANGE_KINDS, URGENCIES } from '../../data/store.js'
 // Create/edit modals for tasks and projects + confirm dialog. Includes validation.
 
 // Campo de dinheiro: formata a cada tecla (2.500,00) e mantém o cursor no fim,
@@ -35,7 +35,9 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   const ro = !canEdit // somente leitura (papel 'Só exibição'): só checklist + entrar/sair
   const [title, setTitle] = React.useState(task?.title || '')
   const [projectId, setProjectId] = React.useState(task?.projectId || defaultProjectId || projects[0]?.id || '')
-  const [assigneeId, setAssigneeId] = React.useState(task?.assigneeId || users[0]?.id || '')
+  // O padrão é a primeira pessoa que pode receber trabalho: users[0] é a conta
+  // de manutenção mais antiga, e toda atividade nova nasceria no nome dela.
+  const [assigneeId, setAssigneeId] = React.useState(task?.assigneeId || users.find(u => !u.isDev)?.id || '')
   const [memberIds, setMemberIds] = React.useState(task?.memberIds ? [...task.memberIds] : [])
   const [status, setStatus] = React.useState(task?.status || defaultStatus || 'todo')
   const [priority, setPriority] = React.useState(task?.priority || 'medium')
@@ -71,6 +73,10 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
     setMemberIds(m => join ? [...m, currentUserId] : m.filter(x => x !== currentUserId))
     if (onToggleMembership && task) onToggleMembership(task, join)
   }
+
+  // Quem pode receber a atividade. Um responsável ou membro já gravado entra
+  // na lista mesmo sendo conta de manutenção, senão o salvamento o trocaria.
+  const pessoas = paraAtribuir(users, assigneeId, memberIds, task?.assigneeId, task?.memberIds)
 
   const dErr = dateError(start, end)
   const titleErr = touched && !title.trim() ? 'Informe um título.' : null
@@ -108,7 +114,7 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
         </Field>
         <Field label="Responsável">
           <select className="control" value={assigneeId} disabled={ro} onChange={e => setAssigneeId(e.target.value)}>
-            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            {pessoas.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
         </Field>
       </div>
@@ -129,7 +135,7 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
           )
         )}
         <div className="member-picker">
-          {users.map(u => {
+          {pessoas.map(u => {
             const isResp = u.id === assigneeId
             const on = isResp || memberIds.includes(u.id)
             return (
@@ -453,7 +459,10 @@ function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, on
   }
   const addMember = () => {
     if (!selectedUserId) return
-    onChangeMembers([...members, { userId: selectedUserId, role: 'view' }])
+    // Administrador entra como Edição total: ele tem acesso irrestrito de
+    // qualquer forma, e gravar 'view' mostraria na tela um limite que não existe.
+    const u = users.find(x => x.id === selectedUserId)
+    onChangeMembers([...members, { userId: selectedUserId, role: u?.isAdmin ? 'full' : 'view' }])
     setSelectedUserId('')
   }
   // Tirar alguém do projeto também o tira da responsabilidade: um responsável
@@ -463,20 +472,23 @@ function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, on
     onChangeResponsibles(responsibleIds.filter(x => x !== userId))
   }
 
+  // Só quem já é participante aparece na lista, então marcar alguém aqui nunca
+  // precisa lhe dar acesso antes — ele já tem.
   const isResp = (userId) => responsibleIds.includes(userId)
   const toggleResp = (u) => {
-    if (isResp(u.id)) { onChangeResponsibles(responsibleIds.filter(x => x !== u.id)); return }
-    onChangeResponsibles([...responsibleIds, u.id])
-    // Marcar alguém como responsável garante que ele enxergue o projeto.
-    if (isAdmin && !u.isAdmin && roleOf(u.id) === 'none') setRole(u.id, 'full')
+    onChangeResponsibles(isResp(u.id) ? responsibleIds.filter(x => x !== u.id) : [...responsibleIds, u.id])
   }
 
-  const availableUsers = users.filter(u => !u.isAdmin && roleOf(u.id) === 'none')
-  // Admins entram na lista mesmo sem vínculo: têm acesso total e são elegíveis
-  // a responsável (normalmente é o engenheiro responsável quem responde).
-  const teamUsers = users.filter(u => u.isAdmin || roleOf(u.id) !== 'none')
-  const comAcesso = users.filter(u => !u.isAdmin && roleOf(u.id) !== 'none').length
-  const nResp = users.filter(u => isResp(u.id)).length
+  // A equipe de desenvolvimento (users.is_dev) não entra em projeto: mantém o
+  // sistema, não toca obra. Fora ela, qualquer pessoa pode ser adicionada e
+  // marcada como responsável — administradores inclusive.
+  const elegiveis = users.filter(u => !u.isDev)
+  const availableUsers = elegiveis.filter(u => roleOf(u.id) === 'none')
+  const teamUsers = elegiveis.filter(u => roleOf(u.id) !== 'none')
+  // Administrador vê todo projeto por definição, então não conta como alguém a
+  // quem este cadastro deu acesso — a frase do rodapé fala dos demais.
+  const comAcesso = teamUsers.filter(u => !u.isAdmin).length
+  const nResp = teamUsers.filter(u => isResp(u.id)).length
   return (
     <div className="field">
       <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -514,7 +526,16 @@ function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, on
               <span className="av" style={{ width: 26, height: 26, background: u.color, fontSize: 10 }}>{u.initials}</span>
               <span className="perm-name">{u.name}{u.isAdmin ? ' · admin' : ''}</span>
               {u.isAdmin ? (
-                <span className="perm-admin-tag">Acesso total</span>
+                // Sem seletor de papel: o acesso do admin é total em todo
+                // projeto, e um "Só exibição" aqui seria letra morta.
+                <>
+                  <span className="perm-admin-slot"><span className="perm-admin-tag">Acesso total</span></span>
+                  {isAdmin && (
+                    <button type="button" className="btn-icon perm-remove" onClick={() => removeMember(u.id)} aria-label={`Remover ${u.name}`} title="Remover da equipe">
+                      <Icon name="x" size={15} />
+                    </button>
+                  )}
+                </>
               ) : isAdmin ? (
                 <>
                   <select className="control perm-select" value={roleOf(u.id)} onChange={e => setRole(u.id, e.target.value)}>
@@ -555,8 +576,12 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const [resources, setResources] = React.useState(project?.resources ? project.resources.map(r => ({ ...r })) : [])
   const [members, setMembers] = React.useState(project?.members ? project.members.map(m => ({ ...m })) : [])
   // ----- ficha do projeto (dados do convênio) -----
-  const [prefeitura, setPrefeitura] = React.useState(project?.prefeitura || '')
-  const [secretaria, setSecretaria] = React.useState(project?.secretaria || '')
+  // Prefeitura e secretaria são listas fechadas, mas o que já está gravado
+  // manda: canonizar() reconhece "Umari" como o "UMARI" da lista e, se o valor
+  // não existir nela, opcoesCom() o mantém como opção para não sumir ao salvar.
+  const [prefeitura, setPrefeitura] = React.useState(canonizar(PREFEITURAS, project?.prefeitura))
+  const [secretaria, setSecretaria] = React.useState(canonizar(SECRETARIAS, project?.secretaria))
+  const opcoesCom = (lista, atual) => (atual && !lista.includes(atual) ? [atual, ...lista] : lista)
   const [responsibleIds, setResponsibleIds] = React.useState(project?.responsibleIds ? [...project.responsibleIds] : [])
   const [origemRecurso, setOrigemRecurso] = React.useState(project?.origemRecurso || 'federal')
   // Valores em R$: mantidos como texto enquanto digita; convertidos ao salvar.
@@ -601,11 +626,17 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
 
       <div className="field-row">
         <Field label="Prefeitura">
-          <input className="control" value={prefeitura?? ''} placeholder="Ex.: Umari" onChange={e => setPrefeitura(e.target.value)} />
+          <select className="control" value={prefeitura ?? ''} onChange={e => setPrefeitura(e.target.value)}>
+            <option value="">Selecione a prefeitura</option>
+            {opcoesCom(PREFEITURAS, prefeitura).map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
           {prefErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{prefErr}</span>}
         </Field>
         <Field label="Secretaria">
-          <input className="control" value={secretaria?? ''} placeholder="Ex.: Educação" onChange={e => setSecretaria(e.target.value)} />
+          <select className="control" value={secretaria ?? ''} onChange={e => setSecretaria(e.target.value)}>
+            <option value="">Sem secretaria</option>
+            {opcoesCom(SECRETARIAS, secretaria).map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
         </Field>
       </div>
 
@@ -713,8 +744,11 @@ export function ChangeModal({ change, projectId, users = [], members = [], curre
   const [touched, setTouched] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
 
-  // Só quem participa do projeto entra nas listas de pessoa.
-  const equipe = users.filter(u => u.isAdmin || members.some(m => m.userId === u.id))
+  // Só quem participa do projeto entra nas listas de pessoa — e contas de
+  // manutenção ficam de fora, salvo se já forem o emissor ou o destinatário
+  // de uma mudança gravada antes desta regra.
+  const equipe = paraAtribuir(users, change?.emitterUserId, change?.targetUserIds, change?.responsibleId)
+    .filter(u => u.isAdmin || members.some(m => m.userId === u.id))
 
   // Emissor já vem preenchido com quem abriu — o caso comum é a própria pessoa
   // registrando. Trocar cobre "quem pediu foi outro, eu só digitei".

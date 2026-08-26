@@ -42,6 +42,43 @@ export const RESOURCE_ORIGINS = [
 ]
 export const RESOURCE_ORIGIN_MAP = Object.fromEntries(RESOURCE_ORIGINS.map(o => [o.id, o]))
 
+// Prefeituras atendidas e secretarias que aparecem no cadastro do projeto.
+// São o texto gravado, não um id: a coluna do banco é text livre e continua
+// aceitando qualquer valor, então nada do que já foi digitado se perde — o
+// modal reaproveita o valor antigo como opção do seletor (ver canonizar()).
+export const PREFEITURAS = ['UMARI', 'MOMBAÇA']
+
+export const SECRETARIAS = [
+  'Obras e Infraestrutura',
+  'Planejamento Urbano',
+  'Meio Ambiente',
+  'Habitação',
+  'Mobilidade Urbana e Transportes',
+  'Serviços Públicos',
+  'Educação',
+  'Saúde',
+  'Esporte, Lazer e Cultura',
+  'Administração',
+]
+
+// Contas de manutenção do sistema (users.is_dev): mantêm o app, não tocam
+// obra, então ficam fora de toda lista onde se escolhe gente para trabalhar.
+// Continuam visíveis onde só se EXIBE quem já está num registro — o avatar de
+// um responsável antigo não pode virar "?" porque a conta saiu das listas.
+//
+// Passe em `jaVinculados` quem o registro aberto já aponta (responsável atual,
+// membros, destinatários). Sem isso, o seletor abriria sem a opção que está
+// gravada e o próximo "salvar" trocaria a pessoa sem ninguém pedir.
+export const paraAtribuir = (users = [], ...jaVinculados) => {
+  const manter = new Set(jaVinculados.flat().filter(Boolean))
+  return users.filter(u => !u.isDev || manter.has(u.id))
+}
+
+// Compara ignorando caixa e acento, para "Umari" (digitado quando o campo era
+// texto) reconhecer o "UMARI" da lista em vez de virar uma opção duplicada.
+const chaveTexto = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+export const canonizar = (lista, valor) => lista.find(o => chaveTexto(o) === chaveTexto(valor)) || valor || ''
+
 // Status geral do projeto (diferente do status das atividades).
 // Tons da identidade PROMAV, escurecidos até passarem 4.5:1 como TEXTO sobre
 // fundo claro — o selo pinta a própria cor sobre um véu dela mesma, então o

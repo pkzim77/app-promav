@@ -94,6 +94,11 @@
 
 .perm-select { flex: 0 0 168px; width: 168px; min-width: 0; }
 
+/* Selo do administrador na coluna "Acesso ao projeto". O slot ocupa a mesma
+   largura do seletor de papel, para as linhas alinharem; o selo em si mantém
+   o tamanho do texto. */
+.perm-admin-slot { flex: 0 0 168px; display: flex; align-items: center; }
+
 .perm-admin-tag { font-size: 12px; font-weight: 600; color: var(--brand); background: var(--brand-soft); padding: 4px 10px; border-radius: var(--r-full); }
 
 /* Seletor de arquivo (modais de documento/imagem) */

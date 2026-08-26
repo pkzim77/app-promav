@@ -274,9 +274,9 @@ app.get('/api/health', wrap(async (_req, res) => {
 }))
 
 // Forma pública de um usuário (sem hash de senha).
-const PUBLIC_USER = 'id, name, initials, color, email, sector, is_admin AS "isAdmin"'
+const PUBLIC_USER = 'id, name, initials, color, email, sector, is_admin AS "isAdmin", is_dev AS "isDev"'
 // Forma reduzida usada em listas (bootstrap/equipe).
-const LIST_USER = 'id, name, initials, color, sector, is_admin AS "isAdmin"'
+const LIST_USER = 'id, name, initials, color, sector, is_admin AS "isAdmin", is_dev AS "isDev"'
 
 // ----- autenticação (rotas públicas) -----
 app.post('/api/auth/login', wrap(async (req, res) => {
@@ -1153,6 +1153,15 @@ async function ensureSchema() {
       PRIMARY KEY (project_id, user_id)
     )
   `)
+
+  // Equipe de desenvolvimento do app: contas que mantêm o sistema, não gente
+  // que toca obra. Ficam fora da equipe dos projetos (e da responsabilidade),
+  // por isso a marca é por e-mail — id muda, e-mail não. A lista é a fonte da
+  // verdade: tirar alguém daqui devolve a pessoa ao cadastro no próximo boot.
+  await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_dev boolean NOT NULL DEFAULT false')
+  const devEmails = (process.env.DEV_EMAILS || 'kauaalbuquerque77@gmail.com,janylson.promav@gmail.com')
+    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+  await q('UPDATE users SET is_dev = (lower(email) = ANY($1))', [devEmails])
 
   // Bootstrap do administrador: promove o ADMIN_EMAIL e garante ao menos um admin.
   const adminEmail = process.env.ADMIN_EMAIL || 'engenharia.promav@gmail.com'
