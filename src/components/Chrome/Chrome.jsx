@@ -157,10 +157,6 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
 
   const nav = [
     { id: 'hub', label: 'Visão geral', icon: 'hub' },
-    { id: 'projects', label: 'Projetos', icon: 'folder' },
-    { id: 'list', label: 'Lista', icon: 'list' },
-    { id: 'kanban', label: 'Kanban', icon: 'kanban' },
-    { id: 'gantt', label: 'Gantt', icon: 'gantt' },
     { id: 'reports', label: 'Relatórios Dos Projetos', icon: 'trendingUp' },
     { id: 'team', label: 'Relatórios Da Equipe', icon: 'users' },
   ]
@@ -300,7 +296,7 @@ export function UserMenu({ user, onChangePassword, onLogout }) {
   )
 }
 
-export function TopBar({ title, currentUser, canNewProject = true, onToggleMobileNav, onChangePassword, onLogout, onNewProject, tasks, projects, sessions, now, onStartTimer, onStopTimer }) {
+export function TopBar({ title, currentUser, canNewProject = true, onToggleMobileNav, onChangePassword, onLogout, onNewProject, tasks, projects, sessions, now, onStartTimer, onStopTimer, searchQuery, onSearchChange }) {
   return (
     <header className="topbar">
       <button className="tb-hamburger" title="Menu" onClick={onToggleMobileNav}>
@@ -310,7 +306,7 @@ export function TopBar({ title, currentUser, canNewProject = true, onToggleMobil
       <div className="tb-spacer" />
       <div className="search">
         <Icon name="search" size={17} />
-        <input placeholder="Buscar projetos e tarefas" />
+        <input value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Buscar projetos" />
       </div>
       <TimeClock currentUser={currentUser} tasks={tasks} projects={projects} sessions={sessions} now={now} onStart={onStartTimer} onStop={onStopTimer} />
       {canNewProject && (

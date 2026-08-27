@@ -25,7 +25,10 @@ function HubCard({ icon, title, desc, tint, ink, onClick }) {
   )
 }
 
-export function Hub({ projects, tasks, onNavigate, sessions, currentUserId, now }) {
+export function Hub({ projects, recentProjects: searchedProjects = projects, tasks, onNavigate, sessions, currentUserId, now }) {
+  const recentProjects = [...searchedProjects]
+    .sort((a, b) => new Date(b.created) - new Date(a.created))
+    .slice(0, 10)
   const inProgress = tasks.filter(t => t.status === 'progress').length
   const done = tasks.filter(t => t.status === 'done').length
   const todayMs = (sessions || []).filter(s => s.userId === currentUserId && sameDay(s.start, now))
@@ -35,7 +38,7 @@ export function Hub({ projects, tasks, onNavigate, sessions, currentUserId, now 
     { icon: 'folder', title: 'Projetos', desc: 'Crie e gerencie seus projetos e atividades.', tint: 'var(--brand-soft)', ink: 'var(--accent-strong)', view: 'projects' },
     { icon: 'kanban', title: 'Kanban', desc: 'Acompanhe o fluxo das tarefas por status.', tint: 'var(--brand-soft)', ink: 'var(--accent-strong)', view: 'kanban' },
     { icon: 'gantt', title: 'Gantt', desc: 'Visualize a linha do tempo dos projetos.', tint: 'var(--brand-soft)', ink: 'var(--accent-strong)', view: 'gantt' },
-    { icon: 'inbox', title: 'Minhas tarefas', desc: 'Veja o que está sob sua responsabilidade.', tint: 'var(--brand-soft)', ink: 'var(--accent-strong)', view: 'kanban', mine: true },
+    { icon: 'list', title: 'Lista', desc: 'Visualize todas as atividades em formato de lista.', tint: 'var(--brand-soft)', ink: 'var(--accent-strong)', view: 'list' },
   ]
   return (
     <div className="page">
@@ -62,7 +65,7 @@ export function Hub({ projects, tasks, onNavigate, sessions, currentUserId, now 
         </button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 14 }}>
-        {projects.map(p => {
+        {recentProjects.map(p => {
           const pct = projectProgress(tasks, p.id)
           const count = tasks.filter(t => t.projectId === p.id).length
           return (
