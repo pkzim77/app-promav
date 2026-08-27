@@ -359,7 +359,7 @@ export default function App() {
   } else if (route.view === 'projects') {
     screen = <ProjectList projects={searchedProjects} tasks={tasks} folders={folders} authUser={authUser} canCreate={isAdmin}
       onOpen={(id) => setRoute({ view: 'projects', projectId: id })}
-      onEdit={openEditProject} onDelete={askDeleteProject} onNew={openNewProject} />
+      onEdit={openEditProject} onDelete={askDeleteProject} onNew={openNewProject} onMoveProject={moveProject} onMoveFolder={moveFolder} onNewSubfolder={createFolder} onDeleteFolder={askDeleteFolder} />
   } else if (route.view === 'list') {
     screen = <TaskListView tasks={tasks} projects={projects} users={users} authUser={authUser} filterProject={filterProject} mine={mine}
       currentUserId={currentUserId} onFilterProject={setFilterProject} onToggleMine={() => setMine(m => !m)}
