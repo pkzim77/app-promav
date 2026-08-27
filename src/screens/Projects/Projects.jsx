@@ -171,8 +171,14 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
     clearDrag()
   }
   const dropFolderTarget = (f) => (e) => {
-    if (!canMove || !drag || drag.type !== 'folder' || drag.id === f.id) return
+    if (!canMove || !drag || drag.id === f.id) return
     e.preventDefault(); e.stopPropagation()
+    if (drag.type === 'project') {
+      onMoveProject(drag.id, f.id, null)
+      clearDrag()
+      return
+    }
+    if (drag.type !== 'folder') return
     const rect = e.currentTarget.getBoundingClientRect()
     const siblings = childFolders(f.parentId).filter(x => x.id !== drag.id)
     const index = siblings.findIndex(x => x.id === f.id)
