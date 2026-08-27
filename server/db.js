@@ -11,6 +11,15 @@ if (!process.env.DATABASE_URL) {
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
+  keepAlive: true,
+})
+
+// Erros em clientes ociosos são emitidos pelo pool fora de uma chamada q().
+// Sem listener, o EventEmitter do Node encerra o processo da API.
+pool.on('error', (err) => {
+  console.error('[promav] erro na conexão PostgreSQL:', err.message)
 })
 
 // Helper: query simples retornando as linhas.
