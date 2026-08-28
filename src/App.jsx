@@ -34,6 +34,7 @@ export default function App() {
   const [tasks, setTasks] = React.useState([])
   const [changes, setChanges] = React.useState([])
   const [route, setRoute] = React.useState({ view: 'hub' })
+  const [projectSearch, setProjectSearch] = React.useState('')
   const [filterProject, setFilterProject] = React.useState(null)
   const [mine, setMine] = React.useState(false)
   const [modal, setModal] = React.useState(null)
@@ -404,6 +405,10 @@ export default function App() {
   }
 
   const currentProject = route.projectId ? projects.find(p => p.id === route.projectId) : null
+  const normalizedSearch = projectSearch.trim().toLocaleLowerCase('pt-BR')
+  const searchedProjects = normalizedSearch
+    ? projects.filter(p => `${p.name} ${p.desc || ''}`.toLocaleLowerCase('pt-BR').includes(normalizedSearch))
+    : projects
   const isAdmin = !!authUser?.isAdmin
   // Papel efetivo do usuário no projeto aberto (admin/full/view).
   const currentRole = currentProject ? effectiveProjectRole(currentProject, authUser) : 'view'
@@ -411,7 +416,7 @@ export default function App() {
 
   let screen
   if (route.view === 'hub') {
-    screen = <Hub projects={projects} tasks={tasks} onNavigate={navigate} sessions={sessions} currentUserId={currentUserId} now={now} />
+    screen = <Hub projects={projects} recentProjects={searchedProjects} tasks={tasks} onNavigate={navigate} sessions={sessions} currentUserId={currentUserId} now={now} />
   } else if (route.view === 'projects' && currentProject) {
     screen = <ProjectDetail project={currentProject} tasks={tasks} users={users} changes={changes}
       sessions={sessions} currentUserId={currentUserId} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
@@ -423,9 +428,9 @@ export default function App() {
       onAddResource={openAddResource}
       onNewChange={openNewChange} onEditChange={openEditChange} onAckChange={ackChange} onDecideChange={decideChange} />
   } else if (route.view === 'projects') {
-    screen = <ProjectList projects={projects} tasks={tasks} folders={folders} authUser={authUser} canCreate={isAdmin}
+    screen = <ProjectList projects={searchedProjects} tasks={tasks} folders={folders} authUser={authUser} canCreate={isAdmin}
       onOpen={(id) => setRoute({ view: 'projects', projectId: id })}
-      onEdit={openEditProject} onDelete={askDeleteProject} onNew={openNewProject} />
+      onEdit={openEditProject} onDelete={askDeleteProject} onNew={openNewProject} onMoveProject={moveProject} onMoveFolder={moveFolder} onNewSubfolder={createFolder} onDeleteFolder={askDeleteFolder} />
   } else if (route.view === 'list') {
     screen = <TaskListView tasks={tasks} projects={projects} users={users} authUser={authUser} filterProject={filterProject} mine={mine}
       currentUserId={currentUserId} onFilterProject={setFilterProject} onToggleMine={() => setMine(m => !m)}
@@ -445,7 +450,7 @@ export default function App() {
 
   return (
     <div className={'app' + (mobileNavOpen ? ' nav-open' : '')}>
-      <Sidebar route={route} onNavigate={navigate} projects={projects} tasks={tasks}
+      <Sidebar route={route} onNavigate={navigate} projects={searchedProjects} tasks={tasks}
         folders={folders} isAdmin={isAdmin}
         collapsed={navCollapsed} mobileOpen={mobileNavOpen}
         onToggleCollapse={() => setNavCollapsed(c => !c)}
@@ -461,7 +466,8 @@ export default function App() {
           onChangePassword={() => setModal({ type: 'password' })}
           onMySector={MY_SECTOR_ENABLED ? () => setModal({ type: 'mysector' }) : undefined}
           onLogout={handleLogout} onNewProject={openNewProject}
-          tasks={tasks} projects={projects} sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer} />
+          tasks={tasks} projects={projects} sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
+          searchQuery={projectSearch} onSearchChange={setProjectSearch} />
         <div className="content">{screen}</div>
       </div>
 

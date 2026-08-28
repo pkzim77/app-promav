@@ -70,6 +70,7 @@ const PROJECT_SELECT = `
          status,
          responsible_ids AS "responsibleIds",
          default_role AS "defaultRole",
+         created_at AS created,
          COALESCE((
            SELECT json_agg(json_build_object('userId', pm.user_id, 'role', pm.role) ORDER BY pm.user_id)
            FROM project_members pm WHERE pm.project_id = projects.id

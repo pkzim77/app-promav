@@ -131,9 +131,8 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
   const startDrag = (id) => (e) => {
     if (!canMove) return
     const type = e.currentTarget.dataset.dragType || 'project'
-    const item = { id, type }
     dragRef.current = item
-    setDrag(item)
+    setDrag({ id, type })
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', `${type}:${id}`)
   }
@@ -174,24 +173,23 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
     clearDrag()
   }
   const dropFolderTarget = (f) => (e) => {
-    const item = dragRef.current || drag
-    if (!canMove || !item || item.id === f.id) return
+    if (!canMove || !drag || drag.id === f.id) return
     e.preventDefault(); e.stopPropagation()
-    if (item.type === 'project') {
-      onMoveProject(item.id, f.id, null)
+    if (drag.type === 'project') {
+      onMoveProject(drag.id, f.id, null)
       clearDrag()
       return
     }
-    if (item.type !== 'folder') return
+    if (drag.type !== 'folder') return
     const rect = e.currentTarget.getBoundingClientRect()
-    const siblings = childFolders(f.parentId).filter(x => x.id !== item.id)
+    const siblings = childFolders(f.parentId).filter(x => x.id !== drag.id)
     const index = siblings.findIndex(x => x.id === f.id)
     const relativeY = e.clientY - rect.top
     if (relativeY >= rect.height * 0.3 && relativeY <= rect.height * 0.7) {
-      onMoveFolder(item.id, f.id, null)
+      onMoveFolder(drag.id, f.id, null)
     } else {
       const beforeId = relativeY < rect.height * 0.3 ? f.id : (siblings[index + 1]?.id || null)
-      onMoveFolder(item.id, f.parentId || null, beforeId)
+      onMoveFolder(drag.id, f.parentId || null, beforeId)
     }
     clearDrag()
   }
