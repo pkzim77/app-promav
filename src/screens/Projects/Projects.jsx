@@ -131,8 +131,9 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
   const startDrag = (id) => (e) => {
     if (!canMove) return
     const type = e.currentTarget.dataset.dragType || 'project'
+    const item = { id, type }
     dragRef.current = item
-    setDrag({ id, type })
+    setDrag(item)
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', `${type}:${id}`)
   }
