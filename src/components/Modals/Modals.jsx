@@ -749,15 +749,19 @@ export function ChangeModal({ change, projectId, users = [], members = [], curre
   // de uma mudança gravada antes desta regra.
   const equipe = paraAtribuir(users, change?.emitterUserId, change?.targetUserIds, change?.responsibleId)
     .filter(u => u.isAdmin || members.some(m => m.userId === u.id))
+  const equipeDestinatarios = equipe.filter(u => members.some(m => m.userId === u.id))
 
   // Emissor já vem preenchido com quem abriu — o caso comum é a própria pessoa
   // registrando. Trocar cobre "quem pediu foi outro, eu só digitei".
   const [emissor, setEmissor] = React.useState(
     escreverLado({ userId: change?.emitterUserId, sector: change?.emitterSector }) || LADO_PESSOA(currentUserId)
   )
-  // Destinatário: um setor OU uma lista de pessoas. Guardamos sempre a lista;
-  // o setor, quando escolhido, é exclusivo (não convive com pessoas).
-  const [destSetor, setDestSetor] = React.useState(change?.targetSector || null)
+  // Destinatário: um setor e/ou uma lista de pessoas. O setor continua sendo
+  // único por compatibilidade com o contrato da API, mas pode ser combinado
+  // com participantes avulsos.
+  const [destSetores, setDestSetores] = React.useState(
+    change?.targetSectors?.length ? [...change.targetSectors] : change?.targetSector ? [change.targetSector] : []
+  )
   const [destPessoas, setDestPessoas] = React.useState(
     change?.targetUserIds?.length ? [...change.targetUserIds]
       : change?.responsibleId ? [change.responsibleId] : []
@@ -765,8 +769,10 @@ export function ChangeModal({ change, projectId, users = [], members = [], curre
   // Escolher no seletor vazio acrescenta; escolher num preenchido troca.
   const definirDestino = (indice, valor) => {
     const { userId, sector } = lerLado(valor)
-    if (sector) { setDestSetor(sector); setDestPessoas([]); return }
-    setDestSetor(null)
+    if (sector) {
+      setDestSetores(atual => atual.includes(sector) ? atual : [...atual, sector])
+      return
+    }
     setDestPessoas(atual => {
       if (!userId) return atual.filter((_, i) => i !== indice)      // "remover"
       if (atual.includes(userId)) return atual                       // já está
@@ -775,20 +781,31 @@ export function ChangeModal({ change, projectId, users = [], members = [], curre
       return copia
     })
   }
+  const definirSetorOuPessoa = (valor) => {
+    const { userId, sector } = lerLado(valor)
+    if (sector) { setDestSetores(atual => atual.includes(sector) ? atual : [...atual, sector]); return }
+    if (!userId) return
+    setDestPessoas(atual => atual.includes(userId) ? atual : [userId, ...atual])
+  }
+  const alterarSetor = (indice, valor) => {
+    const { sector } = lerLado(valor)
+    if (sector) setDestSetores(atual => atual.map((item, i) => i === indice ? sector : item).filter((item, i, lista) => lista.indexOf(item) === i))
+  }
+  const removerSetor = (indice) => setDestSetores(atual => atual.filter((_, i) => i !== indice))
   const removerDestino = (i) => setDestPessoas(a => a.filter((_, k) => k !== i))
 
   const titleErr = touched && !title.trim() ? 'Diga o que mudou, em uma linha.' : null
   const descErr = touched && !description.trim() ? 'Descreva a mudança para quem vai fazer.' : null
-  const temDestino = !!destSetor || destPessoas.length > 0
+  const temDestino = destSetores.length > 0 || destPessoas.length > 0
   const destErr = touched && !temDestino ? 'Escolha para quem vai a mudança.' : null
 
   // Endereçar a um setor cobra quem está nele — mas só quem participa do
   // projeto pode ser avisado. Avisa antes de publicar, não depois.
-  const foraDoProjeto = destSetor
-    ? users.filter(u => u.sector === destSetor && !u.isAdmin && !members.some(m => m.userId === u.id))
+  const foraDoProjeto = destSetores.length
+    ? users.filter(u => destSetores.includes(u.sector) && !u.isAdmin && !members.some(m => m.userId === u.id))
     : []
   // Setor escolhido sem ninguém dentro não avisa ninguém — vale dizer antes.
-  const semNinguemNoSetor = destSetor && !users.some(u => u.sector === destSetor)
+  const semNinguemNoSetor = destSetores.some(setor => !members.some(m => users.some(u => u.id === m.userId && u.sector === setor)))
 
   const save = async () => {
     setTouched(true)
@@ -800,7 +817,7 @@ export function ChangeModal({ change, projectId, users = [], members = [], curre
         ...(change ? { id: change.id } : {}), projectId,
         title: title.trim(), description: description.trim(), requester: requester.trim(),
         changeDate, urgency,
-        targetUserIds: destSetor ? [] : destPessoas, targetSector: destSetor,
+        targetUserIds: destPessoas, targetSectors: destSetores, targetSector: destSetores[0] || null,
         emitterUserId: em.userId, emitterSector: em.sector,
         ...(editing ? {} : { kind, affectsBudget }),
       })
@@ -853,24 +870,20 @@ export function ChangeModal({ change, projectId, users = [], members = [], curre
           <span className="peso-hint">De quem partiu o pedido.</span>
         </Field>
         <Field label="Destinatário">
-          {/* Setor é escolha única. Pessoas acumulam: cada uma escolhida abre
-              um seletor vazio embaixo para incluir mais. */}
-          {destSetor ? (
-            <LadoSelect value={LADO_SETOR(destSetor)} onChange={v => definirDestino(0, v)}
-              equipe={equipe} incluirVazio rotuloVazio="Escolha pessoa ou setor" />
-          ) : (
-            <div className="dest-lista">
-              {destPessoas.map((uid, i) => (
-                <div className="dest-linha" key={uid}>
-                  <LadoSelect value={LADO_PESSOA(uid)} onChange={v => definirDestino(i, v)} equipe={equipe} />
-                  <button type="button" className="btn-icon" onClick={() => removerDestino(i)}
-                    aria-label="Remover destinatário"><Icon name="x" size={16} /></button>
-                </div>
-              ))}
-              <LadoSelect value="" onChange={v => definirDestino(destPessoas.length, v)} equipe={equipe}
-                incluirVazio rotuloVazio={destPessoas.length ? '+ incluir outra pessoa' : 'Escolha pessoa ou setor'} />
-            </div>
-          )}
+          {/* Cada escolha mantém um seletor abaixo para incluir outra pessoa
+              ou setor; pessoas avulsas podem acompanhar o setor. */}
+          <div className="dest-lista">
+            {destSetores.map((setor, i) => <div className="dest-linha" key={'setor-' + setor}>
+              <LadoSelect value={LADO_SETOR(setor)} onChange={v => alterarSetor(i, v)} equipe={equipeDestinatarios} />
+              <button type="button" className="btn-icon" onClick={() => removerSetor(i)} aria-label="Remover setor"><Icon name="x" size={16} /></button>
+            </div>)}
+            {destPessoas.map((uid, i) => <div className="dest-linha" key={uid}>
+              <LadoSelect value={LADO_PESSOA(uid)} onChange={v => definirDestino(i, v)} equipe={equipeDestinatarios} />
+              <button type="button" className="btn-icon" onClick={() => removerDestino(i)} aria-label="Remover destinatário"><Icon name="x" size={16} /></button>
+            </div>)}
+            <LadoSelect value="" onChange={definirSetorOuPessoa} equipe={equipeDestinatarios}
+              incluirVazio rotuloVazio={temDestino ? '+ incluir outra pessoa ou setor' : 'Escolha pessoa ou setor'} />
+          </div>
           {destErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{destErr}</span>}
         </Field>
       </div>

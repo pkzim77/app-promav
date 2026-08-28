@@ -7,7 +7,7 @@ import { PROJECT_COLORS, STATUSES, projectProgress, taskProgress, checklistStats
 import { api } from '../../data/api.js'
 // Projetos — grid of project cards, and a project detail view with task table.
 
-function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete }) {
+function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete, draggable, dragging, dropHint, onDragStart, onDragEnd, onDragOver, onDrop }) {
   const pct = projectProgress(tasks, project.id)
   const count = tasks.filter(t => t.projectId === project.id).length
   const color = PROJECT_COLORS[project.color]
@@ -16,7 +16,8 @@ function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete })
   const canDelete = role === 'admin'
   return (
     // O card inteiro abre o projeto; os botões de ação param a propagação.
-    <div className="card proj-card" role="button" tabIndex={0} title={project.name}
+    <div className={'card proj-card' + (dragging ? ' dragging' : '') + (dropHint ? ` drop-${dropHint}` : '')} role="button" tabIndex={0} title={project.name}
+      draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragOver={onDragOver} onDrop={onDrop}
       onClick={() => onOpen(project.id)}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(project.id) } }}
       style={{ padding: 22, display: 'flex', flexDirection: 'column', minHeight: 200 }}>
@@ -47,25 +48,63 @@ function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete })
   )
 }
 
+function FolderGridMenu({ folder, onNewProject, onNewSubfolder, onDelete }) {
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef(null)
+  React.useEffect(() => {
+    const handleOutside = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handleOutside)
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [])
+  return (
+    <div className="proj-folder-menu" ref={ref} onClick={(e) => e.stopPropagation()}>
+      <button className="proj-folder-menu-btn" title="Opções da pasta" aria-label="Opções da pasta"
+        onClick={() => setOpen(value => !value)}>
+        <Icon name="more" size={19} />
+      </button>
+      {open && (
+        <div className="menu">
+          <button className="menu-item" onClick={() => { setOpen(false); onNewProject(folder.id) }}>
+            <Icon name="plus" size={16} />Novo projeto
+          </button>
+          <button className="menu-item" onClick={() => { setOpen(false); onNewSubfolder(folder.id) }}>
+            <Icon name="folder" size={16} />Criar subpasta
+          </button>
+          <button className="menu-item danger" onClick={() => { setOpen(false); onDelete(folder) }}>
+            <Icon name="trash" size={16} />Excluir pasta
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Card de uma pasta na tela de Projetos: entra na pasta ao clicar.
-function FolderGridCard({ folder, subCount, projCount, onEnter }) {
+function FolderGridCard({ folder, subCount, projCount, onEnter, onNewProject, onNewSubfolder, onDelete, draggable, dragging, dropHint, onDragStart, onDragEnd, onDragOver, onDrop }) {
   const parts = []
   if (subCount) parts.push(`${subCount} ${subCount > 1 ? 'pastas' : 'pasta'}`)
   parts.push(`${projCount} ${projCount === 1 ? 'projeto' : 'projetos'}`)
   return (
-    <button className="card proj-folder-card" onClick={() => onEnter(folder.id)} title={folder.name}>
+    <div className={'card proj-folder-card' + (dragging ? ' dragging' : '') + (dropHint ? ` drop-${dropHint}` : '')}
+      role="button" tabIndex={0}
+      data-drag-type="folder" draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragOver={onDragOver} onDrop={onDrop}
+      onClick={() => onEnter(folder.id)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEnter(folder.id) } }} title={folder.name}>
       <span className="proj-folder-ic"><Icon name="folder" size={28} /></span>
       <div style={{ minWidth: 0, flex: 1 }}>
         <div className="proj-folder-name">{folder.name}</div>
         <div className="proj-folder-meta">{parts.join(' · ')}</div>
       </div>
-      <Icon name="chevronRight" size={20} style={{ color: 'var(--fg-4)', flexShrink: 0 }} />
-    </button>
+      <FolderGridMenu folder={folder} onNewProject={onNewProject} onNewSubfolder={onNewSubfolder} onDelete={onDelete} />
+    </div>
   )
 }
 
-export function ProjectList({ projects, tasks, folders = [], authUser, canCreate = true, onOpen, onEdit, onDelete, onNew }) {
+export function ProjectList({ projects, tasks, folders = [], authUser, canCreate = true, onOpen, onEdit, onDelete, onNew, onMoveProject, onMoveFolder, onNewSubfolder, onDeleteFolder }) {
   const [openId, setOpenId] = React.useState(null) // pasta aberta (null = raiz)
+  const [drag, setDrag] = React.useState(null)
+  const dragRef = React.useRef(null)
+  const [dropHint, setDropHint] = React.useState(null)
 
   const folderIds = React.useMemo(() => new Set(folders.map(f => f.id)), [folders])
   // Pasta atual é válida? (pode ter sido excluída) — senão, volta à raiz.
@@ -87,6 +126,87 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
   const subfolders = childFolders(currentId)
   const projs = projectsIn(currentId)
   const isEmpty = !subfolders.length && !projs.length
+  const canMove = !!authUser?.isAdmin && typeof onMoveProject === 'function'
+  const clearDrag = () => { dragRef.current = null; setDrag(null); setDropHint(null) }
+  const startDrag = (id) => (e) => {
+    if (!canMove) return
+    const type = e.currentTarget.dataset.dragType || 'project'
+    const item = { id, type }
+    dragRef.current = item
+    setDrag(item)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', `${type}:${id}`)
+  }
+  const overProject = (p) => (e) => {
+    if (!canMove || !drag || drag.type !== 'project' || drag.id === p.id) return
+    e.preventDefault(); e.stopPropagation()
+    const rect = e.currentTarget.getBoundingClientRect()
+    setDropHint({ key: 'p:' + p.id, mode: e.clientY - rect.top < rect.height / 2 ? 'before' : 'after' })
+  }
+  const dropProject = (p) => (e) => {
+    if (!canMove || !drag || drag.type !== 'project' || drag.id === p.id) return
+    e.preventDefault(); e.stopPropagation()
+    const rect = e.currentTarget.getBoundingClientRect()
+    const beforeId = e.clientY - rect.top < rect.height / 2 ? p.id : (projs[projs.findIndex(x => x.id === p.id) + 1]?.id || null)
+    onMoveProject(drag.id, currentId, beforeId)
+    clearDrag()
+  }
+  const overFolder = (f) => (e) => {
+    if (!canMove || (!drag && !e.dataTransfer.types.includes('text/plain'))) return
+    if (drag?.id === f.id) return
+    e.preventDefault(); e.stopPropagation()
+    const rect = e.currentTarget.getBoundingClientRect()
+    const mode = drag?.type === 'folder'
+      ? (e.clientY - rect.top < rect.height * 0.3 ? 'before' : e.clientY - rect.top > rect.height * 0.7 ? 'after' : 'into')
+      : 'into'
+    setDropHint({ key: 'f:' + f.id, mode })
+  }
+  const dropFolder = (f) => (e) => {
+    if (!canMove) return
+    const raw = drag?.id ? drag : e.dataTransfer.getData('text/plain').split(':')
+    const draggedType = drag?.type || raw[0]
+    const draggedId = drag?.id || raw[1]
+    if (!draggedId) return
+    if (draggedId === f.id) return
+    e.preventDefault(); e.stopPropagation()
+    if (draggedType === 'folder') onMoveFolder(draggedId, f.id, null)
+    else onMoveProject(draggedId, f.id, null)
+    clearDrag()
+  }
+  const dropFolderTarget = (f) => (e) => {
+    const item = dragRef.current || drag
+    if (!canMove || !item || item.id === f.id) return
+    e.preventDefault(); e.stopPropagation()
+    if (item.type === 'project') {
+      onMoveProject(item.id, f.id, null)
+      clearDrag()
+      return
+    }
+    if (item.type !== 'folder') return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const siblings = childFolders(f.parentId).filter(x => x.id !== item.id)
+    const index = siblings.findIndex(x => x.id === f.id)
+    const relativeY = e.clientY - rect.top
+    if (relativeY >= rect.height * 0.3 && relativeY <= rect.height * 0.7) {
+      onMoveFolder(item.id, f.id, null)
+    } else {
+      const beforeId = relativeY < rect.height * 0.3 ? f.id : (siblings[index + 1]?.id || null)
+      onMoveFolder(item.id, f.parentId || null, beforeId)
+    }
+    clearDrag()
+  }
+  const overRoot = (e) => {
+    if (!canMove || !drag || !currentId) return
+    e.preventDefault(); e.stopPropagation(); setDropHint({ key: 'root', mode: 'into' })
+  }
+  const dropRoot = (e) => {
+    if (!canMove || !drag || !currentId) return
+    e.preventDefault(); e.stopPropagation()
+    if (drag.type === 'folder') onMoveFolder(drag.id, null, null)
+    else onMoveProject(drag.id, null, null)
+    clearDrag()
+  }
+  const hintClass = (key) => dropHint?.key === key ? ' drop-' + dropHint.mode : ''
 
   return (
     <div className="page">
@@ -99,13 +219,18 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
 
       {/* Trilha de navegação: Projetos / Pasta / Subpasta */}
       <nav className="proj-crumbs">
-        <button className="proj-crumb" onClick={() => setOpenId(null)} disabled={!currentId}>
+        <button className={'proj-crumb' + hintClass('root')} onClick={() => setOpenId(null)} disabled={!currentId}
+          onDragOver={overRoot} onDrop={dropRoot}>
           <Icon name="folder" size={15} />Projetos
         </button>
         {path.map(f => (
           <React.Fragment key={f.id}>
             <Icon name="chevronRight" size={14} style={{ color: 'var(--fg-4)' }} />
-            <button className="proj-crumb" onClick={() => setOpenId(f.id)} disabled={f.id === currentId}>{f.name}</button>
+            <button className={'proj-crumb' + (dropHint?.key === 'f:' + f.id ? ' drop-into' : '')}
+              onClick={() => setOpenId(f.id)} disabled={f.id === currentId}
+              onDragEnter={overFolder(f)} onDragOver={overFolder(f)} onDrop={dropFolder(f)}>
+              {f.name}
+            </button>
           </React.Fragment>
         ))}
       </nav>
@@ -122,7 +247,10 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
           {subfolders.length > 0 && (
             <div className="proj-explorer-grid" style={{ marginBottom: projs.length ? 24 : 0 }}>
               {subfolders.map(f => (
-                <FolderGridCard key={f.id} folder={f}
+                <FolderGridCard key={f.id} folder={f} onNewProject={onNew} onNewSubfolder={onNewSubfolder} onDelete={onDeleteFolder}
+                  draggable={canMove} dragging={drag?.type === 'folder' && drag.id === f.id}
+                  dropHint={dropHint?.key === 'f:' + f.id ? dropHint.mode : null}
+                  onDragStart={startDrag(f.id)} onDragEnd={clearDrag} onDragOver={overFolder(f)} onDrop={dropFolderTarget(f)}
                   subCount={childFolders(f.id).length} projCount={projectsIn(f.id).length}
                   onEnter={setOpenId} />
               ))}
@@ -130,7 +258,9 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
           )}
           {projs.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 18 }}>
-              {projs.map(p => <ProjectGridCard key={p.id} project={p} tasks={tasks} authUser={authUser} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete} />)}
+              {projs.map(p => <ProjectGridCard key={p.id} project={p} tasks={tasks} authUser={authUser} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete}
+                draggable={canMove} dragging={drag?.id === p.id} dropHint={dropHint?.key === 'p:' + p.id ? dropHint.mode : null}
+                onDragStart={startDrag(p.id)} onDragEnd={clearDrag} onDragOver={overProject(p)} onDrop={dropProject(p)} />)}
             </div>
           )}
         </>
@@ -178,7 +308,7 @@ function TaskRow({ task, members, sessions, currentUserId, now, canEdit, onStart
       <td style={{ width: 70 }}>
         <div className="row-actions">
           <button className="btn-icon" onClick={() => onEdit(task)} aria-label={canEdit ? 'Editar' : 'Ver'}><Icon name={canEdit ? 'pencil' : 'externalLink'} size={15} /></button>
-          {canEdit && <button className="btn-icon" onClick={() => onDelete(task)} aria-label="Excluir"><Icon name="trash" size={15} /></button>}
+          {canEdit && <button className="btn-icon" onClick={(e) => { e.stopPropagation(); onDelete(task) }} aria-label="Excluir"><Icon name="trash" size={15} /></button>}
         </div>
       </td>
     </tr>
@@ -578,11 +708,8 @@ function ProjectTechSheet({ project, canEdit, onCopyResource, onDeleteResource, 
   )
 }
 
-// Dias sem confirmar a partir dos quais a ciência é cobrada em destaque.
 const DIAS_PARA_COBRAR_CIENCIA = 2
-
-// "há 3 dias", "há 2 meses" — para datas de publicação/edição.
-function haQuantoTempo(ms) {
+const haQuantoTempo = (ms) => {
   const dias = Math.floor((Date.now() - ms) / 86400000)
   if (dias <= 0) return 'hoje'
   if (dias === 1) return 'ontem'
@@ -592,220 +719,83 @@ function haQuantoTempo(ms) {
   const anos = Math.floor(meses / 12)
   return `há ${anos} ${anos === 1 ? 'ano' : 'anos'}`
 }
+const cienciaAtrasada = (ack) => !ack.confirmedAt && (Date.now() - ack.sentAt) / 86400000 >= DIAS_PARA_COBRAR_CIENCIA
 
-const cienciaAtrasada = (ack) =>
-  !ack.confirmedAt && (Date.now() - ack.sentAt) / 86400000 >= DIAS_PARA_COBRAR_CIENCIA
-
-// Chips de quem já viu e quem ainda deve. É o registro que responde ao
-// "eu não fui avisado" — não trava nada, só mostra.
 function Ciencia({ acks, users }) {
   if (!acks.length) return null
-  const nome = (id) => users.find(u => u.id === id)?.name || 'Alguém'
-  return (
-    <div className="mud-ciencia">
-      {acks.map(a => {
-        const atrasada = cienciaAtrasada(a)
-        return (
-          <span key={a.userId}
-            className={'mud-ack' + (a.confirmedAt ? ' ok' : atrasada ? ' late' : '')}
-            title={a.confirmedAt ? `Confirmou ${haQuantoTempo(a.confirmedAt)}` : `Avisado ${haQuantoTempo(a.sentAt)}`}>
-            {a.confirmedAt && <Icon name="check" size={12} stroke={3} />}
-            {nome(a.userId)}{a.confirmedAt ? '' : ' ainda não viu'}
-          </span>
-        )
-      })}
-    </div>
-  )
+  return <div className="mud-ciencia">{acks.map(a => {
+    const nome = users.find(u => u.id === a.userId)?.name || 'Alguém'
+    const atrasada = cienciaAtrasada(a)
+    return <span key={a.userId} className={'mud-ack' + (a.confirmedAt ? ' ok' : atrasada ? ' late' : '')}
+      title={a.confirmedAt ? `Confirmou ${haQuantoTempo(a.confirmedAt)}` : `Avisado ${haQuantoTempo(a.sentAt)}`}>
+      {a.confirmedAt && <Icon name="check" size={12} stroke={3} />}{nome}{a.confirmedAt ? '' : ' ainda não viu'}</span>
+  })}</div>
 }
 
-// Selos da mudança: tipo, urgência e o "altera orçamento ou prazo".
 function SelosDaMudanca({ change }) {
   const tipo = CHANGE_KIND_MAP[change.kind] || CHANGE_KIND_MAP.requisicao
   const urg = URGENCY_MAP[change.urgency] || URGENCY_MAP.medium
-  return (
-    <>
-      <span className={'mud-selo tipo-' + change.kind} title={tipo.hint}>{tipo.label}</span>
-      {/* Urgência normal não vira selo: só o que foge do padrão merece destaque. */}
-      {change.urgency !== 'medium' && (
-        <span className="mud-selo" style={{ color: urg.color, background: urg.color + '1a' }}>{urg.label}</span>
-      )}
-      {change.affectsBudget && (
-        <span className="mud-selo" title="Marcada por quem publicou. Não trava o trabalho.">
-          <Icon name="banknote" size={13} />Altera orçamento ou prazo
-        </span>
-      )}
-    </>
-  )
+  return <>
+    <span className={'mud-selo tipo-' + change.kind} title={tipo.hint}>{tipo.label}</span>
+    {change.urgency !== 'medium' && <span className="mud-selo" style={{ color: urg.color, background: urg.color + '1a' }}>{urg.label}</span>}
+    {change.affectsBudget && <span className="mud-selo"><Icon name="banknote" size={13} />Altera orçamento ou prazo</span>}
+  </>
 }
 
-// Emissor → destinatário. Pessoa mostra avatar; setor mostra ícone de grupo.
 function LadoChip({ lado }) {
   if (!lado.tipo) return <span className="mud-lado vazio">—</span>
-  return (
-    <span className="mud-lado">
-      {lado.tipo === 'pessoa' && lado.user
-        ? <span className="av" style={{ width: 22, height: 22, background: lado.user.color, fontSize: 9 }}>{lado.user.initials}</span>
-        : <span className="mud-lado-ic"><Icon name="users" size={13} /></span>}
-      {lado.nome}
-    </span>
-  )
+  return <span className="mud-lado">
+    {lado.tipo === 'pessoa' && lado.user
+      ? <span className="av" style={{ width: 22, height: 22, background: lado.user.color, fontSize: 9 }}>{lado.user.initials}</span>
+      : <span className="mud-lado-ic"><Icon name="users" size={13} /></span>}
+    {lado.nome}
+  </span>
 }
 
 function DeParaMudanca({ change, users }) {
   const de = ladoDaMudanca({ userId: change.emitterUserId, sector: change.emitterSector }, users)
-  // Destinatário: um setor, ou uma ou mais pessoas.
-  const paras = change.targetSector
-    ? [ladoDaMudanca({ sector: change.targetSector }, users)]
-    : (change.targetUserIds?.length ? change.targetUserIds : [change.responsibleId].filter(Boolean))
-        .map(id => ladoDaMudanca({ userId: id }, users))
-  return (
-    <div className="mud-depara">
-      <span className="mud-depara-lab">De</span><LadoChip lado={de} />
-      <Icon name="arrowRight" size={16} style={{ color: 'var(--fg-4)' }} />
-      <span className="mud-depara-lab">Para</span>
-      {paras.length ? paras.map((p, i) => <LadoChip lado={p} key={i} />) : <LadoChip lado={{ tipo: null, nome: '—' }} />}
-    </div>
-  )
+  const paras = [
+    ...(change.targetSectors || (change.targetSector ? [change.targetSector] : [])).map(sector => ladoDaMudanca({ sector }, users)),
+    ...(change.targetUserIds || []).map(id => ladoDaMudanca({ userId: id }, users)),
+  ]
+  return <div className="mud-depara"><span className="mud-depara-lab">De</span><LadoChip lado={de} />
+    <Icon name="arrowRight" size={16} style={{ color: 'var(--fg-4)' }} /><span className="mud-depara-lab">Para</span>
+    {paras.length ? paras.map((p, i) => <LadoChip lado={p} key={i} />) : <LadoChip lado={{ tipo: null }} />}</div>
 }
 
-// Destinatários de uma mudança, como lista de ids (compatível com o formato
-// antigo, que guardava um responsável só).
-const alvosDaMudanca = (c) =>
-  c.targetUserIds?.length ? c.targetUserIds : [c.responsibleId].filter(Boolean)
-
-// A pessoa é o destinatário? Endereçada diretamente, ou está no setor endereçado.
-// É esta checagem que libera aceitar/recusar uma sugestão.
+const alvosDaMudanca = (change) => change.targetUserIds?.length ? change.targetUserIds : [change.responsibleId].filter(Boolean)
 function ehDestinatario(change, user) {
-  if (!user) return false
-  if (change.targetSector) return user.sector === change.targetSector
-  return alvosDaMudanca(change).includes(user.id)
+  const setores = change.targetSectors || (change.targetSector ? [change.targetSector] : [])
+  return !!user && (change.targetUserIds || []).includes(user.id) || !!user && setores.includes(user.sector) || !!user && !setores.length && alvosDaMudanca(change).includes(user.id)
 }
 
-// Um registro de mudança do projeto. A aba é um histórico corrido do que já
-// mudou — não existe "o que vale agora": toda mudança registrada continua
-// valendo como fato ocorrido.
 function CartaoMudanca({ change, users, tasks, currentUser, canEdit, onEdit, onAck, onDecide, onOpenTask }) {
   const autor = users.find(u => u.id === change.publishedBy)
   const decisor = users.find(u => u.id === change.decidedBy)
   const tarefa = tasks.find(t => t.id === change.taskId)
   const minhaCiencia = change.acks.find(a => a.userId === currentUser?.id && !a.confirmedAt)
-  const souDestinatario = ehDestinatario(change, currentUser)
   const pendente = change.kind === 'sugestao' && !change.decision
-
-  return (
-    <div className={'card mud-card' + (pendente ? ' pendente' : '')}>
-      <div className="mud-card-topo">
-        <span className="mud-data">{fmtFull(change.changeDate)}</span>
-        <div className="mud-selos"><SelosDaMudanca change={change} /></div>
-        {canEdit && (
-          <button className="btn-icon" onClick={() => onEdit(change)} aria-label="Editar mudança">
-            <Icon name="pencil" size={16} />
-          </button>
-        )}
-      </div>
-
-      <h3 className="mud-titulo">{change.title}</h3>
-
-      <div className="mud-meta">
-        {autor && <span>Registrada por {autor.name} {haQuantoTempo(change.publishedAt)}</span>}
-        {change.editedAt && <span className="mud-editada">· editada {haQuantoTempo(change.editedAt)}</span>}
-      </div>
-
-      <DeParaMudanca change={change} users={users} />
-      <NotesText text={change.description} />
-      {change.requester && <p className="mud-origem"><strong>Solicitante:</strong> {change.requester}</p>}
-
-      {/* Sugestão pendente: só o destinatário decide. Os demais veem o estado. */}
-      {pendente && (
-        <div className="mud-decisao pendente">
-          <div>
-            <strong>Sugestão aguardando decisão</strong>
-            <p>{souDestinatario
-              ? 'Você é o destinatário. Aceitar cria a atividade no quadro; recusar exige um motivo.'
-              : 'Aguardando o destinatário aceitar ou recusar.'}</p>
-          </div>
-          {souDestinatario && (
-            <div className="mud-decisao-acoes">
-              <button className="btn btn-primary btn-sm" onClick={() => onDecide(change, true)}>
-                <Icon name="check" size={15} stroke={2.4} />Aceitar
-              </button>
-              <button className="btn btn-secondary btn-sm" onClick={() => onDecide(change, false)}>
-                <Icon name="x" size={15} stroke={2.4} />Recusar
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-      {change.decision === 'aceita' && (
-        <div className="mud-decisao aceita">
-          <div><strong>Sugestão aceita{decisor ? ` por ${decisor.name}` : ''}</strong></div>
-        </div>
-      )}
-      {change.decision === 'recusada' && (
-        <div className="mud-decisao recusada">
-          <div>
-            <strong>Sugestão recusada{decisor ? ` por ${decisor.name}` : ''}</strong>
-            <p>{change.decisionReason}</p>
-          </div>
-        </div>
-      )}
-
-      {(minhaCiencia || tarefa) && (
-        <div className="mud-acoes">
-          {minhaCiencia && (
-            <button className="btn btn-primary btn-sm" onClick={() => onAck(change)}>
-              <Icon name="check" size={15} stroke={2.4} />Confirmo que vi esta mudança
-            </button>
-          )}
-          {tarefa && (
-            <button className="btn btn-ghost btn-sm" onClick={() => onOpenTask(tarefa)}>
-              Ver a atividade<Icon name="arrowRight" size={15} />
-            </button>
-          )}
-        </div>
-      )}
-
-      <Ciencia acks={change.acks} users={users} />
-    </div>
-  )
+  return <div className={'card mud-card' + (pendente ? ' pendente' : '')}>
+    <div className="mud-card-topo"><span className="mud-data">{fmtFull(change.changeDate)}</span><div className="mud-selos"><SelosDaMudanca change={change} /></div>
+      {canEdit && <button className="btn-icon" onClick={() => onEdit(change)} aria-label="Editar mudança"><Icon name="pencil" size={16} /></button>}</div>
+    <h3 className="mud-titulo">{change.title}</h3>
+    <div className="mud-meta">{autor && <span>Registrada por {autor.name} {haQuantoTempo(change.publishedAt)}</span>}{change.editedAt && <span className="mud-editada">· editada {haQuantoTempo(change.editedAt)}</span>}</div>
+    <DeParaMudanca change={change} users={users} /><NotesText text={change.description} />
+    {change.requester && <p className="mud-origem"><strong>Solicitante:</strong> {change.requester}</p>}
+    {pendente && <div className="mud-decisao pendente"><div><strong>Sugestão aguardando decisão</strong><p>{ehDestinatario(change, currentUser) ? 'Você é o destinatário. Aceitar cria a atividade no quadro; recusar exige um motivo.' : 'Aguardando o destinatário aceitar ou recusar.'}</p></div>
+      {ehDestinatario(change, currentUser) && <div className="mud-decisao-acoes"><button className="btn btn-primary btn-sm" onClick={() => onDecide(change, true)}><Icon name="check" size={15} stroke={2.4} />Aceitar</button><button className="btn btn-secondary btn-sm" onClick={() => onDecide(change, false)}><Icon name="x" size={15} stroke={2.4} />Recusar</button></div>}</div>}
+    {change.decision === 'aceita' && <div className="mud-decisao aceita"><strong>Sugestão aceita{decisor ? ` por ${decisor.name}` : ''}</strong></div>}
+    {change.decision === 'recusada' && <div className="mud-decisao recusada"><strong>Sugestão recusada{decisor ? ` por ${decisor.name}` : ''}</strong><p>{change.decisionReason}</p></div>}
+    {(minhaCiencia || tarefa) && <div className="mud-acoes">{minhaCiencia && <button className="btn btn-primary btn-sm" onClick={() => onAck(change)}><Icon name="check" size={15} stroke={2.4} />Confirmo que vi esta mudança</button>}{tarefa && <button className="btn btn-ghost btn-sm" onClick={() => onOpenTask(tarefa)}>Ver a atividade<Icon name="arrowRight" size={15} /></button>}</div>}
+    <Ciencia acks={change.acks} users={users} />
+  </div>
 }
 
-// Aba "Mudanças": registro do que já mudou no projeto, do mais recente ao mais
-// antigo. Cada mudança fica na lista para sempre — é histórico, não versão.
 function ProjectChanges({ project, changes, tasks, users, currentUserId, canEdit, onNew, onEdit, onAck, onDecide, onOpenTask }) {
-  const lista = changes
-    .filter(c => c.projectId === project.id)
-    .sort((a, b) => b.publishedAt - a.publishedAt)
-  const currentUser = users.find(u => u.id === currentUserId) || null
-
-  if (!lista.length) {
-    return (
-      <EmptyState icon="history" title="Nenhuma mudança registrada"
-        text="Registre aqui o que mudou no projeto — escopo, estrutura, prazo. A equipe é avisada e uma requisição já vira atividade no quadro."
-        action={canEdit ? <button className="btn btn-primary" onClick={() => onNew(project.id)}><Icon name="plus" size={17} stroke={2.2} />Registrar mudança</button> : null} />
-    )
-  }
-
-  return (
-    <div className="proj-mudancas">
-      <div className="mud-topo">
-        <span className="mud-contagem">
-          {lista.length} {lista.length === 1 ? 'mudança registrada' : 'mudanças registradas'}
-        </span>
-        {canEdit && (
-          <button className="btn btn-primary btn-sm" onClick={() => onNew(project.id)}>
-            <Icon name="plus" size={16} stroke={2.2} />Registrar mudança
-          </button>
-        )}
-      </div>
-
-      {lista.map(c => (
-        <CartaoMudanca key={c.id} change={c} users={users} tasks={tasks}
-          currentUser={currentUser} canEdit={canEdit}
-          onEdit={onEdit} onAck={onAck} onDecide={onDecide} onOpenTask={onOpenTask} />
-      ))}
-    </div>
-  )
+  const lista = changes.filter(c => c.projectId === project.id).sort((a, b) => b.publishedAt - a.publishedAt)
+  if (!lista.length) return <EmptyState icon="history" title="Nenhuma mudança registrada" text="Registre aqui o que mudou no projeto. A equipe será avisada e uma requisição já vira atividade no quadro." action={canEdit ? <button className="btn btn-primary" onClick={() => onNew(project.id)}><Icon name="plus" size={17} stroke={2.2} />Registrar mudança</button> : null} />
+  return <div className="proj-mudancas"><div className="mud-topo"><span className="mud-contagem">{lista.length} {lista.length === 1 ? 'mudança registrada' : 'mudanças registradas'}</span>{canEdit && <button className="btn btn-primary btn-sm" onClick={() => onNew(project.id)}><Icon name="plus" size={16} stroke={2.2} />Registrar mudança</button>}</div>
+    {lista.map(c => <CartaoMudanca key={c.id} change={c} users={users} tasks={tasks} currentUser={users.find(u => u.id === currentUserId)} canEdit={canEdit} onEdit={onEdit} onAck={onAck} onDecide={onDecide} onOpenTask={onOpenTask} />)}</div>
 }
 
 // Panorama — primeira aba, pensada para ser projetada numa reunião:
@@ -942,10 +932,9 @@ function ProjectCover({ project, tasks, users }) {
 export function ProjectDetail({ project, tasks, users, sessions, changes = [], currentUserId, now, canEdit = true, role, onStartTimer, onStopTimer, onBack, onEdit, onNewTask, onEditTask, onDeleteTask, onCopyResource, onDeleteResource, onAddResource, onNewChange, onEditChange, onAckChange, onDecideChange }) {
   // O Panorama abre primeiro: é o que se mostra numa reunião com o cliente.
   const [tab, setTab] = React.useState('panorama') // 'panorama' | 'tecnica' | 'atividades' | 'mudancas'
-  // Ciências pendentes minhas neste projeto — viram um ponto na aba.
   const cienciasPendentes = changes
     .filter(c => c.projectId === project.id)
-    .reduce((n, c) => n + (c.acks.some(a => a.userId === currentUserId && !a.confirmedAt) ? 1 : 0), 0)
+    .reduce((total, c) => total + (c.acks || []).some(a => a.userId === currentUserId && !a.confirmedAt), 0)
   const list = tasks.filter(t => t.projectId === project.id)
   const pct = projectProgress(tasks, project.id)
   const color = PROJECT_COLORS[project.color]
@@ -979,8 +968,7 @@ export function ProjectDetail({ project, tasks, users, sessions, changes = [], c
           <Icon name="list" size={15} />Atividades
         </button>
         <button className={'proj-tab' + (tab === 'mudancas' ? ' on' : '')} onClick={() => setTab('mudancas')}>
-          <Icon name="history" size={15} />Mudanças
-          {cienciasPendentes > 0 && <span className="proj-tab-dot" title="Você ainda não confirmou que viu" />}
+          <Icon name="history" size={15} />Mudanças{cienciasPendentes > 0 && <span className="proj-tab-dot" />}
         </button>
       </div>
 
@@ -991,8 +979,8 @@ export function ProjectDetail({ project, tasks, users, sessions, changes = [], c
           onCopyResource={onCopyResource} onDeleteResource={onDeleteResource} onAddResource={onAddResource} />
       ) : tab === 'mudancas' ? (
         <ProjectChanges project={project} changes={changes} tasks={tasks} users={users}
-          currentUserId={currentUserId} canEdit={canEdit}
-          onNew={onNewChange} onEdit={onEditChange} onAck={onAckChange} onDecide={onDecideChange} onOpenTask={onEditTask} />
+          currentUserId={currentUserId} canEdit={canEdit} onNew={onNewChange} onEdit={onEditChange}
+          onAck={onAckChange} onDecide={onDecideChange} onOpenTask={onEditTask} />
       ) : (
       <>
       <div className="card" style={{ padding: 18, marginBottom: 22, display: 'flex', alignItems: 'center', gap: 20 }}>

@@ -744,6 +744,9 @@ const CHANGE_SELECT = `
          c.emitter_user_id AS "emitterUserId",
          c.emitter_sector  AS "emitterSector",
          c.target_sector   AS "targetSector",
+            CASE WHEN c.target_sectors IS NULL OR jsonb_array_length(c.target_sectors) = 0
+              THEN CASE WHEN c.target_sector IS NULL THEN '[]'::jsonb ELSE jsonb_build_array(c.target_sector) END
+              ELSE c.target_sectors END AS "targetSectors",
          c.target_user_ids AS "targetUserIds",
          c.decision,
          c.decided_by      AS "decidedBy",
@@ -798,10 +801,14 @@ async function getChange(id) {
 // Quem deve dar ciência: a equipe do projeto, menos quem publicou.
 // É a MESMA lista que dá acesso ao projeto — de propósito, para nunca existir
 // alguém que enxerga o projeto sem ser avisado, nem o contrário.
-async function abrirCiencia(client, changeId, projectId, autorId) {
+async function abrirCiencia(client, changeId, projectId, autorId, targetSectors = [], targetUserIds = []) {
   const equipe = await client.query(
-    'SELECT user_id FROM project_members WHERE project_id = $1 AND user_id <> $2',
-    [projectId, autorId]
+    `SELECT pm.user_id
+       FROM project_members pm
+       JOIN users u ON u.id = pm.user_id
+      WHERE pm.project_id = $1 AND pm.user_id <> $2
+        AND (u.sector = ANY($3::text[]) OR pm.user_id = ANY($4::text[]))`,
+      [projectId, autorId, targetSectors, targetUserIds]
   )
   for (const m of equipe.rows) {
     // Reabre para quem já tinha confirmado: se o texto mudou, "eu vi" precisa
@@ -843,6 +850,11 @@ async function changeProjectId(req) {
 const normAlvos = (v) =>
   Array.isArray(v) ? [...new Set(v.filter((x) => typeof x === 'string' && x))] : []
 
+const normSetores = (v, legado = null) => {
+  const lista = Array.isArray(v) ? v : legado ? [legado] : []
+  return [...new Set(lista.filter((x) => typeof x === 'string' && x))]
+}
+
 // Valida o responsável: precisa existir e estar na equipe do projeto.
 async function checarResponsavel(responsibleId, projectId) {
   if (!responsibleId) return null
@@ -861,7 +873,7 @@ app.get('/api/changes', wrap(async (req, res) => {
 app.post('/api/projects/:id/changes', gate((req) => req.params.id, CAN.edit), wrap(async (req, res) => {
   const {
     title, description, requester = '', changeDate,
-    kind, urgency, targetUserIds = [], targetSector = null,
+    kind, urgency, targetUserIds = [], targetSectors = [], targetSector = null,
     emitterUserId = null, emitterSector = null, affectsBudget = false,
   } = req.body
   if (!String(title || '').trim()) return res.status(400).json({ error: 'Informe o que mudou, em uma linha.' })
@@ -869,10 +881,10 @@ app.post('/api/projects/:id/changes', gate((req) => req.params.id, CAN.edit), wr
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(changeDate || ''))) return res.status(400).json({ error: 'Informe a data da mudança.' })
 
   const tipo = normKind(kind)
-  const alvoSetor = normSetor(targetSector)
-  // Destinatário é um setor OU uma ou mais pessoas — o setor manda se vier.
-  const alvos = alvoSetor ? [] : normAlvos(targetUserIds)
-  if (!alvos.length && !alvoSetor) return res.status(400).json({ error: 'Informe para quem vai a mudança — pessoas ou um setor.' })
+  const alvosSetores = normSetores(targetSectors, targetSector)
+  const alvoSetor = alvosSetores[0] || null
+  const alvos = normAlvos(targetUserIds)
+  if (!alvos.length && !alvosSetores.length) return res.status(400).json({ error: 'Informe para quem vai a mudança — pessoas ou um setor.' })
 
   for (const u of alvos) {
     const erro = await checarResponsavel(u, req.params.id)
@@ -895,15 +907,15 @@ app.post('/api/projects/:id/changes', gate((req) => req.params.id, CAN.edit), wr
 
     await client.query(
       `INSERT INTO changes (id, project_id, title, description, origin, change_date,
-                            responsible_id, target_sector, target_user_ids, task_id, affects_budget,
+                            responsible_id, target_sector, target_sectors, target_user_ids, task_id, affects_budget,
                             kind, urgency, emitter_user_id, emitter_sector,
                             published_by, published_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, now())`,
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, now())`,
       [id, req.params.id, String(title).trim(), String(description).trim(), String(requester || '').trim(),
-       changeDate, alvos[0] || null, alvoSetor, JSON.stringify(alvos), taskId, !!affectsBudget,
+      changeDate, alvos[0] || null, alvoSetor, JSON.stringify(alvosSetores), JSON.stringify(alvos), taskId, !!affectsBudget,
        tipo, normUrgency(urgency), emissorPessoa || null, emissorSetor, req.userId]
     )
-    await abrirCiencia(client, id, req.params.id, req.userId)
+    await abrirCiencia(client, id, req.params.id, req.userId, alvosSetores, alvos)
   })
   res.status(201).json(await getChange(id))
 }))
@@ -913,7 +925,7 @@ app.post('/api/projects/:id/changes', gate((req) => req.params.id, CAN.edit), wr
 app.put('/api/changes/:id', gate(changeProjectId, CAN.edit), wrap(async (req, res) => {
   const {
     title, description, requester = '', changeDate, urgency,
-    targetUserIds = [], targetSector = null, emitterUserId = null, emitterSector = null,
+    targetUserIds = [], targetSectors = [], targetSector = null, emitterUserId = null, emitterSector = null,
   } = req.body
   if (!String(title || '').trim()) return res.status(400).json({ error: 'Informe o que mudou, em uma linha.' })
   if (!String(description || '').trim()) return res.status(400).json({ error: 'Descreva a mudança para quem vai fazer.' })
@@ -922,9 +934,10 @@ app.put('/api/changes/:id', gate(changeProjectId, CAN.edit), wrap(async (req, re
   const [atual] = await q('SELECT project_id, task_id FROM changes WHERE id = $1', [req.params.id])
   if (!atual) return res.status(404).json({ error: 'Mudança não encontrada.' })
 
-  const alvoSetor = normSetor(targetSector)
-  const alvos = alvoSetor ? [] : normAlvos(targetUserIds)
-  if (!alvos.length && !alvoSetor) return res.status(400).json({ error: 'Informe para quem vai a mudança — pessoas ou um setor.' })
+  const alvosSetores = normSetores(targetSectors, targetSector)
+  const alvoSetor = alvosSetores[0] || null
+  const alvos = normAlvos(targetUserIds)
+  if (!alvos.length && !alvosSetores.length) return res.status(400).json({ error: 'Informe para quem vai a mudança — pessoas ou um setor.' })
 
   for (const u of alvos) {
     const erro = await checarResponsavel(u, atual.project_id)
@@ -937,12 +950,12 @@ app.put('/api/changes/:id', gate(changeProjectId, CAN.edit), wrap(async (req, re
   await tx(async (client) => {
     await client.query(
       `UPDATE changes SET title = $2, description = $3, origin = $4, change_date = $5,
-                          responsible_id = $6, target_sector = $7, target_user_ids = $8, urgency = $9,
-                          emitter_user_id = $10, emitter_sector = $11,
-                          edited_by = $12, edited_at = now()
+                          responsible_id = $6, target_sector = $7, target_sectors = $8, target_user_ids = $9, urgency = $10,
+                          emitter_user_id = $11, emitter_sector = $12,
+                          edited_by = $13, edited_at = now()
        WHERE id = $1`,
       [req.params.id, String(title).trim(), String(description).trim(), String(requester || '').trim(),
-       changeDate, alvos[0] || null, alvoSetor, JSON.stringify(alvos), normUrgency(urgency),
+      changeDate, alvos[0] || null, alvoSetor, JSON.stringify(alvosSetores), JSON.stringify(alvos), normUrgency(urgency),
        emissorPessoa || null, emissorSetor, req.userId]
     )
     if (atual.task_id) {
@@ -954,7 +967,7 @@ app.put('/api/changes/:id', gate(changeProjectId, CAN.edit), wrap(async (req, re
         await client.query('INSERT INTO task_members (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [atual.task_id, u])
       }
     }
-    await abrirCiencia(client, req.params.id, atual.project_id, req.userId)
+    await abrirCiencia(client, req.params.id, atual.project_id, req.userId, alvosSetores, alvos)
   })
   res.json(await getChange(req.params.id))
 }))
@@ -969,7 +982,7 @@ app.post('/api/changes/:id/decide', gate(changeProjectId, CAN.light), wrap(async
   if (!aceitar && !motivo) return res.status(400).json({ error: 'Recusar exige um motivo registrado.' })
 
   const [c] = await q(
-    `SELECT project_id, kind, decision, task_id, title, target_user_ids, target_sector, urgency,
+    `SELECT project_id, kind, decision, task_id, title, target_user_ids, target_sector, target_sectors, urgency,
             to_char(change_date, 'YYYY-MM-DD') AS change_date
      FROM changes WHERE id = $1`, [req.params.id])
   if (!c) return res.status(404).json({ error: 'Mudança não encontrada.' })
@@ -977,9 +990,8 @@ app.post('/api/changes/:id/decide', gate(changeProjectId, CAN.light), wrap(async
   if (c.decision) return res.status(400).json({ error: 'Esta sugestão já foi decidida.' })
 
   const [eu] = await q('SELECT sector FROM users WHERE id = $1', [req.userId])
-  const souDestinatario = c.target_sector
-    ? eu && eu.sector === c.target_sector
-    : normAlvos(c.target_user_ids).includes(req.userId)
+  const setores = c.target_sectors || normSetores([], c.target_sector)
+  const souDestinatario = (eu && setores.includes(eu.sector)) || normAlvos(c.target_user_ids).includes(req.userId)
   if (!souDestinatario) {
     return res.status(403).json({ error: 'Só o destinatário da sugestão pode aceitar ou recusar.' })
   }
@@ -1118,6 +1130,7 @@ async function ensureSchema() {
   await q('ALTER TABLE changes ADD COLUMN IF NOT EXISTS emitter_sector text')
   // Destinatário setor. Quando é pessoa, fica em responsible_id (quem vai fazer).
   await q('ALTER TABLE changes ADD COLUMN IF NOT EXISTS target_sector text')
+  await q(`ALTER TABLE changes ADD COLUMN IF NOT EXISTS target_sectors jsonb NOT NULL DEFAULT '[]'::jsonb`)
   // Destinatários pessoa: a mudança pode ir para mais de uma. O primeiro vira
   // responsável da atividade; os demais entram como membros dela.
   await q(`ALTER TABLE changes ADD COLUMN IF NOT EXISTS target_user_ids jsonb NOT NULL DEFAULT '[]'::jsonb`)
