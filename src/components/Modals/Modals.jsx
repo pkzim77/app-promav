@@ -41,8 +41,8 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   const [memberIds, setMemberIds] = React.useState(task?.memberIds ? [...task.memberIds] : [])
   const [status, setStatus] = React.useState(task?.status || defaultStatus || 'todo')
   const [priority, setPriority] = React.useState(task?.priority || 'medium')
-  const [start, setStart] = React.useState(task?.start || '2026-05-26')
-  const [end, setEnd] = React.useState(task?.end || '2026-06-05')
+  const [start, setStart] = React.useState(task?.start || '')
+  const [end, setEnd] = React.useState(task?.end || '')
   const [checklist, setChecklist] = React.useState(task?.checklist ? task.checklist.map(i => ({ ...i })) : [])
   const [newItem, setNewItem] = React.useState('')
   const [touched, setTouched] = React.useState(false)
@@ -89,7 +89,7 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   }
 
   return (
-    <Modal title={ro ? 'Detalhes da atividade' : (editing ? 'Editar atividade' : 'Nova atividade')} onClose={onClose}
+    <Modal className="project-modal" title={ro ? 'Detalhes da atividade' : (editing ? 'Editar atividade' : 'Nova atividade')} onClose={onClose}
       footer={ro ? (
         <button className="btn btn-secondary" onClick={onClose}>Fechar</button>
       ) : (<>
@@ -570,8 +570,8 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const [desc, setDesc] = React.useState(project?.desc || '')
   const [color, setColor] = React.useState(project?.color || 'indigo')
   const [folderId, setFolderId] = React.useState(project?.folderId || defaultFolderId || '')
-  const [start, setStart] = React.useState(project?.start || '2026-05-26')
-  const [end, setEnd] = React.useState(project?.end || '2026-07-01')
+  const [start, setStart] = React.useState(project?.start || null)
+  const [end, setEnd] = React.useState(project?.end || null)
   const [notes, setNotes] = React.useState(project?.notes || '')
   const [resources, setResources] = React.useState(project?.resources ? project.resources.map(r => ({ ...r })) : [])
   const [members, setMembers] = React.useState(project?.members ? project.members.map(m => ({ ...m })) : [])
@@ -611,7 +611,7 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   }
 
   return (
-    <Modal title={editing ? 'Editar projeto' : 'Novo projeto'} onClose={onClose}
+    <Modal className="project-modal" title={editing ? 'Editar projeto' : 'Novo projeto'} onClose={onClose}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
         <button className="btn btn-primary" onClick={save}>{editing ? 'Salvar alterações' : 'Criar projeto'}</button>
@@ -825,7 +825,7 @@ export function ChangeModal({ change, projectId, users = [], members = [], curre
   }
 
   return (
-    <Modal title={editing ? 'Editar mudança' : 'Publicar mudança'} onClose={onClose}
+    <Modal className="project-modal" title={editing ? 'Editar mudança' : 'Publicar mudança'} onClose={onClose}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
         <button className="btn btn-primary" onClick={save} disabled={saving}>

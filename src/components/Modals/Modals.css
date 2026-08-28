@@ -6,6 +6,8 @@
 
 .field-error { font-size: 12.5px; color: var(--danger); display: flex; align-items: center; gap: 5px; }
 
+.project-modal { max-width: 900px; }
+
 .color-swatches { display: flex; gap: 10px; }
 
 .color-swatches button { width: 30px; height: 30px; border-radius: var(--r-sm); border: 2px solid transparent; transition: transform var(--dur); }
@@ -132,6 +134,12 @@
 .perm-head > span:nth-child(2) { flex: 1; padding-left: 36px; }
 
 .perm-head-role { flex: 0 0 168px; }
+
+.perm-add { display: flex; gap: 8px; margin-bottom: 12px; }
+
+.perm-add .control { flex: 1; min-width: 0; }
+
+.perm-add .btn { flex-shrink: 0; }
 
 /* Caixa de marcação "é responsável pelo projeto" */
 .resp-check { flex: 0 0 20px; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid var(--border-strong, var(--border)); border-radius: var(--r-sm); color: #fff; background: transparent; transition: background var(--dur), border-color var(--dur); }
