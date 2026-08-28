@@ -18,7 +18,9 @@
 
 .modal { 
   width: 100%; 
-  max-width: 520px; 
+  /* Largura padrão de todos os modais. Subiu de 520px porque os formulários
+     com campos pareados (data+urgência, emissor+destinatário) espremiam. */
+  max-width: 600px; 
   max-height: 91vh;
   background: var(--surface);
   border-radius: var(--r-xl);

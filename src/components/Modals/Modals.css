@@ -6,10 +6,6 @@
 
 .field-error { font-size: 12.5px; color: var(--danger); display: flex; align-items: center; gap: 5px; }
 
-.project-modal { max-width: 900px; }
-
-.task-modal { max-width: 900px; }
-
 .color-swatches { display: flex; gap: 10px; }
 
 .color-swatches button { width: 30px; height: 30px; border-radius: var(--r-sm); border: 2px solid transparent; transition: transform var(--dur); }
@@ -98,13 +94,12 @@
 
 .perm-select { flex: 0 0 168px; width: 168px; min-width: 0; }
 
+/* Selo do administrador na coluna "Acesso ao projeto". O slot ocupa a mesma
+   largura do seletor de papel, para as linhas alinharem; o selo em si mantém
+   o tamanho do texto. */
+.perm-admin-slot { flex: 0 0 168px; display: flex; align-items: center; }
+
 .perm-admin-tag { font-size: 12px; font-weight: 600; color: var(--brand); background: var(--brand-soft); padding: 4px 10px; border-radius: var(--r-full); }
-
-.perm-add { display: flex; gap: 8px; margin-bottom: 12px; }
-
-.perm-add .control { flex: 1; min-width: 0; }
-
-.perm-add .btn { flex-shrink: 0; }
 
 /* Seletor de arquivo (modais de documento/imagem) */
 
@@ -149,6 +144,14 @@
 
 .perm-role-static { flex: 0 0 168px; font-size: 12.5px; color: var(--fg-3); }
 
+/* Botão de tirar alguém do projeto — alinhado à direita do seletor de acesso. */
+.perm-remove { flex: 0 0 31px; padding: 8px 6px; }
+
+/* Reserva no cabeçalho a coluna que o botão de remover ocupa nas linhas. */
+.perm-head-spacer { flex: 0 0 31px; }
+
+.perm-empty { padding: 10px 0; font-size: 13px; color: var(--fg-3); }
+
 /* ---------- Campo de dinheiro (máscara ao digitar) ---------- */
 
 .money-field { position: relative; display: flex; align-items: center; }
@@ -156,3 +159,21 @@
 .money-field .control { padding-left: 38px; font-family: var(--font-mono); font-weight: 600; text-align: right; }
 
 .money-prefix { position: absolute; left: 13px; font-size: 13px; font-weight: 600; color: var(--fg-4); pointer-events: none; }
+
+/* ---------- Marcação "altera orçamento ou prazo" ---------- */
+
+.change-check { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; color: var(--fg-1); }
+
+.change-check-box { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid var(--border-strong); border-radius: var(--r-sm); color: #fff; transition: background var(--dur), border-color var(--dur); }
+
+.change-check:hover .change-check-box { border-color: var(--brand); }
+
+.change-check.on .change-check-box { background: var(--brand); border-color: var(--brand); }
+
+/* ---------- Destinatários múltiplos ---------- */
+
+.dest-lista { display: flex; flex-direction: column; gap: 8px; }
+
+.dest-linha { display: flex; align-items: center; gap: 6px; }
+
+.dest-linha .control { flex: 1; min-width: 0; }

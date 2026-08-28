@@ -42,17 +42,105 @@ export const RESOURCE_ORIGINS = [
 ]
 export const RESOURCE_ORIGIN_MAP = Object.fromEntries(RESOURCE_ORIGINS.map(o => [o.id, o]))
 
+// Prefeituras atendidas e secretarias que aparecem no cadastro do projeto.
+// São o texto gravado, não um id: a coluna do banco é text livre e continua
+// aceitando qualquer valor, então nada do que já foi digitado se perde — o
+// modal reaproveita o valor antigo como opção do seletor (ver canonizar()).
+export const PREFEITURAS = ['UMARI', 'MOMBAÇA']
+
+export const SECRETARIAS = [
+  'Obras e Infraestrutura',
+  'Planejamento Urbano',
+  'Meio Ambiente',
+  'Habitação',
+  'Mobilidade Urbana e Transportes',
+  'Serviços Públicos',
+  'Educação',
+  'Saúde',
+  'Esporte, Lazer e Cultura',
+  'Administração',
+]
+
+// Contas de manutenção do sistema (users.is_dev): mantêm o app, não tocam
+// obra, então ficam fora de toda lista onde se escolhe gente para trabalhar.
+// Continuam visíveis onde só se EXIBE quem já está num registro — o avatar de
+// um responsável antigo não pode virar "?" porque a conta saiu das listas.
+//
+// Passe em `jaVinculados` quem o registro aberto já aponta (responsável atual,
+// membros, destinatários). Sem isso, o seletor abriria sem a opção que está
+// gravada e o próximo "salvar" trocaria a pessoa sem ninguém pedir.
+export const paraAtribuir = (users = [], ...jaVinculados) => {
+  const manter = new Set(jaVinculados.flat().filter(Boolean))
+  return users.filter(u => !u.isDev || manter.has(u.id))
+}
+
+// Compara ignorando caixa e acento, para "Umari" (digitado quando o campo era
+// texto) reconhecer o "UMARI" da lista em vez de virar uma opção duplicada.
+const chaveTexto = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+export const canonizar = (lista, valor) => lista.find(o => chaveTexto(o) === chaveTexto(valor)) || valor || ''
+
 // Status geral do projeto (diferente do status das atividades).
 // Tons da identidade PROMAV, escurecidos até passarem 4.5:1 como TEXTO sobre
 // fundo claro — o selo pinta a própria cor sobre um véu dela mesma, então o
 // dourado #AD8A5C puro (3,12:1) não serviria aqui, só como preenchimento.
+//
+// A lista está em ordem de criticidade e a cor sobe junto, para o selo ser lido
+// pela cor antes da palavra: neutro (cinza) → em curso (dourado, azul) →
+// pede providência (ouro, laranja) → travado (terracota) → encerrado (verde).
+// Cada tom fica a ΔE > 19 do vizinho mais próximo da lista, senão dois status
+// diferentes leriam como a mesma tarja num selo de 12px.
 export const PROJECT_STATUSES = [
-  { id: 'planejamento', label: 'Planejamento',  color: '#5F5C56' }, // cinza profundo · 6,49:1
-  { id: 'andamento',    label: 'Em andamento',  color: '#8A6A3F' }, // dourado escurecido · 4,85:1
-  { id: 'paralisado',   label: 'Paralisado',    color: '#9A4F32' }, // terracota · 5,78:1
-  { id: 'concluido',    label: 'Concluído',     color: '#276B46' }, // verde profundo · 6,24:1
+  { id: 'planejamento', label: 'Planejamento',  color: '#5F5C56' }, // cinza profundo · 6,66:1 · nada em execução ainda
+  { id: 'andamento',    label: 'Em andamento',  color: '#8A6A3F' }, // dourado escurecido · 4,98:1 · em execução
+  { id: 'revisao',      label: 'Em revisão',    color: '#41607F' }, // azul-ardósia · 6,55:1 · em análise, sem pendência
+  { id: 'pendente',     label: 'Pendente',      color: '#7A6410' }, // ouro escuro · 5,74:1 · parado aguardando providência
+  { id: 'diligencia',   label: 'Em diligência', color: '#AE4B12' }, // laranja-tijolo · 5,50:1 · exigência do órgão, tem prazo
+  { id: 'paralisado',   label: 'Paralisado',    color: '#9A4F32' }, // terracota · 5,93:1 · execução interrompida
+  { id: 'concluido',    label: 'Concluído',     color: '#276B46' }, // verde profundo · 6,41:1 · encerrado
 ]
 export const PROJECT_STATUS_MAP = Object.fromEntries(PROJECT_STATUSES.map(s => [s.id, s]))
+
+// ---------- mudanças do projeto (orientações) ----------
+// Setores da PROMAV. Cada usuário pertence a um (users.sector); é isso que faz
+// "destinatário: Engenharia" resolver para pessoas de verdade.
+export const SECTORS = [
+  { id: 'engenharia',  label: 'Engenharia' },
+  { id: 'arquitetura', label: 'Arquitetura' },
+  { id: 'orcamento',   label: 'Orçamento' },
+  { id: 'coordenacao', label: 'Coordenação' },
+  { id: 'direcao',     label: 'Direção' },
+  { id: 'estagio',     label: 'Estágio' },
+]
+export const SECTOR_MAP = Object.fromEntries(SECTORS.map(s => [s.id, s]))
+export const sectorLabel = (id) => SECTOR_MAP[id]?.label || null
+
+// Tipo da mudança. Requisição obriga; sugestão é proposta e só vira trabalho
+// depois de aceita — por isso ela nasce sem atividade no quadro.
+export const CHANGE_KINDS = [
+  { id: 'requisicao', label: 'Requisição', hint: 'Precisa ser feito' },
+  { id: 'sugestao',   label: 'Sugestão',   hint: 'Proposta, pode ser recusada' },
+]
+export const CHANGE_KIND_MAP = Object.fromEntries(CHANGE_KINDS.map(k => [k.id, k]))
+
+// Urgência. Os ids são os mesmos de PRIORITIES de propósito: a urgência da
+// mudança vira, sem tradução, a prioridade da atividade criada.
+export const URGENCIES = [
+  { id: 'low',    label: 'Baixa',   color: '#5F5C56' },
+  { id: 'medium', label: 'Normal',  color: '#8A6A3F' },
+  { id: 'high',   label: 'Urgente', color: '#9A4F32' },
+]
+export const URGENCY_MAP = Object.fromEntries(URGENCIES.map(u => [u.id, u]))
+
+// Um lado da mudança (emissor ou destinatário): pessoa OU setor.
+// Devolve { tipo: 'pessoa'|'setor'|null, nome }.
+export function ladoDaMudanca({ userId, sector }, users = []) {
+  if (userId) {
+    const u = users.find(x => x.id === userId)
+    return { tipo: 'pessoa', nome: u?.name || 'Alguém', user: u || null }
+  }
+  if (sector) return { tipo: 'setor', nome: sectorLabel(sector) || sector, user: null }
+  return { tipo: null, nome: '—', user: null }
+}
 
 // Formata um número como moeda brasileira (R$ 250.000,00). null/undefined → '—'.
 export function formatBRL(value) {

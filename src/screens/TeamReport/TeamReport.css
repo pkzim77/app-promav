@@ -45,3 +45,21 @@
 .team-bar-time { font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--fg-2); text-align: right; }
 
 @media (max-width: 860px) { .team-bar-row { grid-template-columns: 160px 1fr 64px; } }
+
+/* ---------- Setores da equipe ---------- */
+
+.team-setores { padding: 20px 22px; margin-bottom: 20px; }
+
+.team-setores-head h3 { font: var(--text-h4); margin: 0 0 3px; color: var(--fg-1); }
+
+.team-setores-head p { margin: 0 0 16px; font-size: 12.5px; color: var(--fg-3); }
+
+.team-setores-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px 20px; }
+
+.team-setor-row { display: flex; align-items: center; gap: 10px; }
+
+.team-setor-nome { flex: 1; min-width: 0; font-size: 13.5px; color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.team-setor-select { flex: 0 0 150px; width: 150px; }
+
+.team-setor-tag { flex: 0 0 150px; font-size: 12.5px; color: var(--fg-3); }

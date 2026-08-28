@@ -2,7 +2,7 @@ import './Modals.css'
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field, SegControl, StatusTag, PriorityTag } from '../primitives/primitives.jsx'
-import { STATUSES, PRIORITIES, PROJECT_HEX, MAX_FILE_BYTES, formatBytes, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, parseBRL, maskBRL } from '../../data/store.js'
+import { STATUSES, PRIORITIES, PROJECT_HEX, MAX_FILE_BYTES, formatBytes, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, PREFEITURAS, SECRETARIAS, canonizar, paraAtribuir, parseBRL, maskBRL, SECTORS, CHANGE_KINDS, URGENCIES } from '../../data/store.js'
 // Create/edit modals for tasks and projects + confirm dialog. Includes validation.
 
 // Campo de dinheiro: formata a cada tecla (2.500,00) e mantém o cursor no fim,
@@ -35,15 +35,16 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   const ro = !canEdit // somente leitura (papel 'Só exibição'): só checklist + entrar/sair
   const [title, setTitle] = React.useState(task?.title || '')
   const [projectId, setProjectId] = React.useState(task?.projectId || defaultProjectId || projects[0]?.id || '')
-  const [assigneeId, setAssigneeId] = React.useState(task?.assigneeId || '')
+  // O padrão é a primeira pessoa que pode receber trabalho: users[0] é a conta
+  // de manutenção mais antiga, e toda atividade nova nasceria no nome dela.
+  const [assigneeId, setAssigneeId] = React.useState(task?.assigneeId || users.find(u => !u.isDev)?.id || '')
   const [memberIds, setMemberIds] = React.useState(task?.memberIds ? [...task.memberIds] : [])
   const [status, setStatus] = React.useState(task?.status || defaultStatus || 'todo')
   const [priority, setPriority] = React.useState(task?.priority || 'medium')
-  const [start, setStart] = React.useState(task?.start || '')
-  const [end, setEnd] = React.useState(task?.end || '')
+  const [start, setStart] = React.useState(task?.start || '2026-05-26')
+  const [end, setEnd] = React.useState(task?.end || '2026-06-05')
   const [checklist, setChecklist] = React.useState(task?.checklist ? task.checklist.map(i => ({ ...i })) : [])
   const [newItem, setNewItem] = React.useState('')
-  const [selectedMemberId, setSelectedMemberId] = React.useState('')
   const [touched, setTouched] = React.useState(false)
 
   const ckDone = checklist.filter(i => i.done).length
@@ -62,12 +63,7 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   }
   const removeItem = (id) => setChecklist(c => c.filter(i => i.id !== id))
 
-  const addMember = () => {
-    if (!selectedMemberId) return
-    setMemberIds(m => m.includes(selectedMemberId) ? m : [...m, selectedMemberId])
-    setSelectedMemberId('')
-  }
-  const removeMember = (id) => setMemberIds(m => m.filter(x => x !== id))
+  const toggleMember = (id) => setMemberIds(m => m.includes(id) ? m.filter(x => x !== id) : [...m, id])
 
   // Auto-participação (viewers): entrar/sair só da própria participação, sem salvar o resto.
   const meAssignee = assigneeId === currentUserId
@@ -78,8 +74,9 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
     if (onToggleMembership && task) onToggleMembership(task, join)
   }
 
-  const activityMembers = users.filter(u => u.id === assigneeId || memberIds.includes(u.id))
-  const availableMembers = users.filter(u => !u.isAdmin && u.id !== assigneeId && !memberIds.includes(u.id))
+  // Quem pode receber a atividade. Um responsável ou membro já gravado entra
+  // na lista mesmo sendo conta de manutenção, senão o salvamento o trocaria.
+  const pessoas = paraAtribuir(users, assigneeId, memberIds, task?.assigneeId, task?.memberIds)
 
   const dErr = dateError(start, end)
   const titleErr = touched && !title.trim() ? 'Informe um título.' : null
@@ -92,7 +89,7 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   }
 
   return (
-    <Modal className="task-modal" title={ro ? 'Detalhes da atividade' : (editing ? 'Editar atividade' : 'Nova atividade')} onClose={onClose}
+    <Modal title={ro ? 'Detalhes da atividade' : (editing ? 'Editar atividade' : 'Nova atividade')} onClose={onClose}
       footer={ro ? (
         <button className="btn btn-secondary" onClick={onClose}>Fechar</button>
       ) : (<>
@@ -117,8 +114,7 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
         </Field>
         <Field label="Responsável">
           <select className="control" value={assigneeId} disabled={ro} onChange={e => setAssigneeId(e.target.value)}>
-            <option value="">Sem responsável</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            {pessoas.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
         </Field>
       </div>
@@ -138,37 +134,25 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
             </button>
           )
         )}
-        {!ro && (
-          <div className="perm-add">
-            <select className="control" value={selectedMemberId} onChange={e => setSelectedMemberId(e.target.value)}>
-              <option value="">Selecionar pessoa</option>
-              {availableMembers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
-            <button type="button" className="btn btn-secondary btn-sm" disabled={!selectedMemberId} onClick={addMember}>
-              <Icon name="plus" size={15} stroke={2.2} />Adicionar
-            </button>
-          </div>
-        )}
         <div className="member-picker">
-          {activityMembers.map(u => {
+          {pessoas.map(u => {
             const isResp = u.id === assigneeId
             const on = isResp || memberIds.includes(u.id)
             return (
               <button type="button" key={u.id}
                 className={'member-chip' + (on ? ' on' : '') + (isResp ? ' resp' : '')}
                 disabled={isResp || ro}
-                title={isResp ? 'Responsável' : 'Remover'}
-                onClick={() => removeMember(u.id)}>
+                title={isResp ? 'Responsável' : (on ? 'Remover' : 'Adicionar')}
+                onClick={() => toggleMember(u.id)}>
                 <span className="av" style={{ width: 22, height: 22, background: u.color, fontSize: 9 }}>{u.initials}</span>
                 {u.name.split(' ')[0]}
                 {isResp
                   ? <span className="member-tag">resp.</span>
-                  : on && <Icon name="x" size={13} stroke={2.2} style={{ color: 'var(--fg-4)' }} />}
+                  : on && <Icon name="check" size={13} stroke={2.6} style={{ color: 'var(--brand)' }} />}
               </button>
             )
           })}
         </div>
-        {!activityMembers.length && <div className="perm-empty">Nenhum membro adicionado.</div>}
       </div>
       <Field label="Prioridade">{ro ? <PriorityTag priority={priority} /> : <SegControl options={PRIORITIES} value={priority} onChange={setPriority} />}</Field>
 
@@ -458,7 +442,15 @@ function ResourceEditor({ resources, onChange }) {
   )
 }
 
-function PermissionsEditor({ users, members, onChangeMembers }) {
+// Equipe do projeto — lista única que resolve duas coisas de uma vez:
+//  • acesso: quem não estiver na lista NÃO enxerga o projeto no sistema
+//    (administradores têm acesso total e não ocupam vaga de participante);
+//  • responsabilidade: o check da esquerda marca quem responde pelo projeto.
+// O seletor de acesso e o "Adicionar" só aparecem para administradores; os
+// demais veem o papel como texto (o backend também ignora alterações de
+// permissão de não-admins) mas ainda podem marcar os responsáveis, porque
+// PUT /api/projects/:id aceita responsibleIds de quem tem Edição total.
+function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, onChangeResponsibles, isAdmin, error }) {
   const [selectedUserId, setSelectedUserId] = React.useState('')
   const roleOf = (userId) => members.find(x => x.userId === userId)?.role || 'none'
   const setRole = (userId, value) => {
@@ -467,89 +459,61 @@ function PermissionsEditor({ users, members, onChangeMembers }) {
   }
   const addMember = () => {
     if (!selectedUserId) return
-    onChangeMembers([...members, { userId: selectedUserId, role: 'view' }])
+    // Administrador entra como Edição total: ele tem acesso irrestrito de
+    // qualquer forma, e gravar 'view' mostraria na tela um limite que não existe.
+    const u = users.find(x => x.id === selectedUserId)
+    onChangeMembers([...members, { userId: selectedUserId, role: u?.isAdmin ? 'full' : 'view' }])
     setSelectedUserId('')
   }
-  const removeMember = (userId) => onChangeMembers(members.filter(x => x.userId !== userId))
-  const availableUsers = users.filter(u => !u.isAdmin && roleOf(u.id) === 'none')
-  const memberUsers = users.filter(u => !u.isAdmin && roleOf(u.id) !== 'none')
-  const comAcesso = users.filter(u => !u.isAdmin && roleOf(u.id) !== 'none').length
-  return (
-    <div className="field">
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        Participantes
-        <span style={{ fontWeight: 400, color: 'var(--fg-4)', fontSize: 12.5 }}>adicione quem poderá acessar o projeto</span>
-      </label>
-      <div className="perm-add">
-        <select className="control" value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)}>
-          <option value="">Selecionar pessoa</option>
-          {availableUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
-        <button type="button" className="btn btn-secondary btn-sm" disabled={!selectedUserId} onClick={addMember}>
-          <Icon name="plus" size={15} stroke={2.2} />Adicionar
-        </button>
-      </div>
-      <div className="perm-list">
-        {memberUsers.map(u => (
-          <div className="perm-row" key={u.id}>
-            <span className="av" style={{ width: 26, height: 26, background: u.color, fontSize: 10 }}>{u.initials}</span>
-            <span className="perm-name">{u.name}</span>
-            <select className="control perm-select" value={roleOf(u.id)} onChange={e => setRole(u.id, e.target.value)}>
-              {PROJECT_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
-            </select>
-            <button type="button" className="btn-icon perm-remove" onClick={() => removeMember(u.id)} aria-label={`Remover ${u.name}`} title="Remover participante">
-              <Icon name="x" size={15} />
-            </button>
-          </div>
-        ))}
-      </div>
-      {!memberUsers.length && <div className="perm-empty">Nenhum participante adicionado.</div>}
-      <div className="perm-default-label" style={{ marginTop: 10 }}>
-        {comAcesso === 0
-          ? 'Ninguém além dos administradores vê este projeto.'
-          : `${comAcesso} ${comAcesso === 1 ? 'pessoa vê' : 'pessoas veem'} este projeto (além dos administradores).`}
-      </div>
-    </div>
-  )
-}
-// Equipe do projeto — lista única que resolve duas coisas de uma vez:
-//  • acesso: quem estiver como "Sem acesso" NÃO enxerga o projeto no sistema
-//    (administradores têm acesso total e não têm seletor);
-//  • responsabilidade: o check da esquerda marca quem responde pelo projeto.
-// O seletor de acesso só aparece para administradores; os demais veem o papel
-// como texto (o backend também ignora alterações de permissão de não-admins).
-
-/*function ProjectTeamEditor({ users, members, responsibleIds, onChangeMembers, onChangeResponsibles, isAdmin, error }) {
-  const roleOf = (userId) => members.find(x => x.userId === userId)?.role || 'none'
-  const setRole = (userId, value) => {
-    const others = members.filter(x => x.userId !== userId)
-    onChangeMembers(value === 'none' ? others : [...others, { userId, role: value }])
+  // Tirar alguém do projeto também o tira da responsabilidade: um responsável
+  // sem acesso apareceria no Panorama sem conseguir abrir o projeto.
+  const removeMember = (userId) => {
+    onChangeMembers(members.filter(x => x.userId !== userId))
+    onChangeResponsibles(responsibleIds.filter(x => x !== userId))
   }
+
+  // Só quem já é participante aparece na lista, então marcar alguém aqui nunca
+  // precisa lhe dar acesso antes — ele já tem.
   const isResp = (userId) => responsibleIds.includes(userId)
-  // Marcar alguém como responsável garante que ele enxergue o projeto:
-  // se estiver "Sem acesso", passa a ter Edição total automaticamente.
   const toggleResp = (u) => {
-    if (isResp(u.id)) { onChangeResponsibles(responsibleIds.filter(x => x !== u.id)); return }
-    onChangeResponsibles([...responsibleIds, u.id])
-    if (isAdmin && !u.isAdmin && roleOf(u.id) === 'none') setRole(u.id, 'full')
+    onChangeResponsibles(isResp(u.id) ? responsibleIds.filter(x => x !== u.id) : [...responsibleIds, u.id])
   }
 
-  const comAcesso = users.filter(u => !u.isAdmin && roleOf(u.id) !== 'none').length
-  const nResp = users.filter(u => isResp(u.id)).length
-
+  // A equipe de desenvolvimento (users.is_dev) não entra em projeto: mantém o
+  // sistema, não toca obra. Fora ela, qualquer pessoa pode ser adicionada e
+  // marcada como responsável — administradores inclusive.
+  const elegiveis = users.filter(u => !u.isDev)
+  const availableUsers = elegiveis.filter(u => roleOf(u.id) === 'none')
+  const teamUsers = elegiveis.filter(u => roleOf(u.id) !== 'none')
+  // Administrador vê todo projeto por definição, então não conta como alguém a
+  // quem este cadastro deu acesso — a frase do rodapé fala dos demais.
+  const comAcesso = teamUsers.filter(u => !u.isAdmin).length
+  const nResp = teamUsers.filter(u => isResp(u.id)).length
   return (
     <div className="field">
       <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         Equipe do projeto
         <span style={{ fontWeight: 400, color: 'var(--fg-4)', fontSize: 12.5 }}>marque quem responde pelo projeto</span>
       </label>
+      {isAdmin && (
+        <div className="perm-add">
+          <select className="control" value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)}>
+            <option value="">Selecionar pessoa</option>
+            {availableUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+          <button type="button" className="btn btn-secondary btn-sm" disabled={!selectedUserId} onClick={addMember}>
+            <Icon name="plus" size={15} stroke={2.2} />Adicionar
+          </button>
+        </div>
+      )}
       <div className="perm-head">
         <span className="perm-head-resp">Resp.</span>
         <span>Pessoa</span>
-        {isAdmin && <span className="perm-head-role">Acesso ao projeto</span>}
+        <span className="perm-head-role">Acesso ao projeto</span>
+        {isAdmin && <span className="perm-head-spacer" />}
       </div>
       <div className="perm-list">
-        {users.map(u => {
+        {teamUsers.map(u => {
           const resp = isResp(u.id)
           return (
             <div className={'perm-row' + (resp ? ' is-resp' : '')} key={u.id}>
@@ -562,12 +526,25 @@ function PermissionsEditor({ users, members, onChangeMembers }) {
               <span className="av" style={{ width: 26, height: 26, background: u.color, fontSize: 10 }}>{u.initials}</span>
               <span className="perm-name">{u.name}{u.isAdmin ? ' · admin' : ''}</span>
               {u.isAdmin ? (
-                <span className="perm-admin-tag">Acesso total</span>
+                // Sem seletor de papel: o acesso do admin é total em todo
+                // projeto, e um "Só exibição" aqui seria letra morta.
+                <>
+                  <span className="perm-admin-slot"><span className="perm-admin-tag">Acesso total</span></span>
+                  {isAdmin && (
+                    <button type="button" className="btn-icon perm-remove" onClick={() => removeMember(u.id)} aria-label={`Remover ${u.name}`} title="Remover da equipe">
+                      <Icon name="x" size={15} />
+                    </button>
+                  )}
+                </>
               ) : isAdmin ? (
-                <select className="control perm-select" value={roleOf(u.id)} onChange={e => setRole(u.id, e.target.value)}>
-                  <option value="none">Sem acesso</option>
-                  {PROJECT_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
-                </select>
+                <>
+                  <select className="control perm-select" value={roleOf(u.id)} onChange={e => setRole(u.id, e.target.value)}>
+                    {PROJECT_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+                  </select>
+                  <button type="button" className="btn-icon perm-remove" onClick={() => removeMember(u.id)} aria-label={`Remover ${u.name}`} title="Remover participante">
+                    <Icon name="x" size={15} />
+                  </button>
+                </>
               ) : (
                 <span className="perm-role-static">{ROLE_LABEL[roleOf(u.id)] || 'Sem acesso'}</span>
               )}
@@ -575,6 +552,7 @@ function PermissionsEditor({ users, members, onChangeMembers }) {
           )
         })}
       </div>
+      {!teamUsers.length && <div className="perm-empty">Nenhum participante adicionado.</div>}
       {error && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{error}</span>}
       <div className="perm-default-label" style={{ marginTop: 10 }}>
         {comAcesso === 0
@@ -584,7 +562,7 @@ function PermissionsEditor({ users, members, onChangeMembers }) {
       </div>
     </div>
   )
-}*/
+}
 
 export function ProjectModal({ project, users = [], folders = [], defaultFolderId = null, isAdmin = false, onSave, onClose }) {
   const editing = !!project
@@ -592,14 +570,18 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const [desc, setDesc] = React.useState(project?.desc || '')
   const [color, setColor] = React.useState(project?.color || 'indigo')
   const [folderId, setFolderId] = React.useState(project?.folderId || defaultFolderId || '')
-  const [start, setStart] = React.useState(project?.start || null)
-  const [end, setEnd] = React.useState(project?.end || null)
+  const [start, setStart] = React.useState(project?.start || '2026-05-26')
+  const [end, setEnd] = React.useState(project?.end || '2026-07-01')
   const [notes, setNotes] = React.useState(project?.notes || '')
   const [resources, setResources] = React.useState(project?.resources ? project.resources.map(r => ({ ...r })) : [])
   const [members, setMembers] = React.useState(project?.members ? project.members.map(m => ({ ...m })) : [])
   // ----- ficha do projeto (dados do convênio) -----
-  const [prefeitura, setPrefeitura] = React.useState(project?.prefeitura || '')
-  const [secretaria, setSecretaria] = React.useState(project?.secretaria || '')
+  // Prefeitura e secretaria são listas fechadas, mas o que já está gravado
+  // manda: canonizar() reconhece "Umari" como o "UMARI" da lista e, se o valor
+  // não existir nela, opcoesCom() o mantém como opção para não sumir ao salvar.
+  const [prefeitura, setPrefeitura] = React.useState(canonizar(PREFEITURAS, project?.prefeitura))
+  const [secretaria, setSecretaria] = React.useState(canonizar(SECRETARIAS, project?.secretaria))
+  const opcoesCom = (lista, atual) => (atual && !lista.includes(atual) ? [atual, ...lista] : lista)
   const [responsibleIds, setResponsibleIds] = React.useState(project?.responsibleIds ? [...project.responsibleIds] : [])
   const [origemRecurso, setOrigemRecurso] = React.useState(project?.origemRecurso || 'federal')
   // Valores em R$: mantidos como texto enquanto digita; convertidos ao salvar.
@@ -629,7 +611,7 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   }
 
   return (
-    <Modal className='project-modal' title={editing ? 'Editar projeto' : 'Novo projeto'} onClose={onClose}
+    <Modal title={editing ? 'Editar projeto' : 'Novo projeto'} onClose={onClose}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
         <button className="btn btn-primary" onClick={save}>{editing ? 'Salvar alterações' : 'Criar projeto'}</button>
@@ -644,17 +626,23 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
 
       <div className="field-row">
         <Field label="Prefeitura">
-          <input className="control" value={prefeitura?? ''} placeholder="Ex.: Umari" onChange={e => setPrefeitura(e.target.value)} />
+          <select className="control" value={prefeitura ?? ''} onChange={e => setPrefeitura(e.target.value)}>
+            <option value="">Selecione a prefeitura</option>
+            {opcoesCom(PREFEITURAS, prefeitura).map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
           {prefErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{prefErr}</span>}
         </Field>
         <Field label="Secretaria">
-          <input className="control" value={secretaria?? ''} placeholder="Ex.: Educação" onChange={e => setSecretaria(e.target.value)} />
+          <select className="control" value={secretaria ?? ''} onChange={e => setSecretaria(e.target.value)}>
+            <option value="">Sem secretaria</option>
+            {opcoesCom(SECRETARIAS, secretaria).map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
         </Field>
       </div>
 
-      {isAdmin && (
-        <PermissionsEditor users={users} members={members} onChangeMembers={setMembers} />
-      )}
+      <PermissionsEditor users={users} members={members} responsibleIds={responsibleIds}
+        onChangeMembers={setMembers} onChangeResponsibles={setResponsibleIds}
+        isAdmin={isAdmin} error={respErr} />
 
       <div className="field-row">
         <Field label="Valor estimado">
@@ -709,6 +697,266 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
         <Field label="Data de término"><input type="date" className="control" value={end??''} onChange={e => setEnd(e.target.value)} /></Field>
       </div>
       {dErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{dErr}</span>}
+    </Modal>
+  )
+}
+
+// Emissor e destinatário são polimórficos: pessoa OU setor. O <select> codifica
+// como "u:<id>" ou "s:<setor>" e o valor é desmontado ao salvar.
+const LADO_PESSOA = (id) => `u:${id}`
+const LADO_SETOR = (s) => `s:${s}`
+function lerLado(v) {
+  if (!v) return { userId: null, sector: null }
+  if (v.startsWith('u:')) return { userId: v.slice(2), sector: null }
+  return { userId: null, sector: v.slice(2) }
+}
+function escreverLado({ userId, sector }) {
+  return sector ? LADO_SETOR(sector) : userId ? LADO_PESSOA(userId) : ''
+}
+
+// Um <select> de pessoa-ou-setor, com as duas listas separadas por grupo.
+function LadoSelect({ value, onChange, equipe, incluirVazio, rotuloVazio }) {
+  return (
+    <select className="control" value={value} onChange={e => onChange(e.target.value)}>
+      {incluirVazio && <option value="">{rotuloVazio}</option>}
+      <optgroup label="Pessoas do projeto">
+        {equipe.map(u => <option key={u.id} value={LADO_PESSOA(u.id)}>{u.name}</option>)}
+      </optgroup>
+      <optgroup label="Setores">
+        {SECTORS.map(s => <option key={s.id} value={LADO_SETOR(s.id)}>{s.label}</option>)}
+      </optgroup>
+    </select>
+  )
+}
+
+// Publicar ou editar uma MUDANÇA do projeto (a "orientação"). O mesmo modal
+// serve aos dois casos; só a criação pergunta se altera orçamento ou prazo,
+// porque essa resposta congela na publicação.
+export function ChangeModal({ change, projectId, users = [], members = [], currentUserId, onSave, onClose }) {
+  const editing = !!change
+  const [title, setTitle] = React.useState(change?.title || '')
+  const [changeDate, setChangeDate] = React.useState(change?.changeDate || new Date().toISOString().slice(0, 10))
+  const [description, setDescription] = React.useState(change?.description || '')
+  const [requester, setRequester] = React.useState(change?.requester || '')
+  const [kind, setKind] = React.useState(change?.kind || 'requisicao')
+  const [urgency, setUrgency] = React.useState(change?.urgency || 'medium')
+  const [affectsBudget, setAffectsBudget] = React.useState(!!change?.affectsBudget)
+  const [touched, setTouched] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
+
+  // Só quem participa do projeto entra nas listas de pessoa — e contas de
+  // manutenção ficam de fora, salvo se já forem o emissor ou o destinatário
+  // de uma mudança gravada antes desta regra.
+  const equipe = paraAtribuir(users, change?.emitterUserId, change?.targetUserIds, change?.responsibleId)
+    .filter(u => u.isAdmin || members.some(m => m.userId === u.id))
+  const equipeDestinatarios = equipe.filter(u => members.some(m => m.userId === u.id))
+
+  // Emissor já vem preenchido com quem abriu — o caso comum é a própria pessoa
+  // registrando. Trocar cobre "quem pediu foi outro, eu só digitei".
+  const [emissor, setEmissor] = React.useState(
+    escreverLado({ userId: change?.emitterUserId, sector: change?.emitterSector }) || LADO_PESSOA(currentUserId)
+  )
+  // Destinatário: um setor e/ou uma lista de pessoas. O setor continua sendo
+  // único por compatibilidade com o contrato da API, mas pode ser combinado
+  // com participantes avulsos.
+  const [destSetores, setDestSetores] = React.useState(
+    change?.targetSectors?.length ? [...change.targetSectors] : change?.targetSector ? [change.targetSector] : []
+  )
+  const [destPessoas, setDestPessoas] = React.useState(
+    change?.targetUserIds?.length ? [...change.targetUserIds]
+      : change?.responsibleId ? [change.responsibleId] : []
+  )
+  // Escolher no seletor vazio acrescenta; escolher num preenchido troca.
+  const definirDestino = (indice, valor) => {
+    const { userId, sector } = lerLado(valor)
+    if (sector) {
+      setDestSetores(atual => atual.includes(sector) ? atual : [...atual, sector])
+      return
+    }
+    setDestPessoas(atual => {
+      if (!userId) return atual.filter((_, i) => i !== indice)      // "remover"
+      if (atual.includes(userId)) return atual                       // já está
+      const copia = [...atual]
+      if (indice < copia.length) copia[indice] = userId; else copia.push(userId)
+      return copia
+    })
+  }
+  const definirSetorOuPessoa = (valor) => {
+    const { userId, sector } = lerLado(valor)
+    if (sector) { setDestSetores(atual => atual.includes(sector) ? atual : [...atual, sector]); return }
+    if (!userId) return
+    setDestPessoas(atual => atual.includes(userId) ? atual : [userId, ...atual])
+  }
+  const alterarSetor = (indice, valor) => {
+    const { sector } = lerLado(valor)
+    if (sector) setDestSetores(atual => atual.map((item, i) => i === indice ? sector : item).filter((item, i, lista) => lista.indexOf(item) === i))
+  }
+  const removerSetor = (indice) => setDestSetores(atual => atual.filter((_, i) => i !== indice))
+  const removerDestino = (i) => setDestPessoas(a => a.filter((_, k) => k !== i))
+
+  const titleErr = touched && !title.trim() ? 'Diga o que mudou, em uma linha.' : null
+  const descErr = touched && !description.trim() ? 'Descreva a mudança para quem vai fazer.' : null
+  const temDestino = destSetores.length > 0 || destPessoas.length > 0
+  const destErr = touched && !temDestino ? 'Escolha para quem vai a mudança.' : null
+
+  // Endereçar a um setor cobra quem está nele — mas só quem participa do
+  // projeto pode ser avisado. Avisa antes de publicar, não depois.
+  const foraDoProjeto = destSetores.length
+    ? users.filter(u => destSetores.includes(u.sector) && !u.isAdmin && !members.some(m => m.userId === u.id))
+    : []
+  // Setor escolhido sem ninguém dentro não avisa ninguém — vale dizer antes.
+  const semNinguemNoSetor = destSetores.some(setor => !members.some(m => users.some(u => u.id === m.userId && u.sector === setor)))
+
+  const save = async () => {
+    setTouched(true)
+    if (!title.trim() || !description.trim() || !changeDate || !temDestino) return
+    const em = lerLado(emissor)
+    setSaving(true)
+    try {
+      await onSave({
+        ...(change ? { id: change.id } : {}), projectId,
+        title: title.trim(), description: description.trim(), requester: requester.trim(),
+        changeDate, urgency,
+        targetUserIds: destPessoas, targetSectors: destSetores, targetSector: destSetores[0] || null,
+        emitterUserId: em.userId, emitterSector: em.sector,
+        ...(editing ? {} : { kind, affectsBudget }),
+      })
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <Modal title={editing ? 'Editar mudança' : 'Publicar mudança'} onClose={onClose}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
+        <button className="btn btn-primary" onClick={save} disabled={saving}>
+          {saving ? 'Salvando…' : editing ? 'Salvar edição' : 'Publicar e avisar a equipe'}
+        </button>
+      </>}>
+      {editing && (
+        <p className="ro-hint"><Icon name="flag" size={14} />
+          Editar reabre a confirmação de todo mundo: se o texto mudou, "eu vi" precisa ser dito de novo.
+        </p>
+      )}
+
+      {!editing && (
+        <Field label="Tipo da mudança">
+          <SegControl options={CHANGE_KINDS} value={kind} onChange={setKind} />
+          <span className="peso-hint">
+            {kind === 'requisicao'
+              ? 'Requisição obriga: a atividade já nasce no quadro.'
+              : 'Sugestão é proposta: vira atividade só depois de alguém aceitar.'}
+          </span>
+        </Field>
+      )}
+
+      <Field label="O que mudou">
+        <input className="control" value={title} autoFocus placeholder="Ex.: Mudou a estrutura da cobertura"
+          onChange={e => setTitle(e.target.value)} />
+        {titleErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{titleErr}</span>}
+      </Field>
+
+      <div className="field-row">
+        <Field label="Data da mudança">
+          <input type="date" className="control" value={changeDate} onChange={e => setChangeDate(e.target.value)} />
+        </Field>
+        <Field label="Urgência">
+          <SegControl options={URGENCIES} value={urgency} onChange={setUrgency} />
+        </Field>
+      </div>
+
+      <div className="field-row">
+        <Field label="Emissor">
+          <LadoSelect value={emissor} onChange={setEmissor} equipe={equipe} />
+          <span className="peso-hint">De quem partiu o pedido.</span>
+        </Field>
+        <Field label="Destinatário">
+          {/* Cada escolha mantém um seletor abaixo para incluir outra pessoa
+              ou setor; pessoas avulsas podem acompanhar o setor. */}
+          <div className="dest-lista">
+            {destSetores.map((setor, i) => <div className="dest-linha" key={'setor-' + setor}>
+              <LadoSelect value={LADO_SETOR(setor)} onChange={v => alterarSetor(i, v)} equipe={equipeDestinatarios} />
+              <button type="button" className="btn-icon" onClick={() => removerSetor(i)} aria-label="Remover setor"><Icon name="x" size={16} /></button>
+            </div>)}
+            {destPessoas.map((uid, i) => <div className="dest-linha" key={uid}>
+              <LadoSelect value={LADO_PESSOA(uid)} onChange={v => definirDestino(i, v)} equipe={equipeDestinatarios} />
+              <button type="button" className="btn-icon" onClick={() => removerDestino(i)} aria-label="Remover destinatário"><Icon name="x" size={16} /></button>
+            </div>)}
+            <LadoSelect value="" onChange={definirSetorOuPessoa} equipe={equipeDestinatarios}
+              incluirVazio rotuloVazio={temDestino ? '+ incluir outra pessoa ou setor' : 'Escolha pessoa ou setor'} />
+          </div>
+          {destErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{destErr}</span>}
+        </Field>
+      </div>
+
+      {semNinguemNoSetor && (
+        <p className="ro-hint" style={{ marginTop: -4 }}>
+          <Icon name="flag" size={14} />
+          Ninguém tem esse setor definido na conta ainda — a mudança não vai cobrar ciência de ninguém.
+          Defina o setor das pessoas na tela Equipe.
+        </p>
+      )}
+      {foraDoProjeto.length > 0 && (
+        <p className="ro-hint" style={{ marginTop: -4 }}>
+          <Icon name="flag" size={14} />
+          {foraDoProjeto.length === 1
+            ? `${foraDoProjeto[0].name} é deste setor mas não participa do projeto — não será avisada.`
+            : `${foraDoProjeto.length} pessoas deste setor não participam do projeto e não serão avisadas.`}
+          {' '}Inclua na equipe pelo cadastro do projeto.
+        </p>
+      )}
+
+      <Field label="Descrição">
+        <textarea className="control" value={description} style={{ minHeight: 110 }}
+          placeholder="Escreva para quem vai executar: o que muda na prática, o que precisa ser refeito."
+          onChange={e => setDescription(e.target.value)} />
+        {descErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{descErr}</span>}
+      </Field>
+
+      <Field label="Solicitante">
+        <input className="control" value={requester} placeholder="Opcional — ofício, ata, cliente, visita técnica…"
+          onChange={e => setRequester(e.target.value)} />
+      </Field>
+
+      {!editing && (
+        <div className="field">
+          <button type="button" role="checkbox" aria-checked={affectsBudget}
+            className={'change-check' + (affectsBudget ? ' on' : '')}
+            onClick={() => setAffectsBudget(v => !v)}>
+            <span className="change-check-box">{affectsBudget && <Icon name="check" size={13} stroke={3} />}</span>
+            Esta mudança altera orçamento ou prazo
+          </button>
+          <span className="peso-hint">
+            Fica marcado na mudança para a coordenação enxergar. Não trava o trabalho —
+            e não pode ser alterado depois de publicar.
+          </span>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+// A pessoa liga a própria conta ao setor em que trabalha. É esse vínculo que
+// faz uma mudança endereçada a "Engenharia" encontrar gente de verdade.
+export function MySectorModal({ current, onSubmit, onClose }) {
+  const [sector, setSector] = React.useState(current || '')
+  const [busy, setBusy] = React.useState(false)
+  const save = async () => { setBusy(true); try { await onSubmit(sector || null) } finally { setBusy(false) } }
+  return (
+    <Modal title="Meu setor" onClose={onClose}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onClose} disabled={busy}>Cancelar</button>
+        <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'Salvando…' : 'Salvar'}</button>
+      </>}>
+      <Field label="Setor em que você trabalha">
+        <select className="control" value={sector} onChange={e => setSector(e.target.value)}>
+          <option value="">Sem setor</option>
+          {SECTORS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+        </select>
+        <span className="peso-hint">
+          Mudanças endereçadas a um setor cobram ciência de quem estiver nele.
+          Sem setor definido, você não recebe esses avisos.
+        </span>
+      </Field>
     </Modal>
   )
 }

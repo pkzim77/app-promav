@@ -2,7 +2,7 @@ import './TeamReport.css'
 import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
 import { Avatar } from '../../components/primitives/primitives.jsx'
-import { PROJECT_COLORS } from '../../data/store.js'
+import { PROJECT_COLORS , SECTORS, sectorLabel } from '../../data/store.js'
 // Relatório da equipe — tempo gasto por pessoa em cada atividade, com filtro dia/semana/mês.
 
 const MS_MIN = 60000
@@ -59,7 +59,40 @@ function clip(sess, s, e, now) {
   return Math.max(0, end - start)
 }
 
-export function TeamReport({ users, tasks, projects, sessions, now }) {
+// Setor de cada pessoa. Só administradores editam — é o setor que decide quem
+// é cobrado quando uma mudança é endereçada a um setor inteiro.
+function SetoresDaEquipe({ users, isAdmin, onSetSector }) {
+  return (
+    <div className="card team-setores">
+      <div className="team-setores-head">
+        <h3>Setores</h3>
+        <p>Uma mudança endereçada a um setor cobra ciência de quem estiver nele.</p>
+      </div>
+      <div className="team-setores-list">
+        {users.map(u => (
+          <div className="team-setor-row" key={u.id}>
+            <span className="av" style={{ width: 26, height: 26, background: u.color, fontSize: 10 }}>{u.initials}</span>
+            <span className="team-setor-nome">{u.name}</span>
+            {isAdmin ? (
+              <select className="control team-setor-select" value={u.sector || ''}
+                onChange={e => onSetSector(u, e.target.value || null)}>
+                <option value="">Sem setor</option>
+                {SECTORS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            ) : (
+              <span className="team-setor-tag">{sectorLabel(u.sector) || 'Sem setor'}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function TeamReport({ users: todosUsers, tasks, projects, sessions, now, isAdmin = false, onSetSector }) {
+  // Contas de manutenção do sistema não são equipe: nem entram no relatório de
+  // horas, nem têm setor a definir (setor só serve para receber mudança).
+  const users = todosUsers.filter(u => !u.isDev)
   const [mode, setMode] = React.useState('week')
   const [anchor, setAnchor] = React.useState(Date.now())
   const [projFilter, setProjFilter] = React.useState(null)
@@ -102,6 +135,8 @@ export function TeamReport({ users, tasks, projects, sessions, now }) {
           ))}
         </div>
       </div>
+
+      {onSetSector && <SetoresDaEquipe users={users} isAdmin={isAdmin} onSetSector={onSetSector} />}
 
       {/* navegador de período */}
       <div className="team-nav">
