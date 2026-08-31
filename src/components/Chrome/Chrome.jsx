@@ -301,25 +301,98 @@ export function UserMenu({ user, onChangePassword, onMySector, onLogout }) {
   )
 }
 
-export function TopBar({ title, currentUser, canNewProject = true, onToggleMobileNav, onChangePassword, onMySector, onLogout, onNewProject, tasks, projects, sessions, now, onStartTimer, onStopTimer, searchQuery, onSearchChange }) {
+export function NewsPanel({ open, items = [], readIds = new Set(), onClose, onMarkRead, onMarkAllRead }) {
+  const [filter, setFilter] = React.useState('all')
+
+  if (!open) return null
+
+  const tags = ['all', ...Array.from(new Set(items.map(i => i.tag)))]
+  const filtered = filter === 'all' ? items : items.filter(i => i.tag === filter)
+
   return (
-    <header className="topbar">
-      <button className="tb-hamburger" title="Menu" onClick={onToggleMobileNav}>
-        <Icon name="menu" size={22} />
-      </button>
-      <h1 className="tb-title">{title}</h1>
-      <div className="tb-spacer" />
-      <div className="search">
-        <Icon name="search" size={17} />
-        <input value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Buscar projetos" />
-      </div>
-      <TimeClock currentUser={currentUser} tasks={tasks} projects={projects} sessions={sessions} now={now} onStart={onStartTimer} onStop={onStopTimer} />
-      {canNewProject && (
-        <button className="btn btn-primary" onClick={onNewProject}>
-          <Icon name="plus" size={17} stroke={2.2} />Novo projeto
+    <div className="news-overlay" onClick={onClose}>
+      <aside className="news-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="news-header">
+          <div className="news-title"><Icon name="bell" size={17} />Novidades</div>
+          {items.length > 0 && (
+            <button className="btn btn-secondary btn-sm" onClick={onMarkAllRead}>Marcar tudo como lido</button>
+          )}
+          <button className="news-close" onClick={onClose} aria-label="Fechar novidades">
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+        {tags.length > 1 && (
+          <div className="news-filters">
+            {tags.map(tag => (
+              <button
+                key={tag}
+                className={`news-filter-btn ${filter === tag ? 'active' : ''}`}
+                onClick={() => setFilter(tag)}
+              >
+                {tag === 'all' ? 'Todas' : tag}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="news-body">
+          {filtered.length === 0 ? (
+            <div className="news-empty">{filter === 'all' ? 'Nenhuma novidade por enquanto.' : `Nenhuma novidade de "${filter}".`}</div>
+          ) : (
+            filtered.map(item => {
+              const unread = !readIds.has(item.id)
+              return (
+                <div key={item.id} className={'news-item' + (unread ? ' unread' : '')} onClick={() => !unread && onMarkRead?.(item.id)}>
+                  <div className="news-item-top">
+                    <span className="news-tag">{item.tag}</span>
+                    <span className="news-time">{item.time}</span>
+                  </div>
+                  <h4>{item.title}</h4>
+                  <p>{item.text}</p>
+                  {unread && (
+                    <button className="news-read" onClick={(e) => { e.stopPropagation(); onMarkRead?.(item.id) }}>
+                      Marcar como lida
+                    </button>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+      </aside>
+    </div>
+  )
+}
+
+export function TopBar({ title, currentUser, canNewProject = true, onToggleMobileNav, onChangePassword, onMySector, onLogout, onNewProject, tasks, projects, sessions, now, onStartTimer, onStopTimer, searchQuery, onSearchChange, notifications = [], unreadCount = 0, readNewsIds = new Set(), onMarkRead, onMarkAllRead }) {
+  const [newsOpen, setNewsOpen] = React.useState(false)
+
+  return (
+    <>
+      <header className="topbar">
+        <button className="tb-hamburger" title="Menu" onClick={onToggleMobileNav}>
+          <Icon name="menu" size={22} />
         </button>
-      )}
-      <UserMenu user={currentUser} onChangePassword={onChangePassword} onMySector={onMySector} onLogout={onLogout} />
-    </header>
+        <h1 className="tb-title">{title}</h1>
+        <div className="tb-spacer" />
+        <div className="search">
+          <Icon name="search" size={17} />
+          <input value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Buscar projetos" />
+        </div>
+        <TimeClock currentUser={currentUser} tasks={tasks} projects={projects} sessions={sessions} now={now} onStart={onStartTimer} onStop={onStopTimer} />
+        {canNewProject && (
+          <button className="btn btn-primary" onClick={onNewProject}>
+            <Icon name="plus" size={17} stroke={2.2} />Novo projeto
+          </button>
+        )}
+        <div className="topbar-actions">
+          <button className="tb-bell" onClick={() => setNewsOpen(o => !o)} aria-label="Abrir novidades">
+            <Icon name="bell" size={18} />
+            {unreadCount > 0 && <span className="tb-bell-badge">{unreadCount}</span>}
+          </button>
+          <UserMenu user={currentUser} onChangePassword={onChangePassword} onMySector={onMySector} onLogout={onLogout} />
+        </div>
+      </header>
+      <NewsPanel open={newsOpen} items={notifications} readIds={readNewsIds} onClose={() => setNewsOpen(false)} onMarkRead={onMarkRead} onMarkAllRead={onMarkAllRead} />
+    </>
   )
 }

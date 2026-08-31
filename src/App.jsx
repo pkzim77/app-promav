@@ -414,6 +414,120 @@ export default function App() {
   const currentRole = currentProject ? effectiveProjectRole(currentProject, authUser) : 'view'
   const canEditCurrent = canEditProject(currentRole)
 
+  const [readNewsIds, setReadNewsIds] = React.useState([])
+  const newsKey = authUser ? `promav-news-${authUser.id}` : null
+
+  React.useEffect(() => {
+    if (!newsKey) { setReadNewsIds([]); return }
+    try {
+      const saved = JSON.parse(localStorage.getItem(newsKey) || '[]')
+      setReadNewsIds(Array.isArray(saved) ? saved : [])
+    } catch {
+      setReadNewsIds([])
+    }
+  }, [newsKey])
+
+  React.useEffect(() => {
+    if (!newsKey) return
+    try { localStorage.setItem(newsKey, JSON.stringify(readNewsIds)) } catch { /* ignore */ }
+  }, [newsKey, readNewsIds])
+
+  const notifications = React.useMemo(() => {
+    if (!authUser) return []
+    const linkedProjectIds = new Set(
+      (projects || []).filter((project) => {
+        if (authUser.isAdmin) return true
+        const members = project.members || []
+        const memberIds = members.map(m => m.userId)
+        return memberIds.includes(authUser.id) || (project.responsibleIds || []).includes(authUser.id)
+      }).map((project) => project.id)
+    )
+
+    const items = []
+    const processedTaskIds = new Set()
+    const projectsWithRelevantActivity = new Set() // Rastreia projetos com mudanças/atividades importantes
+
+    for (const project of projects) {
+      if (!linkedProjectIds.has(project.id)) continue
+
+      const projectChanges = (changes || []).filter(c => c.projectId === project.id)
+      const myChanges = projectChanges.filter(c => (c.targetUserIds || []).includes(authUser.id) || (c.targetSectors || []).includes(authUser.sector))
+
+      // Processa mudanças: consolida mudança + atividade em uma notificação
+      for (const change of myChanges) {
+        const linkedTask = change.taskId ? (tasks || []).find(t => t.id === change.taskId) : null
+        const iAmAssignedToTask = linkedTask && (linkedTask.assigneeId === authUser.id || (linkedTask.memberIds || []).includes(authUser.id))
+
+        if (linkedTask && iAmAssignedToTask) {
+          // Notificação combinada: mudança que criou uma atividade para mim
+          processedTaskIds.add(linkedTask.id)
+          projectsWithRelevantActivity.add(project.id)
+          items.push({
+            id: `change-task-${change.id}`,
+            tag: 'Atividade + mudança',
+            title: linkedTask.title,
+            text: `${change.title} • ${project.name}`,
+            time: change.publishedAt ? new Date(change.publishedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'Hoje',
+            priority: 1,
+          })
+        } else {
+          // Notificação simples de mudança
+          projectsWithRelevantActivity.add(project.id)
+          items.push({
+            id: `change-${change.id}`,
+            tag: 'Mudança',
+            title: change.title,
+            text: `Você foi indicado em ${project.name}.`,
+            time: change.publishedAt ? new Date(change.publishedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'Hoje',
+            priority: 2,
+          })
+        }
+      }
+
+      // Processa atividades não vinculadas a mudanças que já foram notificadas
+      const myTasks = (tasks || []).filter(t => 
+        t.projectId === project.id && 
+        (t.assigneeId === authUser.id || (t.memberIds || []).includes(authUser.id)) &&
+        !processedTaskIds.has(t.id)
+      )
+      if (myTasks.length > 0) {
+        projectsWithRelevantActivity.add(project.id)
+      }
+      for (const task of myTasks) {
+        items.push({
+          id: `task-${task.id}`,
+          tag: 'Atividade',
+          title: task.title,
+          text: `${project.name} • ${task.status === 'done' ? 'concluída' : task.status === 'progress' ? 'em andamento' : 'a fazer'}`,
+          time: 'Hoje',
+          priority: 3,
+        })
+      }
+
+      // Processa atualizações importantes do projeto SOMENTE se não há mudanças/atividades desse projeto
+      if (!projectsWithRelevantActivity.has(project.id) && (project.status || project.start || project.end || project.valorEstimado || project.valorOrcado)) {
+        items.push({
+          id: `project-${project.id}`,
+          tag: 'Projeto',
+          title: `Atualização importante em ${project.name}`,
+          text: `${project.status ? `Status: ${project.status}` : 'Dados do projeto foram atualizados'}${project.start || project.end ? ` • ${project.start || '—'} até ${project.end || '—'}` : ''}`,
+          time: 'Hoje',
+          priority: 4,
+        })
+      }
+    }
+
+    // Ordena por prioridade (maior = mais importante = primeiro)
+    return items
+      .sort((a, b) => (a.priority || 999) - (b.priority || 999))
+      .map(({ priority, ...item }) => item) // Remove o campo de prioridade antes de retornar
+      .slice(0, 20)
+  }, [authUser, projects, tasks, changes])
+
+  const unreadNotifications = notifications.filter(item => !readNewsIds.includes(item.id))
+  const markNewsAsRead = (id) => setReadNewsIds(prev => prev.includes(id) ? prev : [...prev, id])
+  const markAllNewsAsRead = () => setReadNewsIds(prev => Array.from(new Set([...prev, ...notifications.map(item => item.id)])))
+
   let screen
   if (route.view === 'hub') {
     screen = <Hub projects={projects} recentProjects={searchedProjects} tasks={tasks} onNavigate={navigate} sessions={sessions} currentUserId={currentUserId} now={now} />
@@ -467,7 +581,9 @@ export default function App() {
           onMySector={MY_SECTOR_ENABLED ? () => setModal({ type: 'mysector' }) : undefined}
           onLogout={handleLogout} onNewProject={openNewProject}
           tasks={tasks} projects={projects} sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
-          searchQuery={projectSearch} onSearchChange={setProjectSearch} />
+          searchQuery={projectSearch} onSearchChange={setProjectSearch}
+          notifications={notifications} unreadCount={unreadNotifications.length}
+          readNewsIds={new Set(readNewsIds)} onMarkRead={markNewsAsRead} onMarkAllRead={markAllNewsAsRead} />
         <div className="content">{screen}</div>
       </div>
 
