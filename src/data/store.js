@@ -275,6 +275,9 @@ export function effectiveProjectRole(project, user) {
 }
 // Pode criar/editar/excluir atividades, editar o projeto, excluir materiais.
 export const canEditProject = (role) => role === 'admin' || role === 'full'
+// Pode publicar uma mudança/requisição no projeto quando participa dele, mesmo em
+// papel de visualização; a edição total do projeto continua restrita a admins/full.
+export const canPublishProjectChange = (role) => role === 'admin' || role === 'full' || role === 'view'
 
 // ---------- arquivos ----------
 export const MAX_FILE_BYTES = 25 * 1024 * 1024 // 25 MB (igual ao limite do backend)

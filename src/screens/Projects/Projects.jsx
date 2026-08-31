@@ -3,7 +3,7 @@ import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
 import { AvatarStack, StatusTag, PriorityTag, ProgressBar } from '../../components/primitives/primitives.jsx'
 import { TaskTimerButton } from '../../components/TimeTracker/TimeTracker.jsx'
-import { PROJECT_COLORS, STATUSES, projectProgress, taskProgress, checklistStats, taskMembers, fmtShort, fmtMed, fmtFull, dayDiff, parseDate, todayISO, formatBytes, effectiveProjectRole, canEditProject, ROLE_LABEL, RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, formatBRL, calcularProgresso, CHANGE_KIND_MAP, URGENCY_MAP, ladoDaMudanca } from '../../data/store.js'
+import { PROJECT_COLORS, STATUSES, projectProgress, taskProgress, checklistStats, taskMembers, fmtShort, fmtMed, fmtFull, dayDiff, parseDate, todayISO, formatBytes, effectiveProjectRole, canEditProject, canPublishProjectChange, ROLE_LABEL, RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, formatBRL, calcularProgresso, CHANGE_KIND_MAP, URGENCY_MAP, ladoDaMudanca } from '../../data/store.js'
 import { api } from '../../data/api.js'
 // Projetos — grid of project cards, and a project detail view with task table.
 
@@ -790,10 +790,10 @@ function CartaoMudanca({ change, users, tasks, currentUser, canEdit, onEdit, onA
   </div>
 }
 
-function ProjectChanges({ project, changes, tasks, users, currentUserId, canEdit, onNew, onEdit, onAck, onDecide, onOpenTask }) {
+function ProjectChanges({ project, changes, tasks, users, currentUserId, canEdit, canPublish, onNew, onEdit, onAck, onDecide, onOpenTask }) {
   const lista = changes.filter(c => c.projectId === project.id).sort((a, b) => b.publishedAt - a.publishedAt)
-  if (!lista.length) return <EmptyState icon="history" title="Nenhuma mudança registrada" text="Registre aqui o que mudou no projeto. A equipe será avisada e uma requisição já vira atividade no quadro." action={canEdit ? <button className="btn btn-primary" onClick={() => onNew(project.id)}><Icon name="plus" size={17} stroke={2.2} />Registrar mudança</button> : null} />
-  return <div className="proj-mudancas"><div className="mud-topo"><span className="mud-contagem">{lista.length} {lista.length === 1 ? 'mudança registrada' : 'mudanças registradas'}</span>{canEdit && <button className="btn btn-primary btn-sm" onClick={() => onNew(project.id)}><Icon name="plus" size={16} stroke={2.2} />Registrar mudança</button>}</div>
+  if (!lista.length) return <EmptyState icon="history" title="Nenhuma mudança registrada" text="Registre aqui o que mudou no projeto. A equipe será avisada e uma requisição já vira atividade no quadro." action={canPublish ? <button className="btn btn-primary" onClick={() => onNew(project.id)}><Icon name="plus" size={17} stroke={2.2} />Registrar mudança</button> : null} />
+  return <div className="proj-mudancas"><div className="mud-topo"><span className="mud-contagem">{lista.length} {lista.length === 1 ? 'mudança registrada' : 'mudanças registradas'}</span>{canPublish && <button className="btn btn-primary btn-sm" onClick={() => onNew(project.id)}><Icon name="plus" size={16} stroke={2.2} />Registrar mudança</button>}</div>
     {lista.map(c => <CartaoMudanca key={c.id} change={c} users={users} tasks={tasks} currentUser={users.find(u => u.id === currentUserId)} canEdit={canEdit} onEdit={onEdit} onAck={onAck} onDecide={onDecide} onOpenTask={onOpenTask} />)}</div>
 }
 
@@ -937,6 +937,7 @@ export function ProjectDetail({ project, tasks, users, sessions, changes = [], c
   const list = tasks.filter(t => t.projectId === project.id)
   const pct = projectProgress(tasks, project.id)
   const color = PROJECT_COLORS[project.color]
+  const canPublish = canPublishProjectChange(role)
   return (
     <div className="page">
       <button className="btn btn-ghost btn-sm" onClick={onBack} style={{ marginBottom: 16, marginLeft: -8 }}>
@@ -978,7 +979,7 @@ export function ProjectDetail({ project, tasks, users, sessions, changes = [], c
           onCopyResource={onCopyResource} onDeleteResource={onDeleteResource} onAddResource={onAddResource} />
       ) : tab === 'mudancas' ? (
         <ProjectChanges project={project} changes={changes} tasks={tasks} users={users}
-          currentUserId={currentUserId} canEdit={canEdit} onNew={onNewChange} onEdit={onEditChange}
+          currentUserId={currentUserId} canEdit={canEdit} canPublish={canPublish} onNew={onNewChange} onEdit={onEditChange}
           onAck={onAckChange} onDecide={onDecideChange} onOpenTask={onEditTask} />
       ) : (
       <>

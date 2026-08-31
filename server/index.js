@@ -134,6 +134,7 @@ const normDefaultRole = (r) => (ROLES.includes(r) ? r : 'full')
 // Conjuntos de permissão para gating das rotas.
 const CAN = {
   edit: ['admin', 'full'],          // criar/editar/excluir atividades, editar projeto, excluir material
+  publishChange: ['admin', 'full', 'view'], // publicar mudanças/requisições quando participa do projeto
   light: ['admin', 'full', 'view'], // mover no Kanban, marcar checklist, adicionar material
   adminOnly: ['admin'],             // gerenciar permissões, excluir projeto
 }
@@ -871,7 +872,7 @@ app.get('/api/changes', wrap(async (req, res) => {
 }))
 
 // Publicar: grava a mudança, cria a atividade e abre a ciência da equipe.
-app.post('/api/projects/:id/changes', gate((req) => req.params.id, CAN.edit), wrap(async (req, res) => {
+app.post('/api/projects/:id/changes', gate((req) => req.params.id, CAN.publishChange), wrap(async (req, res) => {
   const {
     title, description, requester = '', changeDate,
     kind, urgency, targetUserIds = [], targetSectors = [], targetSector = null,
