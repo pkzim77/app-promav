@@ -7,6 +7,7 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import compression from 'compression'
 import { q, tx } from './db.js'
 import { requireAuth, signToken, verifyPassword, hashPassword } from './auth.js'
 
@@ -16,6 +17,10 @@ const app = express()
 // CORS_ORIGIN aceita uma lista separada por vírgula; ausente/"*" libera todas.
 const origins = (process.env.CORS_ORIGIN || '*').split(',').map(s => s.trim()).filter(Boolean)
 app.use(cors({ origin: origins.includes('*') ? true : origins }))
+// gzip nas respostas. O bootstrap é JSON repetitivo e cai ~85% (54 KB → 8 KB),
+// o que importa porque ele é recarregado a cada mudança detectada pelo /pulse.
+// Vem antes das rotas para envolver todas elas.
+app.use(compression())
 app.use(express.json())
 
 const PORT = process.env.PORT || 3001
@@ -48,8 +53,27 @@ const TASK_SELECT = `
          COALESCE((
            SELECT json_agg(m.user_id ORDER BY m.user_id)
            FROM task_members m WHERE m.task_id = t.id
-         ), '[]'::json) AS "memberIds"
+         ), '[]'::json) AS "memberIds",
+         t.created_by AS "createdBy",
+         (extract(epoch FROM t.created_at) * 1000)::bigint AS "createdAt",
+         CASE WHEN t.updated_at IS NULL THEN NULL
+              ELSE (extract(epoch FROM t.updated_at) * 1000)::bigint END AS "updatedAt",
+         COALESCE((
+           SELECT json_agg(json_build_object(
+                    'userId', v.user_id,
+                    'seenAt', (extract(epoch FROM v.seen_at) * 1000)::bigint)
+                  ORDER BY v.user_id)
+           FROM task_views v WHERE v.task_id = t.id
+         ), '[]'::json) AS views
   FROM tasks t`
+
+// bigint volta como string no driver pg → converte o que for número.
+const mapTask = (t) => ({
+  ...t,
+  createdAt: t.createdAt == null ? null : Number(t.createdAt),
+  updatedAt: t.updatedAt == null ? null : Number(t.updatedAt),
+  views: (t.views || []).map(v => ({ ...v, seenAt: Number(v.seenAt) })),
+})
 
 const PROJECT_SELECT = `
   SELECT id, name,
@@ -134,6 +158,7 @@ const normDefaultRole = (r) => (ROLES.includes(r) ? r : 'full')
 // Conjuntos de permissão para gating das rotas.
 const CAN = {
   edit: ['admin', 'full'],          // criar/editar/excluir atividades, editar projeto, excluir material
+  publishChange: ['admin', 'full', 'view'], // publicar mudanças/requisições quando participa do projeto
   light: ['admin', 'full', 'view'], // mover no Kanban, marcar checklist, adicionar material
   adminOnly: ['admin'],             // gerenciar permissões, excluir projeto
 }
@@ -233,7 +258,14 @@ const mapSession = (s) => ({ ...s, start: Number(s.start), end: s.end === null ?
 
 async function getTask(id) {
   const rows = await q(`${TASK_SELECT} WHERE t.id = $1`, [id])
-  return rows[0] || null
+  return rows[0] ? mapTask(rows[0]) : null
+}
+// projectIds: null = todas (admin); array = só as tarefas desses projetos.
+async function listTasks(projectIds = null) {
+  const rows = projectIds === null
+    ? await q(`${TASK_SELECT} ORDER BY t.id`)
+    : await q(`${TASK_SELECT} WHERE t.project_id = ANY($1) ORDER BY t.id`, [projectIds])
+  return rows.map(mapTask)
 }
 // projectIds: null = todos (admin); array = só as sessões de tarefas desses projetos.
 async function listSessions(projectIds = null) {
@@ -294,6 +326,46 @@ app.post('/api/auth/login', wrap(async (req, res) => {
 // ===== a partir daqui, tudo exige autenticação =====
 app.use('/api', requireAuth)
 
+// Carimbo do estado do banco — o front consulta de tempos em tempos e só
+// refaz o /bootstrap (54 KB) quando o valor muda. A resposta tem ~100 bytes.
+//
+// É contagem + maior carimbo de cada tabela: o carimbo pega criação e edição,
+// a contagem pega exclusão (apagar uma linha não mexe em timestamp nenhum).
+// As tabelas de junção (checklist, membros) entram só pela contagem, porque
+// não têm data — mas toda alteração delas passa por uma rota que carimba o
+// updated_at do pai, então a mudança aparece de um jeito ou de outro.
+//
+// task_views fica DE FORA de propósito: abrir uma atividade não é novidade
+// para mais ninguém, e incluí-la faria cada leitura recarregar o app inteiro.
+const PULSE_SQL = `
+  SELECT (SELECT count(*) FROM tasks)            AS tarefas_n,
+         (SELECT max(greatest(created_at, coalesce(updated_at, created_at))) FROM tasks)    AS tarefas_t,
+         (SELECT count(*) FROM projects)         AS projetos_n,
+         (SELECT max(greatest(created_at, coalesce(updated_at, created_at))) FROM projects) AS projetos_t,
+         (SELECT count(*) FROM changes)          AS mudancas_n,
+         (SELECT max(greatest(published_at, coalesce(edited_at, published_at),
+                              coalesce(decided_at, published_at))) FROM changes)            AS mudancas_t,
+         (SELECT count(*) FROM change_acks)      AS ciencias_n,
+         (SELECT max(coalesce(confirmed_at, sent_at)) FROM change_acks)                     AS ciencias_t,
+         (SELECT count(*) FROM time_sessions)    AS sessoes_n,
+         (SELECT max(greatest(start_at, coalesce(end_at, start_at))) FROM time_sessions)    AS sessoes_t,
+         (SELECT count(*) FROM folders)          AS pastas_n,
+         (SELECT count(*) FROM users)            AS usuarios_n,
+         (SELECT count(*) FROM checklist_items)  AS checklist_n,
+         (SELECT count(*) FROM task_members)     AS membros_tarefa_n,
+         (SELECT count(*) FROM project_members)  AS membros_projeto_n
+`
+
+app.get('/api/pulse', wrap(async (_req, res) => {
+  const [row] = await q(PULSE_SQL)
+  // Uma string só: o front compara por igualdade, não interpreta o conteúdo.
+  const v = Object.keys(row).sort().map(k => {
+    const val = row[k]
+    return val instanceof Date ? val.getTime() : (val ?? 0)
+  }).join('.')
+  res.json({ v })
+}))
+
 // Quem sou eu (valida o token e restaura a sessão no front).
 app.get('/api/auth/me', wrap(async (req, res) => {
   const [user] = await q(`SELECT ${PUBLIC_USER} FROM users WHERE id = $1`, [req.userId])
@@ -325,8 +397,7 @@ app.get('/api/bootstrap', wrap(async (req, res) => {
     q(`SELECT ${LIST_USER} FROM users ORDER BY id`),
     all ? q(`${PROJECT_SELECT} ORDER BY position, id`)
         : q(`${PROJECT_SELECT} WHERE id = ANY($1) ORDER BY position, id`, [ids]),
-    all ? q(`${TASK_SELECT} ORDER BY t.id`)
-        : q(`${TASK_SELECT} WHERE t.project_id = ANY($1) ORDER BY t.id`, [ids]),
+    listTasks(ids),
     listSessions(ids),
     q(`${FOLDER_SELECT} ORDER BY position, name`),
     listChanges(ids),
@@ -418,7 +489,8 @@ app.put('/api/projects/:id', gate((req) => req.params.id, CAN.edit), wrap(async 
   const ok = await tx(async (client) => {
     const r = await client.query(
       `UPDATE projects SET name = $2, description = $3, color = $4, folder_id = $5, start_date = $6, end_date = $7, notes = $8, resources = $9,
-                           prefeitura = $10, secretaria = $11, origem_recurso = $12, valor_convenio = $13, valor_disponivel = $14, status = $15, responsible_ids = $16
+                           prefeitura = $10, secretaria = $11, origem_recurso = $12, valor_convenio = $13, valor_disponivel = $14, status = $15, responsible_ids = $16,
+                           updated_at = now()
        WHERE id = $1 RETURNING id`,
       [req.params.id, name, desc, color, folderId || null, start, end, notes, JSON.stringify(clean),
        String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso), normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status), JSON.stringify(normResponsibles(responsibleIds))]
@@ -599,10 +671,7 @@ app.get('/api/files/:id', wrap(async (req, res) => {
 
 // ----- tarefas -----
 app.get('/api/tasks', wrap(async (req, res) => {
-  const ids = await visibleProjectIds(req.userId)
-  res.json(ids === null
-    ? await q(`${TASK_SELECT} ORDER BY t.id`)
-    : await q(`${TASK_SELECT} WHERE t.project_id = ANY($1) ORDER BY t.id`, [ids]))
+  res.json(await listTasks(await visibleProjectIds(req.userId)))
 }))
 
 app.post('/api/tasks', gate((req) => req.body.projectId, CAN.edit), wrap(async (req, res) => {
@@ -610,9 +679,9 @@ app.post('/api/tasks', gate((req) => req.body.projectId, CAN.edit), wrap(async (
   const id = genId('t')
   await tx(async (client) => {
     await client.query(
-      `INSERT INTO tasks (id, project_id, title, assignee_id, status, priority, start_date, end_date)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [id, projectId, title, assigneeId || null, status, priority, start, end]
+      `INSERT INTO tasks (id, project_id, title, assignee_id, status, priority, start_date, end_date, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [id, projectId, title, assigneeId || null, status, priority, start, end, req.userId]
     )
     await replaceChildren(client, id, checklist, memberIds, assigneeId)
   })
@@ -624,7 +693,8 @@ app.put('/api/tasks/:id', gate(taskProjectId, CAN.edit), wrap(async (req, res) =
   const id = req.params.id
   const updated = await tx(async (client) => {
     const r = await client.query(
-      `UPDATE tasks SET project_id = $2, title = $3, assignee_id = $4, status = $5, priority = $6, start_date = $7, end_date = $8
+      `UPDATE tasks SET project_id = $2, title = $3, assignee_id = $4, status = $5, priority = $6, start_date = $7, end_date = $8,
+              updated_at = now()
        WHERE id = $1 RETURNING id`,
       [id, projectId, title, assigneeId || null, status, priority, start, end]
     )
@@ -638,7 +708,7 @@ app.put('/api/tasks/:id', gate(taskProjectId, CAN.edit), wrap(async (req, res) =
 
 // Mover entre colunas do Kanban (só o status) — permitido para 'Só exibição'.
 app.patch('/api/tasks/:id/status', gate(taskProjectId, CAN.light), wrap(async (req, res) => {
-  const rows = await q('UPDATE tasks SET status = $2 WHERE id = $1 RETURNING id', [req.params.id, req.body.status])
+  const rows = await q('UPDATE tasks SET status = $2, updated_at = now() WHERE id = $1 RETURNING id', [req.params.id, req.body.status])
   if (!rows.length) return res.status(404).json({ error: 'Atividade não encontrada.' })
   res.json(await getTask(req.params.id))
 }))
@@ -652,6 +722,7 @@ app.patch('/api/tasks/:id/checklist', gate(taskProjectId, CAN.light), wrap(async
       if (!item || !item.id) continue
       await client.query('UPDATE checklist_items SET done = $2 WHERE id = $1 AND task_id = $3', [item.id, !!item.done, req.params.id])
     }
+    await client.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [req.params.id])
   })
   res.json(await getTask(req.params.id))
 }))
@@ -669,6 +740,21 @@ app.post('/api/tasks/:id/membership', gate(taskProjectId, CAN.light), wrap(async
   } else {
     await q('DELETE FROM task_members WHERE task_id = $1 AND user_id = $2', [req.params.id, req.userId])
   }
+  await q('UPDATE tasks SET updated_at = now() WHERE id = $1', [req.params.id])
+  res.json(await getTask(req.params.id))
+}))
+
+// Registrar que a pessoa ABRIU a atividade. Não é edição — 'Só exibição'
+// também marca. É o "acessado" que segura a notificação da atividade que a
+// própria pessoa criou para si (ver as notificações em App.jsx).
+app.post('/api/tasks/:id/view', gate(taskProjectId, CAN.light), wrap(async (req, res) => {
+  const rows = await q(
+    `INSERT INTO task_views (task_id, user_id) VALUES ($1, $2)
+     ON CONFLICT (task_id, user_id) DO UPDATE SET seen_at = now()
+     RETURNING task_id`,
+    [req.params.id, req.userId]
+  )
+  if (!rows.length) return res.status(404).json({ error: 'Atividade não encontrada.' })
   res.json(await getTask(req.params.id))
 }))
 
@@ -871,7 +957,7 @@ app.get('/api/changes', wrap(async (req, res) => {
 }))
 
 // Publicar: grava a mudança, cria a atividade e abre a ciência da equipe.
-app.post('/api/projects/:id/changes', gate((req) => req.params.id, CAN.edit), wrap(async (req, res) => {
+app.post('/api/projects/:id/changes', gate((req) => req.params.id, CAN.publishChange), wrap(async (req, res) => {
   const {
     title, description, requester = '', changeDate,
     kind, urgency, targetUserIds = [], targetSectors = [], targetSector = null,
@@ -1148,6 +1234,35 @@ async function ensureSchema() {
       sent_at      timestamptz NOT NULL DEFAULT now(),
       confirmed_at timestamptz,
       PRIMARY KEY (change_id, user_id)
+    )
+  `)
+
+  // Último toque no projeto. Sem isto o /api/pulse não enxerga edição de
+  // projeto: a tabela só tinha created_at, então mudar nome, datas ou valores
+  // não mexia em carimbo nenhum. Mesmo cuidado do tasks.updated_at: sem
+  // DEFAULT na criação, para as linhas antigas herdarem o próprio created_at.
+  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS updated_at timestamptz')
+  await q('UPDATE projects SET updated_at = created_at WHERE updated_at IS NULL')
+  await q('ALTER TABLE projects ALTER COLUMN updated_at SET DEFAULT now()')
+
+  // ----- atividade: autoria, último toque e leitura -----
+  // Quem criou a atividade. NULL nas linhas antigas (não dá para descobrir
+  // depois) — a regra de "criei para mim mesmo" simplesmente não as alcança.
+  await q('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_by text REFERENCES users(id) ON DELETE SET NULL')
+  // Último toque na atividade (edição, status, checklist, participação).
+  // Entra sem DEFAULT para não carimbar now() nas linhas antigas: elas herdam
+  // o próprio created_at logo abaixo, que é a data real mais próxima.
+  await q('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS updated_at timestamptz')
+  await q('UPDATE tasks SET updated_at = created_at WHERE updated_at IS NULL')
+  await q('ALTER TABLE tasks ALTER COLUMN updated_at SET DEFAULT now()')
+  // Quando cada pessoa abriu a atividade pela última vez. Uma linha por
+  // (atividade, pessoa) — é o "acessado" da regra de notificação.
+  await q(`
+    CREATE TABLE IF NOT EXISTS task_views (
+      task_id text NOT NULL REFERENCES tasks(id)  ON DELETE CASCADE,
+      user_id text NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
+      seen_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (task_id, user_id)
     )
   `)
 

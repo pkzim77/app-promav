@@ -434,3 +434,20 @@
 .mud-titulo { font: var(--text-h4); margin: 0 0 8px; color: var(--fg-1); letter-spacing: var(--tracking-snug); }
 
 .mud-decisao.aceita { background: var(--success-soft); color: #276B46; }
+
+/* Destaque temporário do item aberto a partir de uma notificação.
+   Aplicado/removido por JS em ProjectDetail (ver focusId). */
+@keyframes promav-focus-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(140, 123, 88, 0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(140, 123, 88, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(140, 123, 88, 0); }
+}
+
+.is-focused { animation: promav-focus-pulse 1.4s ease-out 2; border-color: var(--accent-strong) !important; }
+
+/* Numa <tr> o box-shadow não pinta: destaca o fundo das células. */
+tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
+
+@media (prefers-reduced-motion: reduce) {
+  .is-focused { animation: none; }
+}

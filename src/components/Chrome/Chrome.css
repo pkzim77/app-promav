@@ -132,6 +132,56 @@
 
 .userselect-btn:hover { background: var(--bg-subtle); box-shadow: inset 0 0 0 1px var(--border); }
 
+.topbar-actions { display: flex; align-items: center; gap: 10px; }
+
+.tb-bell { position: relative; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--bg-muted); color: var(--fg-2); transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+
+.tb-bell:hover { background: var(--bg-subtle); color: var(--fg-1); }
+
+.tb-bell-badge { position: absolute; top: -3px; right: -2px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--brand); color: #fff; display: grid; place-items: center; font-size: 10px; font-weight: 700; }
+
+.news-overlay { position: fixed; inset: 0; background: rgba(17, 17, 17, 0.22); z-index: 90; }
+
+.news-panel { position: absolute; right: 0; top: 0; width: min(360px, 92vw); height: 100vh; background: #fff; box-shadow: -12px 0 30px rgba(12, 17, 23, 0.12); display: flex; flex-direction: column; }
+
+.news-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 18px 14px; background: #f6f4ef; border-bottom: 1px solid var(--border); }
+
+.news-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: var(--fg-1); }
+
+.news-close { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--r-sm); color: var(--fg-3); }
+
+.news-close:hover { background: rgba(24, 26, 31, 0.04); }
+
+.news-filters { display: flex; gap: 8px; padding: 12px 14px; background: #f9f8f7; border-bottom: 1px solid var(--border); overflow-x: auto; }
+
+.news-filter-btn { padding: 6px 12px; border-radius: 999px; background: transparent; color: var(--fg-3); font-size: 12px; font-weight: 600; border: 1px solid var(--border); cursor: pointer; transition: all var(--dur); white-space: nowrap; }
+
+.news-filter-btn:hover { border-color: var(--fg-2); color: var(--fg-2); }
+
+.news-filter-btn.active { background: var(--fg-1); color: #fff; border-color: var(--fg-1); }
+
+.news-body { flex: 1; overflow-y: auto; background: #fff; padding: 14px 12px 18px; }
+
+.news-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 12px 12px 10px; margin-bottom: 10px; cursor: pointer; transition: border-color var(--dur), box-shadow var(--dur); }
+
+.news-item.unread { border-color: rgba(146, 116, 66, 0.38); box-shadow: inset 0 0 0 1px rgba(146, 116, 66, 0.11); background: linear-gradient(180deg, #fffdf9 0%, #fff 100%); }
+
+.news-item-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+
+.news-tag { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 999px; background: #f0efe9; color: var(--fg-2); font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
+
+.news-time { font-size: 11px; color: var(--fg-4); }
+
+.news-item h4 { margin: 0 0 5px; font-size: 13.5px; color: var(--fg-1); line-height: 1.35; }
+
+.news-item p { margin: 0; font-size: 12.8px; line-height: 1.5; color: var(--fg-3); }
+
+.news-read { margin-top: 10px; padding: 5px 8px; border-radius: var(--r-sm); background: var(--bg-muted); color: var(--fg-2); font-size: 11.5px; font-weight: 600; }
+
+.news-read:hover { background: var(--bg-subtle); color: var(--fg-1); }
+
+.news-empty { padding: 18px 8px; color: var(--fg-3); font-size: 13.5px; }
+
 /* ---------- Account menu ---------- */
 
 .menu-account { display: flex; align-items: center; gap: 11px; padding: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
@@ -184,3 +234,48 @@
   .app.nav-open .nav-backdrop { display: block; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
 }
 
+
+/* Bolinha da cor do tipo dentro do chip de filtro. */
+.news-filter-btn { display: inline-flex; align-items: center; gap: 6px; }
+
+.news-filter-dot { width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; }
+
+/* Notificação que leva a algum lugar ganha affordance de clique. */
+.news-item.clickable:hover { border-color: var(--fg-2); box-shadow: var(--shadow-xs); }
+
+.news-item.clickable:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+
+/* Ações do cabeçalho: marcar tudo como lido + limpar tudo. */
+.news-header-acoes { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #f6f4ef; border-bottom: 1px solid var(--border); }
+
+/* Sem quebra de linha: é o que cortava "Limpar tudo" quando os botões
+   disputavam a largura do cabeçalho. */
+.news-header-acoes > .btn { white-space: nowrap; flex-shrink: 0; }
+
+.news-limpar-tudo { display: inline-flex; align-items: center; gap: 5px; color: var(--danger); margin-left: auto; }
+
+.news-limpar-tudo:hover { background: var(--danger-soft); color: var(--danger); }
+
+/* Lixeira de cada notificação: discreta até o mouse passar pelo card. */
+.news-lixeira { display: grid; place-items: center; width: 24px; height: 24px; margin: -4px -4px -4px 2px; border-radius: var(--r-sm); color: var(--fg-4); opacity: 0; transition: opacity var(--dur), background var(--dur), color var(--dur); }
+
+.news-item:hover .news-lixeira, .news-lixeira:focus-visible { opacity: 1; }
+
+.news-lixeira:hover { background: var(--danger-soft); color: var(--danger); }
+
+/* Sem hover (toque), a lixeira fica sempre visível. */
+@media (hover: none) {
+  .news-lixeira { opacity: 1; }
+}
+
+/* Liga/desliga som e avisos do navegador, no cabeçalho do painel. */
+.news-toggle { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--r-sm); color: var(--fg-4); flex-shrink: 0; transition: background var(--dur), color var(--dur); }
+
+.news-toggle:hover { background: rgba(24, 26, 31, 0.04); color: var(--fg-2); }
+
+.news-toggle.on { color: var(--accent-strong); background: rgba(180, 165, 135, 0.16); }
+
+.news-toggle:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
+
+/* O título ocupa a sobra para empurrar os botões para a direita. */
+.news-header .news-title { flex: 1; min-width: 0; }
