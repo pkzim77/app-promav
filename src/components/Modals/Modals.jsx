@@ -41,7 +41,8 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   const [memberIds, setMemberIds] = React.useState(task?.memberIds ? [...task.memberIds] : [])
   const [status, setStatus] = React.useState(task?.status || defaultStatus || 'todo')
   const [priority, setPriority] = React.useState(task?.priority || 'medium')
-  
+  const [start, setStart] = React.useState(task?.start || '')
+  const [end, setEnd] = React.useState(task?.end || '')
   const [checklist, setChecklist] = React.useState(task?.checklist ? task.checklist.map(i => ({ ...i })) : [])
   const [newItem, setNewItem] = React.useState('')
   const [touched, setTouched] = React.useState(false)

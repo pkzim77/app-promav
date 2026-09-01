@@ -282,7 +282,7 @@ export function EmptyState({ icon, title, text, action }) {
 function TaskRow({ task, members, sessions, currentUserId, now, canEdit, onStartTimer, onStopTimer, onEdit, onDelete }) {
   const resp = members[0]
   return (
-    <tr className='task-row-clickable' onClick={() => onEdit(task)}>
+    <tr id={'task-' + task.id} className='task-row-clickable' onClick={() => onEdit(task)}>
       <td style={{ width: '28%' }}><button className="task-title task-title-btn" onClick={() => onEdit(task)}>{task.title}</button></td>
       <td><StatusTag status={task.status} /></td>
       <td><PriorityTag priority={task.priority} /></td>
@@ -774,7 +774,8 @@ function CartaoMudanca({ change, users, tasks, currentUser, canEdit, onEdit, onA
   const tarefa = tasks.find(t => t.id === change.taskId)
   const minhaCiencia = change.acks.find(a => a.userId === currentUser?.id && !a.confirmedAt)
   const pendente = change.kind === 'sugestao' && !change.decision
-  return <div className={'card mud-card' + (pendente ? ' pendente' : '')}>
+  // O id é a âncora usada pelo clique na notificação (ver ProjectDetail).
+  return <div id={'change-' + change.id} className={'card mud-card' + (pendente ? ' pendente' : '')}>
     <div className="mud-card-topo"><span className="mud-data">{fmtFull(change.changeDate)}</span><div className="mud-selos"><SelosDaMudanca change={change} /></div>
       {canEdit && <button className="btn-icon" onClick={() => onEdit(change)} aria-label="Editar mudança"><Icon name="pencil" size={16} /></button>}</div>
     <h3 className="mud-titulo">{change.title}</h3>
@@ -928,9 +929,30 @@ function ProjectCover({ project, tasks, users }) {
   )
 }
 
-export function ProjectDetail({ project, tasks, users, sessions, changes = [], currentUserId, now, canEdit = true, role, onStartTimer, onStopTimer, onBack, onEdit, onNewTask, onEditTask, onDeleteTask, onCopyResource, onDeleteResource, onAddResource, onNewChange, onEditChange, onAckChange, onDecideChange }) {
+export function ProjectDetail({ project, tasks, users, sessions, changes = [], currentUserId, now, canEdit = true, role, initialTab, focusId, focusNonce, onStartTimer, onStopTimer, onBack, onEdit, onNewTask, onEditTask, onDeleteTask, onCopyResource, onDeleteResource, onAddResource, onNewChange, onEditChange, onAckChange, onDecideChange }) {
   // O Panorama abre primeiro: é o que se mostra numa reunião com o cliente.
-  const [tab, setTab] = React.useState('panorama') // 'panorama' | 'tecnica' | 'atividades' | 'mudancas'
+  // Uma notificação clicada entra com a aba já escolhida em 'initialTab'.
+  const [tab, setTab] = React.useState(initialTab || 'panorama') // 'panorama' | 'tecnica' | 'atividades' | 'mudancas'
+
+  // Vindo de uma notificação: troca a aba. O 'focusNonce' entra nas dependências
+  // para funcionar também quando a mesma notificação é clicada de novo depois
+  // de o usuário ter mudado de aba na mão.
+  React.useEffect(() => {
+    if (initialTab) setTab(initialTab)
+  }, [initialTab, focusNonce])
+
+  // Rola até o item da notificação e o destaca por alguns segundos. Depende de
+  // 'tab' porque o elemento só existe depois que a aba certa renderiza.
+  React.useEffect(() => {
+    if (!focusId) return
+    const el = document.getElementById(focusId)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('is-focused')
+    const t = setTimeout(() => el.classList.remove('is-focused'), 2800)
+    return () => { clearTimeout(t); el.classList.remove('is-focused') }
+  }, [focusId, focusNonce, tab])
+
   const cienciasPendentes = changes
     .filter(c => c.projectId === project.id)
     .reduce((total, c) => total + (c.acks || []).some(a => a.userId === currentUserId && !a.confirmedAt), 0)

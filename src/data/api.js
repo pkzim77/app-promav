@@ -102,6 +102,10 @@ export const api = {
   updateTask: (id, data) => req('PUT', `/tasks/${id}`, data),
   deleteTask: (id) => req('DELETE', `/tasks/${id}`),
   moveTask: (id, status) => req('PATCH', `/tasks/${id}/status`, { status }),
+  // Carimbo barato do estado do banco (~100 bytes) — ver o polling em App.jsx.
+  pulse: () => req('GET', '/pulse'),
+  // Registra que a pessoa abriu a atividade — permitido para 'Só exibição'.
+  viewTask: (id) => req('POST', `/tasks/${id}/view`),
 
   // ----- mudanças do projeto (orientações) -----
   publishChange: (projectId, data) => req('POST', `/projects/${projectId}/changes`, data),

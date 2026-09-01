@@ -4,7 +4,7 @@ import { Icon } from '../Icon.jsx'
 import { Logo } from '../Logo/Logo.jsx'
 import { Avatar } from '../primitives/primitives.jsx'
 import { TimeClock } from '../TimeTracker/TimeTracker.jsx'
-import { PROJECT_COLORS } from '../../data/store.js'
+import { PROJECT_COLORS, NOTIF_KINDS, NOTIF_KIND_MAP } from '../../data/store.js'
 // App chrome: left sidebar + top bar with search and user selector.
 
 // Menu de "três pontinhos" de uma pasta: aparece ao passar o mouse na pasta
@@ -301,50 +301,107 @@ export function UserMenu({ user, onChangePassword, onMySector, onLogout }) {
   )
 }
 
-export function NewsPanel({ open, items = [], readIds = new Set(), onClose, onMarkRead, onMarkAllRead }) {
+export function NewsPanel({ open, items = [], readIds = new Set(), onClose, onMarkRead, onMarkAllRead, onOpenNotification, onDismiss, onDismissAll, avisos = { som: true, navegador: false }, onToggleSom, onToggleNavegador }) {
   const [filter, setFilter] = React.useState('all')
 
   if (!open) return null
 
-  const tags = ['all', ...Array.from(new Set(items.map(i => i.tag)))]
-  const filtered = filter === 'all' ? items : items.filter(i => i.tag === filter)
+  // Os filtros seguem a ordem de NOTIF_KINDS (não a ordem de chegada dos
+  // itens), e só aparecem os tipos que existem na lista.
+  const presentes = new Set(items.map(i => i.kind))
+  const kinds = NOTIF_KINDS.filter(k => presentes.has(k.id))
+  const filtered = filter === 'all' ? items : items.filter(i => i.kind === filter)
+  const filtroLabel = NOTIF_KIND_MAP[filter]?.label || filter
 
   return (
     <div className="news-overlay" onClick={onClose}>
       <aside className="news-panel" onClick={(e) => e.stopPropagation()}>
         <div className="news-header">
           <div className="news-title"><Icon name="bell" size={17} />Novidades</div>
-          {items.length > 0 && (
-            <button className="btn btn-secondary btn-sm" onClick={onMarkAllRead}>Marcar tudo como lido</button>
-          )}
+          <button
+            className={'news-toggle' + (avisos.som ? ' on' : '')}
+            onClick={onToggleSom}
+            aria-pressed={avisos.som}
+            title={avisos.som ? 'Som ligado — clique para silenciar' : 'Som desligado — clique para ligar'}
+            aria-label={avisos.som ? 'Desligar som dos avisos' : 'Ligar som dos avisos'}>
+            <Icon name={avisos.som ? 'volume' : 'volumeOff'} size={16} />
+          </button>
+          <button
+            className={'news-toggle' + (avisos.navegador ? ' on' : '')}
+            onClick={onToggleNavegador}
+            aria-pressed={avisos.navegador}
+            title={avisos.navegador ? 'Avisos do navegador ligados — clique para desligar' : 'Receber avisos do navegador quando esta aba estiver em segundo plano'}
+            aria-label={avisos.navegador ? 'Desligar avisos do navegador' : 'Ligar avisos do navegador'}>
+            <Icon name={avisos.navegador ? 'bell' : 'bellOff'} size={16} />
+          </button>
           <button className="news-close" onClick={onClose} aria-label="Fechar novidades">
             <Icon name="x" size={16} />
           </button>
         </div>
-        {tags.length > 1 && (
+        {/* Faixa própria: no painel de 360px os dois botões não cabem na
+            mesma linha do título sem cortar o texto. */}
+        {items.length > 0 && (
+          <div className="news-header-acoes">
+            <button className="btn btn-secondary btn-sm" onClick={onMarkAllRead}>Marcar tudo como lido</button>
+            <button className="btn btn-ghost btn-sm news-limpar-tudo" onClick={onDismissAll}>
+              <Icon name="trash" size={15} />Limpar tudo
+            </button>
+          </div>
+        )}
+        {kinds.length > 1 && (
           <div className="news-filters">
-            {tags.map(tag => (
-              <button
-                key={tag}
-                className={`news-filter-btn ${filter === tag ? 'active' : ''}`}
-                onClick={() => setFilter(tag)}
-              >
-                {tag === 'all' ? 'Todas' : tag}
-              </button>
-            ))}
+            <button className={`news-filter-btn ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
+              Todas
+            </button>
+            {kinds.map(k => {
+              const on = filter === k.id
+              return (
+                <button
+                  key={k.id}
+                  className={`news-filter-btn ${on ? 'active' : ''}`}
+                  onClick={() => setFilter(k.id)}
+                  // A cor do tipo pinta o chip inteiro quando ligado e só a
+                  // bolinha quando desligado.
+                  style={on
+                    ? { background: k.color, borderColor: k.color, color: '#fff' }
+                    : { borderColor: k.color + '66', color: k.color }}
+                >
+                  <span className="news-filter-dot" style={{ background: on ? '#fff' : k.color }} />
+                  {k.label}
+                </button>
+              )
+            })}
           </div>
         )}
         <div className="news-body">
           {filtered.length === 0 ? (
-            <div className="news-empty">{filter === 'all' ? 'Nenhuma novidade por enquanto.' : `Nenhuma novidade de "${filter}".`}</div>
+            <div className="news-empty">{filter === 'all' ? 'Nenhuma novidade por enquanto.' : `Nenhuma novidade de "${filtroLabel}".`}</div>
           ) : (
             filtered.map(item => {
               const unread = !readIds.has(item.id)
+              const cor = item.color || 'var(--fg-3)'
+              // O card inteiro leva ao lugar da notificação; o botão "Marcar
+              // como lida" continua sendo a ação que não navega.
+              const abrir = () => { onOpenNotification?.(item); onClose?.() }
               return (
-                <div key={item.id} className={'news-item' + (unread ? ' unread' : '')} onClick={() => !unread && onMarkRead?.(item.id)}>
+                <div
+                  key={item.id}
+                  className={'news-item' + (unread ? ' unread' : '') + (item.target ? ' clickable' : '')}
+                  style={{ borderLeft: `3px solid ${cor}` }}
+                  role={item.target ? 'button' : undefined}
+                  tabIndex={item.target ? 0 : undefined}
+                  onClick={() => (item.target ? abrir() : !unread && onMarkRead?.(item.id))}
+                  onKeyDown={(e) => { if (item.target && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); abrir() } }}>
                   <div className="news-item-top">
-                    <span className="news-tag">{item.tag}</span>
+                    <span className="news-tag" style={{ color: cor, background: cor + '1a' }}>{item.tag}</span>
                     <span className="news-time">{item.time}</span>
+                    <button
+                      className="news-lixeira"
+                      aria-label={`Excluir notificação: ${item.title}`}
+                      title="Excluir esta notificação"
+                      onClick={(e) => { e.stopPropagation(); onDismiss?.(item) }}>
+                      <Icon name="trash" size={14} />
+                    </button>
                   </div>
                   <h4>{item.title}</h4>
                   <p>{item.text}</p>
@@ -363,7 +420,7 @@ export function NewsPanel({ open, items = [], readIds = new Set(), onClose, onMa
   )
 }
 
-export function TopBar({ title, currentUser, canNewProject = true, onToggleMobileNav, onChangePassword, onMySector, onLogout, onNewProject, tasks, projects, sessions, now, onStartTimer, onStopTimer, searchQuery, onSearchChange, notifications = [], unreadCount = 0, readNewsIds = new Set(), onMarkRead, onMarkAllRead }) {
+export function TopBar({ title, currentUser, canNewProject = true, onToggleMobileNav, onChangePassword, onMySector, onLogout, onNewProject, tasks, projects, sessions, now, onStartTimer, onStopTimer, searchQuery, onSearchChange, notifications = [], unreadCount = 0, readNewsIds = new Set(), onMarkRead, onMarkAllRead, onOpenNotification, onDismiss, onDismissAll, avisos, onToggleSom, onToggleNavegador }) {
   const [newsOpen, setNewsOpen] = React.useState(false)
 
   return (
@@ -392,7 +449,9 @@ export function TopBar({ title, currentUser, canNewProject = true, onToggleMobil
           <UserMenu user={currentUser} onChangePassword={onChangePassword} onMySector={onMySector} onLogout={onLogout} />
         </div>
       </header>
-      <NewsPanel open={newsOpen} items={notifications} readIds={readNewsIds} onClose={() => setNewsOpen(false)} onMarkRead={onMarkRead} onMarkAllRead={onMarkAllRead} />
+      <NewsPanel open={newsOpen} items={notifications} readIds={readNewsIds} onClose={() => setNewsOpen(false)} onMarkRead={onMarkRead} onMarkAllRead={onMarkAllRead}
+        onOpenNotification={onOpenNotification} onDismiss={onDismiss} onDismissAll={onDismissAll}
+        avisos={avisos} onToggleSom={onToggleSom} onToggleNavegador={onToggleNavegador} />
     </>
   )
 }

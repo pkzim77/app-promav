@@ -122,6 +122,19 @@ export const CHANGE_KINDS = [
 ]
 export const CHANGE_KIND_MAP = Object.fromEntries(CHANGE_KINDS.map(k => [k.id, k]))
 
+// Tipos de notificação do sino. A cor é a identidade do tipo: aparece no chip
+// do filtro e na borda/selo do card, sempre o mesmo valor nos dois lugares.
+// Os hexadecimais são os mesmos de --proj-* (tokens.css) — em hex, e não em
+// var(), porque o código monta o fundo suave concatenando alpha ('1a').
+export const NOTIF_KINDS = [
+  { id: 'requisicao', label: 'Requisição', color: '#B0603F' }, // terracota
+  { id: 'sugestao',   label: 'Sugestão',   color: '#C0912E' }, // ocre
+  { id: 'ciencia',    label: 'Ciência',    color: '#4C7F78' }, // verde-azulado
+  { id: 'atividade',  label: 'Atividade',  color: '#5A7695' }, // azul-ardósia
+  { id: 'projeto',    label: 'Projeto',    color: '#6E6A9B' }, // índigo
+]
+export const NOTIF_KIND_MAP = Object.fromEntries(NOTIF_KINDS.map(k => [k.id, k]))
+
 // Urgência. Os ids são os mesmos de PRIORITIES de propósito: a urgência da
 // mudança vira, sem tradução, a prioridade da atividade criada.
 export const URGENCIES = [

@@ -11,7 +11,8 @@ import { Reports } from './screens/Reports/Reports.jsx'
 import { TeamReport } from './screens/TeamReport/TeamReport.jsx'
 import { Login } from './screens/Login/Login.jsx'
 import { api } from './data/api.js'
-import { effectiveProjectRole, canEditProject } from './data/store.js'
+import { effectiveProjectRole, canEditProject, NOTIF_KIND_MAP } from './data/store.js'
+import { tocarAviso, destravarSom, avisarNoNavegador, pedirPermissao, permissaoNotificacao, suportaNotificacao } from './data/avisos.js'
 // Promav app — root: dados vêm do backend (Express + Neon) via src/data/api.js.
 
 const TITLES = { hub: 'Visão geral', projects: 'Projetos', list: 'Lista', kanban: 'Kanban', gantt: 'Gantt', reports: 'Relatórios', team: 'Equipe' }
@@ -24,6 +25,13 @@ const TITLES = { hub: 'Visão geral', projects: 'Projetos', list: 'Lista', kanba
 // painel "Setores" da tela de Equipe — que é o que a aba de Mudanças precisa
 // para endereçar uma mudança a um setor inteiro.
 const MY_SECTOR_ENABLED = false
+
+// Quanto tempo uma atividade que a própria pessoa criou para si precisa ficar
+// parada (sem edição e sem ser aberta) antes de virar notificação para ela.
+const REPOUSO_MS = 3 * 24 * 60 * 60 * 1000 // 3 dias
+
+// De quanto em quanto tempo conferir o carimbo do banco (/api/pulse).
+const PULSE_MS = 30000 // 30s
 
 export default function App() {
   const [authUser, setAuthUser] = React.useState(null)   // usuário logado (ou null)
@@ -82,6 +90,48 @@ export default function App() {
       .catch(() => api.logout())
       .finally(() => setBooting(false))
   }, [loadData])
+
+  // ----- polling: mantém o app em dia sem recarregar a página -----
+  // Consulta o /api/pulse (~100 bytes) e só refaz o /bootstrap (54 KB) quando
+  // o carimbo do banco muda. É o que faz a ciência confirmada por outra pessoa
+  // aparecer sozinha, sem F5.
+  const pulseRef = React.useRef(null)
+  const modalRef = React.useRef(null)
+  modalRef.current = modal
+
+  React.useEffect(() => {
+    if (!authUser || !dataReady) return
+    let vivo = true
+
+    const conferir = async () => {
+      // Aba em segundo plano não consulta: o navegador estrangula o timer de
+      // qualquer jeito e não há nada para mostrar. Voltar para a aba dispara
+      // uma conferida imediata (o listener de visibilitychange abaixo).
+      if (!vivo || document.hidden) return
+      try {
+        const { v } = await api.pulse()
+        if (!vivo || v === pulseRef.current) return
+        // Primeira leitura só semeia: o bootstrap do login já trouxe tudo.
+        if (pulseRef.current === null) { pulseRef.current = v; return }
+        // Com um modal aberto, adia. Recarregar por baixo de um formulário
+        // aberto atropela o que a pessoa está editando. O ref não avança, então
+        // a próxima volta tenta de novo — assim que ela fechar, atualiza.
+        if (modalRef.current) return
+        pulseRef.current = v
+        await loadData()
+      } catch { /* rede instável ou API fora: tenta na próxima volta */ }
+    }
+
+    conferir()
+    const t = setInterval(conferir, PULSE_MS)
+    document.addEventListener('visibilitychange', conferir)
+    return () => {
+      vivo = false
+      pulseRef.current = null // nova sessão volta a semear
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', conferir)
+    }
+  }, [authUser, dataReady, loadData])
 
   // Chamado pela tela de Login. Rejeita em caso de credenciais inválidas.
   const handleLogin = async (email, password) => {
@@ -321,7 +371,15 @@ export default function App() {
 
   // ----- tasks -----
   const openNewTask = (projectId, status) => setModal({ type: 'task', defaultProjectId: projectId, defaultStatus: status })
-  const openEditTask = (task) => setModal({ type: 'task', task })
+  // Abrir a atividade conta como acesso: é o que adia a notificação daquilo
+  // que a própria pessoa criou para si. Falha aqui não pode travar o modal —
+  // o registro de leitura é secundário em relação a ver a atividade.
+  const openEditTask = (task) => {
+    setModal({ type: 'task', task })
+    api.viewTask(task.id)
+      .then(saved => setTasks(ts => ts.map(t => t.id === saved.id ? saved : t)))
+      .catch(() => { /* registro de leitura é best-effort */ })
+  }
   const saveTask = async (data) => {
     try {
       if (data.id) {
@@ -375,6 +433,300 @@ export default function App() {
     } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); flash(e.message || 'Erro ao atualizar checklist.') }
   }
 
+  const [readNewsIds, setReadNewsIds] = React.useState([])
+  // Notificações limpas pela pessoa. Some da lista para sempre — ao contrário
+  // de "lida", que só tira o destaque. É por usuário e fica só neste navegador.
+  const [dismissedNewsIds, setDismissedNewsIds] = React.useState([])
+  // Preferências de aviso. Som já entra ligado (é discreto e não pede
+  // permissão); a notificação do sistema começa desligada porque depende de a
+  // pessoa autorizar no navegador.
+  const [avisos, setAvisos] = React.useState({ som: true, navegador: false })
+  const newsKey = authUser ? `promav-news-${authUser.id}` : null
+  const dismissedKey = authUser ? `promav-news-limpas-${authUser.id}` : null
+  const avisosKey = authUser ? `promav-avisos-${authUser.id}` : null
+
+  React.useEffect(() => {
+    if (!avisosKey) return
+    try {
+      const salvo = JSON.parse(localStorage.getItem(avisosKey) || 'null')
+      if (salvo) setAvisos({
+        som: salvo.som !== false,
+        // Vale só se o navegador ainda estiver autorizado: a pessoa pode ter
+        // revogado a permissão nas configurações depois de ligar aqui.
+        navegador: !!salvo.navegador && permissaoNotificacao() === 'granted',
+      })
+    } catch { /* preferência é acessória */ }
+  }, [avisosKey])
+
+  React.useEffect(() => {
+    if (!avisosKey) return
+    try { localStorage.setItem(avisosKey, JSON.stringify(avisos)) } catch { /* ignore */ }
+  }, [avisosKey, avisos])
+
+  React.useEffect(() => {
+    if (!newsKey) { setReadNewsIds([]); return }
+    try {
+      const saved = JSON.parse(localStorage.getItem(newsKey) || '[]')
+      setReadNewsIds(Array.isArray(saved) ? saved : [])
+    } catch {
+      setReadNewsIds([])
+    }
+  }, [newsKey])
+
+  React.useEffect(() => {
+    if (!newsKey) return
+    try { localStorage.setItem(newsKey, JSON.stringify(readNewsIds)) } catch { /* ignore */ }
+  }, [newsKey, readNewsIds])
+
+  React.useEffect(() => {
+    if (!dismissedKey) { setDismissedNewsIds([]); return }
+    try {
+      const saved = JSON.parse(localStorage.getItem(dismissedKey) || '[]')
+      setDismissedNewsIds(Array.isArray(saved) ? saved : [])
+    } catch {
+      setDismissedNewsIds([])
+    }
+  }, [dismissedKey])
+
+  React.useEffect(() => {
+    if (!dismissedKey) return
+    try { localStorage.setItem(dismissedKey, JSON.stringify(dismissedNewsIds)) } catch { /* ignore */ }
+  }, [dismissedKey, dismissedNewsIds])
+
+  // Relógio grosso: o 'now' bate a cada segundo (cronômetro), o que recalcularia
+  // as notificações 60x por minuto à toa. Aqui basta a virada do minuto.
+  const minutoAtual = Math.floor(now / 60000)
+
+  const notifications = React.useMemo(() => {
+    if (!authUser) return []
+    const agora = minutoAtual * 60000
+    const linkedProjectIds = new Set(
+      (projects || []).filter((project) => {
+        if (authUser.isAdmin) return true
+        const members = project.members || []
+        const memberIds = members.map(m => m.userId)
+        return memberIds.includes(authUser.id) || (project.responsibleIds || []).includes(authUser.id)
+      }).map((project) => project.id)
+    )
+
+    const items = []
+    const processedTaskIds = new Set()
+    const projectsWithRelevantActivity = new Set() // Rastreia projetos com mudanças/atividades importantes
+
+    const diaCurto = (ts) => ts
+      ? new Date(ts).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+      : 'Hoje'
+    // Quem registrou a mudança não é avisado dela — ele já sabe. O autor só é
+    // notificado quando OUTRA pessoa confirma ciência (notificações 'ciencia').
+    const souAutor = (c) => c.publishedBy === authUser.id || c.emitterUserId === authUser.id
+    // Atividade que a pessoa criou para si mesma não vira notificação enquanto
+    // ela estiver mexendo nela — ela já sabe que existe. Só depois de 3 dias
+    // parada (sem edição e sem ser aberta) é que passa a cobrar.
+    const emRepousoCurto = (task) => {
+      const souDono = task.createdBy && task.createdBy === authUser.id && task.assigneeId === authUser.id
+      if (!souDono) return false
+      const meuAcesso = (task.views || []).find(v => v.userId === authUser.id)?.seenAt || 0
+      const ultimoToque = Math.max(task.updatedAt || 0, task.createdAt || 0, meuAcesso)
+      return agora - ultimoToque < REPOUSO_MS
+    }
+
+    // Monta o item já com a cor e o destino do clique.
+    const push = (kind, item) => {
+      const tipo = NOTIF_KIND_MAP[kind]
+      items.push({ ...item, kind, tag: tipo.label, color: tipo.color })
+    }
+
+    for (const project of projects) {
+      if (!linkedProjectIds.has(project.id)) continue
+
+      const projectChanges = (changes || []).filter(c => c.projectId === project.id)
+      const myChanges = projectChanges.filter(c => !souAutor(c)
+        && ((c.targetUserIds || []).includes(authUser.id) || (c.targetSectors || []).includes(authUser.sector)))
+
+      // Processa mudanças: consolida mudança + atividade em uma notificação.
+      // O tipo da notificação é o tipo da mudança (requisição ou sugestão),
+      // que é o que separa os filtros do painel.
+      for (const change of myChanges) {
+        const kind = change.kind === 'sugestao' ? 'sugestao' : 'requisicao'
+        const linkedTask = change.taskId ? (tasks || []).find(t => t.id === change.taskId) : null
+        const iAmAssignedToTask = linkedTask && (linkedTask.assigneeId === authUser.id || (linkedTask.memberIds || []).includes(authUser.id))
+        const alvo = { view: 'projects', projectId: project.id, tab: 'mudancas', focusId: `change-${change.id}` }
+        projectsWithRelevantActivity.add(project.id)
+
+        if (linkedTask && iAmAssignedToTask) {
+          // Notificação combinada: mudança que criou uma atividade para mim
+          processedTaskIds.add(linkedTask.id)
+          push(kind, {
+            id: `change-task-${change.id}`,
+            title: linkedTask.title,
+            text: `${change.title} • ${project.name} • gerou uma atividade para você`,
+            time: diaCurto(change.publishedAt),
+            priority: 1,
+            target: alvo,
+          })
+        } else {
+          // Notificação simples de mudança
+          push(kind, {
+            id: `change-${change.id}`,
+            title: change.title,
+            text: `Você foi indicado em ${project.name}.`,
+            time: diaCurto(change.publishedAt),
+            priority: 2,
+            target: alvo,
+          })
+        }
+      }
+
+      // Ciência confirmada nas mudanças que EU registrei — é o retorno que o
+      // autor recebe no lugar da notificação da própria mudança.
+      for (const change of projectChanges) {
+        if (!souAutor(change)) continue
+        for (const ack of change.acks || []) {
+          if (!ack.confirmedAt || ack.userId === authUser.id) continue
+          const quem = (users || []).find(u => u.id === ack.userId)
+          projectsWithRelevantActivity.add(project.id)
+          push('ciencia', {
+            id: `ack-${change.id}-${ack.userId}`,
+            title: `${quem?.name || 'Alguém'} confirmou que viu`,
+            text: `${change.title} • ${project.name}`,
+            time: diaCurto(ack.confirmedAt),
+            priority: 3,
+            target: { view: 'projects', projectId: project.id, tab: 'mudancas', focusId: `change-${change.id}` },
+          })
+        }
+      }
+
+      // Processa atividades não vinculadas a mudanças que já foram notificadas
+      const myTasks = (tasks || []).filter(t =>
+        t.projectId === project.id &&
+        (t.assigneeId === authUser.id || (t.memberIds || []).includes(authUser.id)) &&
+        !processedTaskIds.has(t.id) &&
+        !emRepousoCurto(t)
+      )
+      if (myTasks.length > 0) {
+        projectsWithRelevantActivity.add(project.id)
+      }
+      for (const task of myTasks) {
+        push('atividade', {
+          id: `task-${task.id}`,
+          title: task.title,
+          text: `${project.name} • ${task.status === 'done' ? 'concluída' : task.status === 'progress' ? 'em andamento' : 'a fazer'}`,
+          time: 'Hoje',
+          priority: 4,
+          target: { view: 'projects', projectId: project.id, tab: 'atividades', focusId: `task-${task.id}` },
+        })
+      }
+
+      // Processa atualizações importantes do projeto SOMENTE se não há mudanças/atividades desse projeto
+      if (!projectsWithRelevantActivity.has(project.id) && (project.status || project.start || project.end || project.valorEstimado || project.valorOrcado)) {
+        push('projeto', {
+          id: `project-${project.id}`,
+          title: `Atualização importante em ${project.name}`,
+          text: `${project.status ? `Status: ${project.status}` : 'Dados do projeto foram atualizados'}${project.start || project.end ? ` • ${project.start || '—'} até ${project.end || '—'}` : ''}`,
+          time: 'Hoje',
+          priority: 5,
+          target: { view: 'projects', projectId: project.id, tab: 'panorama' },
+        })
+      }
+    }
+
+    // Ordena por prioridade (maior = mais importante = primeiro)
+    return items
+      .sort((a, b) => (a.priority || 999) - (b.priority || 999))
+      .map(({ priority, ...item }) => item) // Remove o campo de prioridade antes de retornar
+      .slice(0, 20)
+  }, [authUser, projects, tasks, changes, users, minutoAtual])
+
+  // O que a pessoa realmente vê: tudo que ela não limpou.
+  const visibleNotifications = notifications.filter(item => !dismissedNewsIds.includes(item.id))
+
+  // ----- avisos de novidade (som + notificação do sistema) -----
+  // As notificações são estado derivado, recalculado do zero a cada carga: não
+  // existe "chegou agora". A diferença entre o conjunto de ids de antes e o de
+  // agora é o que dá essa noção.
+  const avisosRef = React.useRef(avisos); avisosRef.current = avisos
+  const notifRef = React.useRef([]); notifRef.current = visibleNotifications
+  const abrirRef = React.useRef(null)
+  const vistasRef = React.useRef(null)
+  const idsKey = visibleNotifications.map(i => i.id).join('|')
+
+  // Troca de sessão zera a memória: sem isto, entrar na conta faria as ~20
+  // notificações existentes tocarem todas de uma vez, como se fossem novas.
+  React.useEffect(() => { vistasRef.current = null }, [authUser?.id])
+
+  React.useEffect(() => {
+    const itens = notifRef.current
+    const anterior = vistasRef.current
+    vistasRef.current = new Set(itens.map(i => i.id))
+    if (anterior === null) return // primeira passada só semeia
+    const novas = itens.filter(i => !anterior.has(i.id))
+    if (!novas.length) return
+    const pref = avisosRef.current
+    if (pref.som) tocarAviso()
+    // Só avisa o sistema com a aba escondida: com o app na frente, a pessoa
+    // já vê o sino piscando e o pop-up vira ruído.
+    if (pref.navegador && document.hidden) avisarNoNavegador(novas, (item) => abrirRef.current?.(item))
+  }, [idsKey])
+  const unreadNotifications = visibleNotifications.filter(item => !readNewsIds.includes(item.id))
+
+  // Limpar é irreversível (não há "desfazer"), por isso as duas ações passam
+  // pelo mesmo ConfirmDialog do resto do app.
+  const askDismissNotification = (item) => setModal({
+    type: 'confirm', title: 'Excluir esta notificação?',
+    message: `"${item.title}" sai da sua lista de novidades. A atividade ou mudança em si não é apagada.`,
+    onConfirm: () => {
+      setDismissedNewsIds(prev => prev.includes(item.id) ? prev : [...prev, item.id])
+      setModal(null); flash('Notificação excluída.')
+    },
+  })
+  const askDismissAllNotifications = () => {
+    const total = visibleNotifications.length
+    if (!total) return
+    setModal({
+      type: 'confirm', title: 'Limpar todas as notificações?',
+      message: `${total} ${total === 1 ? 'notificação sai' : 'notificações saem'} da sua lista. As atividades e mudanças em si não são apagadas.`,
+      onConfirm: () => {
+        setDismissedNewsIds(prev => Array.from(new Set([...prev, ...visibleNotifications.map(i => i.id)])))
+        setModal(null); flash('Notificações limpas.')
+      },
+    })
+  }
+  // Clique na notificação: leva ao lugar onde ela aconteceu (projeto + aba) e
+  // marca como lida. O 'focusNonce' força o destaque a rodar de novo quando a
+  // mesma notificação é clicada duas vezes seguidas.
+  const openNotification = (item) => {
+    if (!item?.target) return
+    const { view, projectId, tab, focusId } = item.target
+    setRoute({ view, projectId, tab, focusId, focusNonce: Date.now() })
+    setReadNewsIds(prev => prev.includes(item.id) ? prev : [...prev, item.id])
+  }
+  // Clicar na notificação do sistema abre o mesmo destino do clique no sino.
+  abrirRef.current = openNotification
+  const markNewsAsRead = (id) => setReadNewsIds(prev => prev.includes(id) ? prev : [...prev, id])
+
+  // Ligar o som aproveita o clique para destravar o AudioContext — os avisos
+  // seguintes vêm do polling, sem gesto nenhum por trás, e seriam bloqueados.
+  const alternarSom = () => {
+    const ligando = !avisos.som
+    if (ligando) { destravarSom(); tocarAviso() }
+    setAvisos(a => ({ ...a, som: ligando }))
+  }
+
+  // A permissão precisa ser pedida de dentro do clique, senão o navegador
+  // ignora o pedido.
+  const alternarNavegador = async () => {
+    if (avisos.navegador) { setAvisos(a => ({ ...a, navegador: false })); return }
+    if (!suportaNotificacao()) { flash('Este navegador não suporta notificações do sistema.'); return }
+    const permissao = await pedirPermissao()
+    if (permissao === 'granted') {
+      setAvisos(a => ({ ...a, navegador: true }))
+      flash('Avisos do navegador ativados.')
+    } else if (permissao === 'denied') {
+      flash('Permissão negada. Libere as notificações nas configurações do navegador.')
+    }
+  }
+  const markAllNewsAsRead = () => setReadNewsIds(prev => Array.from(new Set([...prev, ...visibleNotifications.map(item => item.id)])))
+
   // Checando token salvo.
   if (booting) {
     return (
@@ -414,119 +766,6 @@ export default function App() {
   const currentRole = currentProject ? effectiveProjectRole(currentProject, authUser) : 'view'
   const canEditCurrent = canEditProject(currentRole)
 
-  const [readNewsIds, setReadNewsIds] = React.useState([])
-  const newsKey = authUser ? `promav-news-${authUser.id}` : null
-
-  React.useEffect(() => {
-    if (!newsKey) { setReadNewsIds([]); return }
-    try {
-      const saved = JSON.parse(localStorage.getItem(newsKey) || '[]')
-      setReadNewsIds(Array.isArray(saved) ? saved : [])
-    } catch {
-      setReadNewsIds([])
-    }
-  }, [newsKey])
-
-  React.useEffect(() => {
-    if (!newsKey) return
-    try { localStorage.setItem(newsKey, JSON.stringify(readNewsIds)) } catch { /* ignore */ }
-  }, [newsKey, readNewsIds])
-
-  const notifications = React.useMemo(() => {
-    if (!authUser) return []
-    const linkedProjectIds = new Set(
-      (projects || []).filter((project) => {
-        if (authUser.isAdmin) return true
-        const members = project.members || []
-        const memberIds = members.map(m => m.userId)
-        return memberIds.includes(authUser.id) || (project.responsibleIds || []).includes(authUser.id)
-      }).map((project) => project.id)
-    )
-
-    const items = []
-    const processedTaskIds = new Set()
-    const projectsWithRelevantActivity = new Set() // Rastreia projetos com mudanças/atividades importantes
-
-    for (const project of projects) {
-      if (!linkedProjectIds.has(project.id)) continue
-
-      const projectChanges = (changes || []).filter(c => c.projectId === project.id)
-      const myChanges = projectChanges.filter(c => (c.targetUserIds || []).includes(authUser.id) || (c.targetSectors || []).includes(authUser.sector))
-
-      // Processa mudanças: consolida mudança + atividade em uma notificação
-      for (const change of myChanges) {
-        const linkedTask = change.taskId ? (tasks || []).find(t => t.id === change.taskId) : null
-        const iAmAssignedToTask = linkedTask && (linkedTask.assigneeId === authUser.id || (linkedTask.memberIds || []).includes(authUser.id))
-
-        if (linkedTask && iAmAssignedToTask) {
-          // Notificação combinada: mudança que criou uma atividade para mim
-          processedTaskIds.add(linkedTask.id)
-          projectsWithRelevantActivity.add(project.id)
-          items.push({
-            id: `change-task-${change.id}`,
-            tag: 'Atividade + mudança',
-            title: linkedTask.title,
-            text: `${change.title} • ${project.name}`,
-            time: change.publishedAt ? new Date(change.publishedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'Hoje',
-            priority: 1,
-          })
-        } else {
-          // Notificação simples de mudança
-          projectsWithRelevantActivity.add(project.id)
-          items.push({
-            id: `change-${change.id}`,
-            tag: 'Mudança',
-            title: change.title,
-            text: `Você foi indicado em ${project.name}.`,
-            time: change.publishedAt ? new Date(change.publishedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'Hoje',
-            priority: 2,
-          })
-        }
-      }
-
-      // Processa atividades não vinculadas a mudanças que já foram notificadas
-      const myTasks = (tasks || []).filter(t => 
-        t.projectId === project.id && 
-        (t.assigneeId === authUser.id || (t.memberIds || []).includes(authUser.id)) &&
-        !processedTaskIds.has(t.id)
-      )
-      if (myTasks.length > 0) {
-        projectsWithRelevantActivity.add(project.id)
-      }
-      for (const task of myTasks) {
-        items.push({
-          id: `task-${task.id}`,
-          tag: 'Atividade',
-          title: task.title,
-          text: `${project.name} • ${task.status === 'done' ? 'concluída' : task.status === 'progress' ? 'em andamento' : 'a fazer'}`,
-          time: 'Hoje',
-          priority: 3,
-        })
-      }
-
-      // Processa atualizações importantes do projeto SOMENTE se não há mudanças/atividades desse projeto
-      if (!projectsWithRelevantActivity.has(project.id) && (project.status || project.start || project.end || project.valorEstimado || project.valorOrcado)) {
-        items.push({
-          id: `project-${project.id}`,
-          tag: 'Projeto',
-          title: `Atualização importante em ${project.name}`,
-          text: `${project.status ? `Status: ${project.status}` : 'Dados do projeto foram atualizados'}${project.start || project.end ? ` • ${project.start || '—'} até ${project.end || '—'}` : ''}`,
-          time: 'Hoje',
-          priority: 4,
-        })
-      }
-    }
-
-    // Ordena por prioridade (maior = mais importante = primeiro)
-    return items
-      .sort((a, b) => (a.priority || 999) - (b.priority || 999))
-      .map(({ priority, ...item }) => item) // Remove o campo de prioridade antes de retornar
-      .slice(0, 20)
-  }, [authUser, projects, tasks, changes])
-
-  const unreadNotifications = notifications.filter(item => !readNewsIds.includes(item.id))
-  const markNewsAsRead = (id) => setReadNewsIds(prev => prev.includes(id) ? prev : [...prev, id])
-  const markAllNewsAsRead = () => setReadNewsIds(prev => Array.from(new Set([...prev, ...notifications.map(item => item.id)])))
 
   let screen
   if (route.view === 'hub') {
@@ -535,6 +774,7 @@ export default function App() {
     screen = <ProjectDetail project={currentProject} tasks={tasks} users={users} changes={changes}
       sessions={sessions} currentUserId={currentUserId} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
       canEdit={canEditCurrent} role={currentRole}
+      initialTab={route.tab} focusId={route.focusId} focusNonce={route.focusNonce}
       onBack={() => setRoute({ view: 'projects' })} onEdit={openEditProject}
       onNewTask={openNewTask} onEditTask={openEditTask} onDeleteTask={askDeleteTask}
       onToggleChecklist={toggleChecklistItem}
@@ -582,8 +822,11 @@ export default function App() {
           onLogout={handleLogout} onNewProject={openNewProject}
           tasks={tasks} projects={projects} sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
           searchQuery={projectSearch} onSearchChange={setProjectSearch}
-          notifications={notifications} unreadCount={unreadNotifications.length}
-          readNewsIds={new Set(readNewsIds)} onMarkRead={markNewsAsRead} onMarkAllRead={markAllNewsAsRead} />
+          notifications={visibleNotifications} unreadCount={unreadNotifications.length}
+          readNewsIds={new Set(readNewsIds)} onMarkRead={markNewsAsRead} onMarkAllRead={markAllNewsAsRead}
+          onOpenNotification={openNotification}
+          onDismiss={askDismissNotification} onDismissAll={askDismissAllNotifications}
+          avisos={avisos} onToggleSom={alternarSom} onToggleNavegador={alternarNavegador} />
         <div className="content">{screen}</div>
       </div>
 

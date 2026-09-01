@@ -234,3 +234,48 @@
   .app.nav-open .nav-backdrop { display: block; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
 }
 
+
+/* Bolinha da cor do tipo dentro do chip de filtro. */
+.news-filter-btn { display: inline-flex; align-items: center; gap: 6px; }
+
+.news-filter-dot { width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; }
+
+/* Notificação que leva a algum lugar ganha affordance de clique. */
+.news-item.clickable:hover { border-color: var(--fg-2); box-shadow: var(--shadow-xs); }
+
+.news-item.clickable:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+
+/* Ações do cabeçalho: marcar tudo como lido + limpar tudo. */
+.news-header-acoes { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #f6f4ef; border-bottom: 1px solid var(--border); }
+
+/* Sem quebra de linha: é o que cortava "Limpar tudo" quando os botões
+   disputavam a largura do cabeçalho. */
+.news-header-acoes > .btn { white-space: nowrap; flex-shrink: 0; }
+
+.news-limpar-tudo { display: inline-flex; align-items: center; gap: 5px; color: var(--danger); margin-left: auto; }
+
+.news-limpar-tudo:hover { background: var(--danger-soft); color: var(--danger); }
+
+/* Lixeira de cada notificação: discreta até o mouse passar pelo card. */
+.news-lixeira { display: grid; place-items: center; width: 24px; height: 24px; margin: -4px -4px -4px 2px; border-radius: var(--r-sm); color: var(--fg-4); opacity: 0; transition: opacity var(--dur), background var(--dur), color var(--dur); }
+
+.news-item:hover .news-lixeira, .news-lixeira:focus-visible { opacity: 1; }
+
+.news-lixeira:hover { background: var(--danger-soft); color: var(--danger); }
+
+/* Sem hover (toque), a lixeira fica sempre visível. */
+@media (hover: none) {
+  .news-lixeira { opacity: 1; }
+}
+
+/* Liga/desliga som e avisos do navegador, no cabeçalho do painel. */
+.news-toggle { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--r-sm); color: var(--fg-4); flex-shrink: 0; transition: background var(--dur), color var(--dur); }
+
+.news-toggle:hover { background: rgba(24, 26, 31, 0.04); color: var(--fg-2); }
+
+.news-toggle.on { color: var(--accent-strong); background: rgba(180, 165, 135, 0.16); }
+
+.news-toggle:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
+
+/* O título ocupa a sobra para empurrar os botões para a direita. */
+.news-header .news-title { flex: 1; min-width: 0; }
