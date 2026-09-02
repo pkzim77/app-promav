@@ -108,6 +108,9 @@ export const api = {
   updateChange: (id, data) => req('PUT', `/changes/${id}`, data),
   ackChange: (id) => req('POST', `/changes/${id}/ack`),
   decideChange: (id, accept, reason) => req('POST', `/changes/${id}/decide`, { accept, reason }),
+  createUser: (data) => req('POST', '/users', data),
+  updateUser: (id, data) => req('PUT', `/users/${id}`, data),
+  deleteUser: (id) => req('DELETE', `/users/${id}`),
   setUserSector: (id, sector) => req('PUT', `/users/${id}/sector`, { sector }),
   setMySector: (sector) => req('POST', '/auth/sector', { sector }),
 

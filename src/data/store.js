@@ -61,17 +61,18 @@ export const SECRETARIAS = [
   'Administração',
 ]
 
-// Contas de manutenção do sistema (users.is_dev): mantêm o app, não tocam
-// obra, então ficam fora de toda lista onde se escolhe gente para trabalhar.
-// Continuam visíveis onde só se EXIBE quem já está num registro — o avatar de
-// um responsável antigo não pode virar "?" porque a conta saiu das listas.
+// Contas de manutenção do sistema (users.is_dev) e profissionais inativos
+// (users.isActive === false) ficam fora de toda lista onde se escolhe gente
+// para trabalhar. Continuam visíveis onde só se EXIBE quem já está num
+// registro — o avatar de um responsável antigo não pode virar "?" porque a
+// conta saiu das listas.
 //
 // Passe em `jaVinculados` quem o registro aberto já aponta (responsável atual,
 // membros, destinatários). Sem isso, o seletor abriria sem a opção que está
 // gravada e o próximo "salvar" trocaria a pessoa sem ninguém pedir.
 export const paraAtribuir = (users = [], ...jaVinculados) => {
   const manter = new Set(jaVinculados.flat().filter(Boolean))
-  return users.filter(u => !u.isDev || manter.has(u.id))
+  return users.filter(u => (!u.isDev && u.isActive !== false) || manter.has(u.id))
 }
 
 // Compara ignorando caixa e acento, para "Umari" (digitado quando o campo era
@@ -104,12 +105,12 @@ export const PROJECT_STATUS_MAP = Object.fromEntries(PROJECT_STATUSES.map(s => [
 // Setores da PROMAV. Cada usuário pertence a um (users.sector); é isso que faz
 // "destinatário: Engenharia" resolver para pessoas de verdade.
 export const SECTORS = [
-  { id: 'engenharia',  label: 'Engenharia' },
-  { id: 'arquitetura', label: 'Arquitetura' },
-  { id: 'orcamento',   label: 'Orçamento' },
-  { id: 'coordenacao', label: 'Coordenação' },
-  { id: 'direcao',     label: 'Direção' },
-  { id: 'estagio',     label: 'Estágio' },
+  { id: 'Engenharia',  label: 'Engenharia' },
+  { id: 'Arquitetura', label: 'Arquitetura' },
+  { id: 'Orcamento',   label: 'Orçamento' },
+  { id: 'Coordenacão', label: 'Coordenação' },
+  { id: 'Direcão',     label: 'Direção' },
+  { id: 'Estágio',     label: 'Estágio' },
 ]
 export const SECTOR_MAP = Object.fromEntries(SECTORS.map(s => [s.id, s]))
 export const sectorLabel = (id) => SECTOR_MAP[id]?.label || null

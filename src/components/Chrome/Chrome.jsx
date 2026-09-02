@@ -157,6 +157,7 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
 
   const nav = [
     { id: 'hub', label: 'Visão geral', icon: 'hub' },
+    ...(isAdmin ? [{ id: 'people', label: 'Profissionais', icon: 'users' }] : []),
     { id: 'reports', label: 'Relatórios Dos Projetos', icon: 'trendingUp' },
     { id: 'team', label: 'Relatórios Da Equipe', icon: 'users' },
   ]
