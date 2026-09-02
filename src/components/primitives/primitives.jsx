@@ -4,12 +4,21 @@ import { Icon } from '../Icon.jsx'
 import { STATUS_MAP, PRIORITY_MAP, PROJECT_COLORS } from '../../data/store.js'
 // Reusable presentational primitives for the Promav UI.
 
+// Pessoa inativa continua aparecendo onde já é histórico (responsável de uma
+// atividade antiga, sessão de tempo, mudança publicada) — só fica esmaecida e
+// com "(inativo)" no tooltip, para não sumir do registro nem parecer ativa.
+const avatarStyle = (user, size) => ({
+  width: size, height: size, background: user.color, fontSize: size * 0.4,
+  opacity: user.isActive === false ? 0.5 : 1,
+})
+const avatarTitle = (user) => user.name + (user.isActive === false ? ' (inativo)' : '')
+
 export function Avatar({ user, size = 28 }) {
   if (!user) return null
   return React.createElement('span', {
     className: 'av',
-    style: { width: size, height: size, background: user.color, fontSize: size * 0.4 },
-    title: user.name,
+    style: avatarStyle(user, size),
+    title: avatarTitle(user),
   }, user.initials)
 }
 
@@ -21,8 +30,8 @@ export function AvatarStack({ users, size = 24, max = 4 }) {
   return (
     <span className="av-stack">
       {shown.map((u, i) => (
-        <span key={u.id} className="av" title={u.name}
-          style={{ width: size, height: size, background: u.color, fontSize: size * 0.4, marginLeft: i ? -size * 0.32 : 0, zIndex: shown.length - i }}>
+        <span key={u.id} className="av" title={avatarTitle(u)}
+          style={{ ...avatarStyle(u, size), marginLeft: i ? -size * 0.32 : 0, zIndex: shown.length - i }}>
           {u.initials}
         </span>
       ))}

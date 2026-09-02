@@ -307,16 +307,18 @@ app.get('/api/health', wrap(async (_req, res) => {
 }))
 
 // Forma pública de um usuário (sem hash de senha).
-const PUBLIC_USER = 'id, name, initials, color, email, sector, is_admin AS "isAdmin", is_dev AS "isDev"'
+const PUBLIC_USER = 'id, name, initials, color, email, sector, job_title AS "jobTitle", is_admin AS "isAdmin", is_active AS "isActive", is_dev AS "isDev"'
 // Forma reduzida usada em listas (bootstrap/equipe).
-const LIST_USER = 'id, name, initials, color, sector, is_admin AS "isAdmin", is_dev AS "isDev"'
+const LIST_USER = 'id, name, initials, color, email, sector, job_title AS "jobTitle", is_admin AS "isAdmin", is_active AS "isActive", is_dev AS "isDev"'
 
 // ----- autenticação (rotas públicas) -----
 app.post('/api/auth/login', wrap(async (req, res) => {
   const { email, password } = req.body
   if (!email || !password) return res.status(400).json({ error: 'Informe email e senha.' })
-  const [row] = await q('SELECT id, name, initials, color, email, is_admin AS "isAdmin", password_hash FROM users WHERE lower(email) = lower($1)', [email])
-  if (!row || !(await verifyPassword(password, row.password_hash))) {
+  const [row] = await q('SELECT id, name, initials, color, email, is_admin AS "isAdmin", is_active AS "isActive", password_hash FROM users WHERE lower(email) = lower($1)', [email])
+  // Mesma mensagem genérica para senha errada, e-mail inexistente ou conta
+  // inativa — nenhuma delas pode revelar se a conta existe ou está desligada.
+  if (!row || row.isActive === false || !(await verifyPassword(password, row.password_hash))) {
     return res.status(401).json({ error: 'Email ou senha incorretos.' })
   }
   const { password_hash, ...user } = row
@@ -409,8 +411,131 @@ app.get('/api/bootstrap', wrap(async (req, res) => {
   })
 }))
 
-app.get('/api/users', wrap(async (_req, res) => {
+// Gerenciamento de usuários/profissionais: só administradores.
+app.get('/api/users', requireAdmin, wrap(async (_req, res) => {
   res.json(await q(`SELECT ${LIST_USER} FROM users ORDER BY id`))
+}))
+
+app.post('/api/users', requireAdmin, wrap(async (req, res) => {
+  const { name, email, sector = null, jobTitle = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, initialPassword } = req.body || {}
+  const cleanName = String(name || '').trim()
+  const cleanEmail = String(email || '').trim()
+  if (!cleanName || !cleanEmail) return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' })
+
+  // Verifica se e-mail já existe (case-insensitive, como no login)
+  const [existing] = await q('SELECT id FROM users WHERE lower(email) = lower($1)', [cleanEmail])
+  if (existing) return res.status(409).json({ error: `O e-mail "${cleanEmail}" já está em uso.` })
+
+  const id = genId('u')
+  const finalInitials = String(initials || '').trim() || (() => {
+    const parts = cleanName.split(/\s+/).filter(Boolean)
+    return (parts[0]?.[0] || '') + (parts[1]?.[0] || '')
+  })().toUpperCase()
+
+  const passwordToUse = typeof initialPassword === 'string' ? initialPassword.trim() : ''
+  if (!passwordToUse || passwordToUse.length < 6) return res.status(400).json({ error: 'A senha inicial precisa ter ao menos 6 caracteres.' })
+  const passwordHash = await hashPassword(passwordToUse)
+  await q(`
+    INSERT INTO users (id, name, initials, color, email, sector, job_title, is_admin, is_active, password_hash, is_dev)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false)
+  `, [id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, sector || null, jobTitle || null, !!isAdmin, isActive !== false, passwordHash])
+
+  const [row] = await q(`SELECT ${LIST_USER} FROM users WHERE id = $1`, [id])
+  res.status(201).json(row)
+}))
+
+app.put('/api/users/:id', requireAdmin, wrap(async (req, res) => {
+  const { name, email, sector = null, jobTitle = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, initialPassword } = req.body || {}
+  const cleanName = String(name || '').trim()
+  const cleanEmail = String(email || '').trim()
+  if (!cleanName || !cleanEmail) return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' })
+
+  const [target] = await q('SELECT is_admin AS "isAdmin", is_active AS "isActive" FROM users WHERE id = $1', [req.params.id])
+  if (!target) return res.status(404).json({ error: 'Usuário não encontrado.' })
+
+  const nextIsAdmin = !!isAdmin
+  const nextIsActive = isActive !== false
+  const isSelf = req.userId === req.params.id
+
+  // Um admin nunca pode tirar a própria permissão — só outro admin pode fazer
+  // isso, senão a conta se tranca fora do próprio sistema.
+  if (isSelf && target.isAdmin && !nextIsAdmin) {
+    return res.status(400).json({ error: 'Você não pode remover sua própria permissão de administrador.' })
+  }
+  // Ninguém desativa a própria conta — pelo mesmo motivo: ficaria sem acesso
+  // sem ter como reverter sozinho.
+  if (isSelf && target.isActive && !nextIsActive) {
+    return res.status(400).json({ error: 'Você não pode desativar sua própria conta.' })
+  }
+
+  // O sistema nunca pode ficar sem nenhum administrador ativo: bloqueia tanto
+  // tirar o "is_admin" quanto inativar quem for o último admin ativo restante.
+  const wasActiveAdmin = target.isAdmin && target.isActive
+  const willBeActiveAdmin = nextIsAdmin && nextIsActive
+  if (wasActiveAdmin && !willBeActiveAdmin) {
+    const [{ count }] = await q('SELECT count(*)::int AS count FROM users WHERE is_admin = true AND is_active = true')
+    if (count <= 1) {
+      return res.status(400).json({ error: 'Não é possível remover o último administrador ativo do sistema. Promova outra pessoa antes de continuar.' })
+    }
+  }
+
+  // Verifica se e-mail já existe em outro usuário (case-insensitive, como no login)
+  const [existing] = await q('SELECT id FROM users WHERE lower(email) = lower($1) AND id != $2', [cleanEmail, req.params.id])
+  if (existing) return res.status(409).json({ error: `O e-mail "${cleanEmail}" já está em uso.` })
+
+  const finalInitials = String(initials || '').trim() || (() => {
+    const parts = cleanName.split(/\s+/).filter(Boolean)
+    return (parts[0]?.[0] || '') + (parts[1]?.[0] || '')
+  })().toUpperCase()
+
+  if (typeof initialPassword === 'string' && initialPassword.trim() && initialPassword.trim().length < 6) {
+    return res.status(400).json({ error: 'A senha inicial precisa ter ao menos 6 caracteres.' })
+  }
+  const passwordHash = typeof initialPassword === 'string' && initialPassword.trim() ? await hashPassword(initialPassword.trim()) : null
+  await q(`
+    UPDATE users
+    SET name = $2,
+        initials = $3,
+        color = $4,
+        email = $5,
+        sector = $6,
+        job_title = $7,
+        is_admin = $8,
+        is_active = $9${passwordHash ? ', password_hash = $10' : ''}
+    WHERE id = $1
+  `, passwordHash ? [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, sector || null, jobTitle || null, !!isAdmin, isActive !== false, passwordHash] : [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, sector || null, jobTitle || null, !!isAdmin, isActive !== false])
+
+  const [row] = await q(`SELECT ${LIST_USER} FROM users WHERE id = $1`, [req.params.id])
+  if (!row) return res.status(404).json({ error: 'Usuário não encontrado.' })
+  res.json(row)
+}))
+
+// Exclusão definitiva de um profissional. Sessões de cronômetro e vínculos
+// de projeto/tarefa desse usuário são apagados/desvinculados em cascata pelo
+// próprio banco (ON DELETE); não há checagem de histórico aqui de propósito.
+app.delete('/api/users/:id', requireAdmin, wrap(async (req, res) => {
+  const [target] = await q('SELECT is_admin AS "isAdmin", is_active AS "isActive" FROM users WHERE id = $1', [req.params.id])
+  if (!target) return res.status(404).json({ error: 'Usuário não encontrado.' })
+
+  if (req.userId === req.params.id) {
+    return res.status(400).json({ error: 'Você não pode excluir sua própria conta.' })
+  }
+  if (target.isAdmin && target.isActive) {
+    const [{ count }] = await q('SELECT count(*)::int AS count FROM users WHERE is_admin = true AND is_active = true')
+    if (count <= 1) {
+      return res.status(400).json({ error: 'Não é possível excluir o último administrador ativo do sistema. Promova outra pessoa antes de continuar.' })
+    }
+  }
+
+  try {
+    await q('DELETE FROM users WHERE id = $1', [req.params.id])
+  } catch (e) {
+    if (e.code === '23503') {
+      return res.status(409).json({ error: 'Não é possível excluir: este profissional publicou ou editou uma mudança registrada no sistema, e esse histórico precisa ser mantido. Inative o profissional em vez de excluir.' })
+    }
+    throw e
+  }
+  res.status(204).end()
 }))
 
 // ----- projetos -----
@@ -1269,6 +1394,9 @@ async function ensureSchema() {
   // Setor da pessoa (engenharia, arquitetura…). É o que faz "destinatário:
   // Engenharia" resolver para gente de verdade na hora de cobrar ciência.
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS sector text')
+  // Cargo e situação ativa/inativa da pessoa.
+  await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title text')
+  await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true')
 
   // ----- permissões -----
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin boolean NOT NULL DEFAULT false')
