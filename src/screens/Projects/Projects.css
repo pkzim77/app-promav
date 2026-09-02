@@ -170,11 +170,17 @@
 
 .proj-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 22px; }
 
-.proj-tab { display: inline-flex; align-items: center; gap: 7px; padding: 10px 14px; font-size: 13.5px; font-weight: 600; color: var(--fg-3); border-bottom: 2px solid transparent; margin-bottom: -1px; border-radius: var(--r-sm) var(--r-sm) 0 0; transition: background var(--dur), color var(--dur); }
+.proj-tab { display: inline-flex; align-items: center; gap: 7px; padding: 10px 14px; font-size: 13.5px; font-weight: 600; color: var(--fg-3); border-bottom: 3px solid transparent; margin-bottom: -1px; border-radius: var(--r-sm) var(--r-sm) 0 0; transition: background var(--dur), color var(--dur), border-color var(--dur); }
 
 .proj-tab:hover { background: var(--bg-muted); color: var(--fg-1); }
 
-.proj-tab.on { color: var(--brand); border-bottom-color: var(--brand); }
+/* Além da cor do texto e do sublinhado, a aba ativa ganha fundo — só a
+   diferença de cinza para preto ficava fraca demais. O traço de 3px fica na
+   regra base (transparente) para a linha não pular ao trocar de aba, e o peso
+   da fonte não muda para o texto não mudar de largura. */
+.proj-tab.on { color: var(--brand); border-bottom-color: var(--brand); background: var(--brand-soft); }
+
+.proj-tab.on:hover { background: var(--brand-soft-2); }
 
 /* ---------- Capa do projeto (aba "Dados do projeto") ---------- */
 
@@ -386,9 +392,9 @@
 
 /* Histórico: escolher uma mudança anterior para comparar. */
 /* Selo de tipo: requisição obriga, sugestão propõe. */
-.mud-selo.tipo-requisicao { color: #276B46; background: var(--success-soft); }
+.mud-selo.tipo-requisicao { color: var(--kind-requisicao); background: var(--success-soft); }
 
-.mud-selo.tipo-sugestao { color: #5F5C56; background: var(--bg-muted); }
+.mud-selo.tipo-sugestao { color: var(--kind-sugestao); background: var(--bg-muted); }
 
 /* Emissor → destinatário */
 .mud-depara { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-bottom: 16px; padding: 10px 14px; border-radius: var(--r-md); background: var(--bg-subtle); }

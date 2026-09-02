@@ -77,6 +77,14 @@
   --proj-purple: #8A6690;  /* ameixa    */
   --proj-pink:   #B0757F;  /* rosa-velho */
 
+  /* ---------- Tipo da mudança ----------
+     A MESMA cor identifica o tipo no selo do cartão e no chip de notificação.
+     O selo do cartão é a referência: estes valores saíram dele. NOTIF_KINDS
+     (store.js) repete os hexadecimais porque monta o fundo suave concatenando
+     alpha — mexeu aqui, mexa lá. */
+  --kind-requisicao: #276B46;  /* verde — obriga    */
+  --kind-sugestao:   #5F5C56;  /* cinza — proposta  */
+
   /* ---------- Radii ---------- */
   --r-xs:   6px;
   --r-sm:   8px;
