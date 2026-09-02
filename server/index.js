@@ -961,7 +961,7 @@ app.post('/api/projects/:id/changes', gate((req) => req.params.id, CAN.publishCh
   const {
     title, description, requester = '', changeDate,
     kind, urgency, targetUserIds = [], targetSectors = [], targetSector = null,
-    emitterUserId = null, emitterSector = null, affectsBudget = false,
+    affectsBudget = false,
   } = req.body
   if (!String(title || '').trim()) return res.status(400).json({ error: 'Informe o que mudou, em uma linha.' })
   if (!String(description || '').trim()) return res.status(400).json({ error: 'Descreva a mudança para quem vai fazer.' })
@@ -978,8 +978,10 @@ app.post('/api/projects/:id/changes', gate((req) => req.params.id, CAN.publishCh
     if (erro) return res.status(400).json({ error: erro })
   }
 
-  const emissorSetor = normSetor(emitterSector)
-  const emissorPessoa = emissorSetor ? null : (emitterUserId || req.userId)
+  // O emissor é sempre quem publica — não é escolha do formulário e o que
+  // vier no corpo é ignorado de propósito: quem emitiu não é dado do cliente.
+  const emissorPessoa = req.userId
+  const emissorSetor = null
 
   const id = genId('mc')
   await tx(async (client) => {
@@ -1012,7 +1014,7 @@ app.post('/api/projects/:id/changes', gate((req) => req.params.id, CAN.publishCh
 app.put('/api/changes/:id', gate(changeProjectId, CAN.edit), wrap(async (req, res) => {
   const {
     title, description, requester = '', changeDate, urgency,
-    targetUserIds = [], targetSectors = [], targetSector = null, emitterUserId = null, emitterSector = null,
+    targetUserIds = [], targetSectors = [], targetSector = null,
   } = req.body
   if (!String(title || '').trim()) return res.status(400).json({ error: 'Informe o que mudou, em uma linha.' })
   if (!String(description || '').trim()) return res.status(400).json({ error: 'Descreva a mudança para quem vai fazer.' })
@@ -1031,19 +1033,18 @@ app.put('/api/changes/:id', gate(changeProjectId, CAN.edit), wrap(async (req, re
     if (erro) return res.status(400).json({ error: erro })
   }
 
-  const emissorSetor = normSetor(emitterSector)
-  const emissorPessoa = emissorSetor ? null : emitterUserId
-
+  // O emissor NÃO entra na edição: quem emitiu é quem publicou, e editar o
+  // texto depois não transfere a autoria para quem editou (isso fica em
+  // edited_by). As colunas ficam intocadas de propósito.
   await tx(async (client) => {
     await client.query(
       `UPDATE changes SET title = $2, description = $3, origin = $4, change_date = $5,
                           responsible_id = $6, target_sector = $7, target_sectors = $8, target_user_ids = $9, urgency = $10,
-                          emitter_user_id = $11, emitter_sector = $12,
-                          edited_by = $13, edited_at = now()
+                          edited_by = $11, edited_at = now()
        WHERE id = $1`,
       [req.params.id, String(title).trim(), String(description).trim(), String(requester || '').trim(),
       changeDate, alvos[0] || null, alvoSetor, JSON.stringify(alvosSetores), JSON.stringify(alvos), normUrgency(urgency),
-       emissorPessoa || null, emissorSetor, req.userId]
+       req.userId]
     )
     if (atual.task_id) {
       await client.query('UPDATE tasks SET title = $2, assignee_id = $3, priority = $4 WHERE id = $1',

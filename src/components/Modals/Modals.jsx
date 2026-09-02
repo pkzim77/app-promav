@@ -710,10 +710,6 @@ function lerLado(v) {
   if (v.startsWith('u:')) return { userId: v.slice(2), sector: null }
   return { userId: null, sector: v.slice(2) }
 }
-function escreverLado({ userId, sector }) {
-  return sector ? LADO_SETOR(sector) : userId ? LADO_PESSOA(userId) : ''
-}
-
 // Um <select> de pessoa-ou-setor, com as duas listas separadas por grupo.
 function LadoSelect({ value, onChange, equipe, incluirVazio, rotuloVazio }) {
   return (
@@ -732,7 +728,7 @@ function LadoSelect({ value, onChange, equipe, incluirVazio, rotuloVazio }) {
 // Publicar ou editar uma MUDANÇA do projeto (a "orientação"). O mesmo modal
 // serve aos dois casos; só a criação pergunta se altera orçamento ou prazo,
 // porque essa resposta congela na publicação.
-export function ChangeModal({ change, projectId, users = [], members = [], currentUserId, onSave, onClose }) {
+export function ChangeModal({ change, projectId, users = [], members = [], onSave, onClose }) {
   const editing = !!change
   const [title, setTitle] = React.useState(change?.title || '')
   const [changeDate, setChangeDate] = React.useState(change?.changeDate || new Date().toISOString().slice(0, 10))
@@ -751,11 +747,8 @@ export function ChangeModal({ change, projectId, users = [], members = [], curre
     .filter(u => u.isAdmin || members.some(m => m.userId === u.id))
   const equipeDestinatarios = equipe.filter(u => members.some(m => m.userId === u.id))
 
-  // Emissor já vem preenchido com quem abriu — o caso comum é a própria pessoa
-  // registrando. Trocar cobre "quem pediu foi outro, eu só digitei".
-  const [emissor, setEmissor] = React.useState(
-    escreverLado({ userId: change?.emitterUserId, sector: change?.emitterSector }) || LADO_PESSOA(currentUserId)
-  )
+  // O emissor não é mais escolhido no formulário: é sempre quem publica, e o
+  // servidor é quem carimba (o cliente nem envia). Editar não troca o emissor.
   // Destinatário: um setor e/ou uma lista de pessoas. O setor continua sendo
   // único por compatibilidade com o contrato da API, mas pode ser combinado
   // com participantes avulsos.
@@ -810,7 +803,6 @@ export function ChangeModal({ change, projectId, users = [], members = [], curre
   const save = async () => {
     setTouched(true)
     if (!title.trim() || !description.trim() || !changeDate || !temDestino) return
-    const em = lerLado(emissor)
     setSaving(true)
     try {
       await onSave({
@@ -818,7 +810,6 @@ export function ChangeModal({ change, projectId, users = [], members = [], curre
         title: title.trim(), description: description.trim(), requester: requester.trim(),
         changeDate, urgency,
         targetUserIds: destPessoas, targetSectors: destSetores, targetSector: destSetores[0] || null,
-        emitterUserId: em.userId, emitterSector: em.sector,
         ...(editing ? {} : { kind, affectsBudget }),
       })
     } finally { setSaving(false) }
@@ -864,29 +855,25 @@ export function ChangeModal({ change, projectId, users = [], members = [], curre
         </Field>
       </div>
 
-      <div className="field-row">
-        <Field label="Emissor">
-          <LadoSelect value={emissor} onChange={setEmissor} equipe={equipe} />
-          <span className="peso-hint">De quem partiu o pedido.</span>
-        </Field>
-        <Field label="Destinatário">
-          {/* Cada escolha mantém um seletor abaixo para incluir outra pessoa
-              ou setor; pessoas avulsas podem acompanhar o setor. */}
-          <div className="dest-lista">
-            {destSetores.map((setor, i) => <div className="dest-linha" key={'setor-' + setor}>
-              <LadoSelect value={LADO_SETOR(setor)} onChange={v => alterarSetor(i, v)} equipe={equipeDestinatarios} />
-              <button type="button" className="btn-icon" onClick={() => removerSetor(i)} aria-label="Remover setor"><Icon name="x" size={16} /></button>
-            </div>)}
-            {destPessoas.map((uid, i) => <div className="dest-linha" key={uid}>
-              <LadoSelect value={LADO_PESSOA(uid)} onChange={v => definirDestino(i, v)} equipe={equipeDestinatarios} />
-              <button type="button" className="btn-icon" onClick={() => removerDestino(i)} aria-label="Remover destinatário"><Icon name="x" size={16} /></button>
-            </div>)}
-            <LadoSelect value="" onChange={definirSetorOuPessoa} equipe={equipeDestinatarios}
-              incluirVazio rotuloVazio={temDestino ? '+ incluir outra pessoa ou setor' : 'Escolha pessoa ou setor'} />
-          </div>
-          {destErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{destErr}</span>}
-        </Field>
-      </div>
+      {/* Não há campo de emissor: quem publica é o emissor, e isso aparece no
+          cartão depois de publicado ("De … Para …"). */}
+      <Field label="Destinatário">
+        {/* Cada escolha mantém um seletor abaixo para incluir outra pessoa
+            ou setor; pessoas avulsas podem acompanhar o setor. */}
+        <div className="dest-lista">
+          {destSetores.map((setor, i) => <div className="dest-linha" key={'setor-' + setor}>
+            <LadoSelect value={LADO_SETOR(setor)} onChange={v => alterarSetor(i, v)} equipe={equipeDestinatarios} />
+            <button type="button" className="btn-icon" onClick={() => removerSetor(i)} aria-label="Remover setor"><Icon name="x" size={16} /></button>
+          </div>)}
+          {destPessoas.map((uid, i) => <div className="dest-linha" key={uid}>
+            <LadoSelect value={LADO_PESSOA(uid)} onChange={v => definirDestino(i, v)} equipe={equipeDestinatarios} />
+            <button type="button" className="btn-icon" onClick={() => removerDestino(i)} aria-label="Remover destinatário"><Icon name="x" size={16} /></button>
+          </div>)}
+          <LadoSelect value="" onChange={definirSetorOuPessoa} equipe={equipeDestinatarios}
+            incluirVazio rotuloVazio={temDestino ? '+ incluir outra pessoa ou setor' : 'Escolha pessoa ou setor'} />
+        </div>
+        {destErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{destErr}</span>}
+      </Field>
 
       {semNinguemNoSetor && (
         <p className="ro-hint" style={{ marginTop: -4 }}>
