@@ -1,7 +1,7 @@
 import React from 'react'
 import { Sidebar, TopBar } from './components/Chrome/Chrome.jsx'
 import { Toast } from './components/primitives/primitives.jsx'
-import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal } from './components/Modals/Modals.jsx'
+import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal, PeopleModal } from './components/Modals/Modals.jsx'
 import { Hub } from './screens/Hub/Hub.jsx'
 import { ProjectList, ProjectDetail } from './screens/Projects/Projects.jsx'
 import { Kanban } from './screens/Kanban/Kanban.jsx'
@@ -9,13 +9,14 @@ import { TaskListView } from './screens/List/List.jsx'
 import { Gantt } from './screens/Gantt/Gantt.jsx'
 import { Reports } from './screens/Reports/Reports.jsx'
 import { TeamReport } from './screens/TeamReport/TeamReport.jsx'
+import { People } from './screens/People/People.jsx'
 import { Login } from './screens/Login/Login.jsx'
 import { api } from './data/api.js'
 import { effectiveProjectRole, canEditProject, NOTIF_KIND_MAP } from './data/store.js'
 import { tocarAviso, destravarSom, avisarNoNavegador, pedirPermissao, permissaoNotificacao, suportaNotificacao } from './data/avisos.js'
 // Promav app — root: dados vêm do backend (Express + Neon) via src/data/api.js.
 
-const TITLES = { hub: 'Visão geral', projects: 'Projetos', list: 'Lista', kanban: 'Kanban', gantt: 'Gantt', reports: 'Relatórios', team: 'Equipe' }
+const TITLES = { hub: 'Visão geral', projects: 'Projetos', list: 'Lista', kanban: 'Kanban', gantt: 'Gantt', people: 'Profissionais', reports: 'Relatórios', team: 'Equipe' }
 
 // "Meu setor" (a pessoa escolhendo o próprio setor no menu da conta) está
 // pausado: entra numa próxima leva, junto do resto da gestão de setores.
@@ -158,6 +159,10 @@ export default function App() {
   }
 
   const navigate = (r) => {
+    if (r.view === 'people' && !isAdmin) {
+      setRoute({ view: 'hub' })
+      return
+    }
     setRoute({ view: r.view, projectId: r.projectId })
     // Ao abrir a Lista a partir de um projeto, já filtra por ele.
     if (r.view === 'list') setFilterProject(r.projectId || null)
@@ -226,6 +231,9 @@ export default function App() {
 
   // ----- projects -----
   const openNewProject = (folderId) => setModal({ type: 'project', defaultFolderId: typeof folderId === 'string' ? folderId : null })
+  const openNewPerson = () => setModal({ type: 'person' })
+  const openEditPerson = (user) => setModal({ type: 'person', user })
+  const openProjectFromPerson = (projectId) => { setModal(null); setRoute({ view: 'projects', projectId }) }
   const openEditProject = (project) => setModal({ type: 'project', project })
   const renameProject = async (project) => {
     const name = window.prompt('Novo nome do projeto:', project.name)
@@ -247,6 +255,36 @@ export default function App() {
       setModal(null)
     } catch (e) { flash(e.message || 'Erro ao salvar projeto.') }
   }
+  const saveUser = async (data) => {
+    try {
+      const payload = {
+        name: data.name.trim(),
+        email: data.email.trim(),
+        sector: data.sector || null,
+        jobTitle: data.jobTitle?.trim() || null,
+        initials: data.initials || '',
+        color: data.color || 'var(--proj-blue)',
+        isAdmin: !!data.isAdmin,
+        isActive: data.isActive !== false,
+        initialPassword: data.initialPassword || undefined,
+      }
+      const saved = data.id ? await api.updateUser(data.id, payload) : await api.createUser(payload)
+      setUsers(us => data.id ? us.map(u => u.id === saved.id ? saved : u) : [saved, ...us])
+      setModal(null)
+      flash(data.id ? 'Profissional atualizado.' : 'Profissional criado.')
+    } catch (e) { flash(e.message || 'Erro ao salvar profissional.') }
+  }
+  const askDeletePerson = (user) => setModal({
+    type: 'confirm', title: 'Excluir profissional?',
+    message: `"${user.name}" será removido permanentemente. Vínculos com projetos e atividades são desfeitos, e o histórico de cronômetro dessa pessoa é apagado. Essa ação não pode ser desfeita.`,
+    onConfirm: async () => {
+      try {
+        await api.deleteUser(user.id)
+        setUsers(us => us.filter(u => u.id !== user.id))
+        setModal(null); flash('Profissional excluído.')
+      } catch (e) { flash(e.message || 'Erro ao excluir profissional.') }
+    },
+  })
   const askDeleteProject = (project) => setModal({
     type: 'confirm', title: 'Excluir projeto?',
     message: `As atividades de "${project.name}" também serão removidas. Essa ação não pode ser desfeita.`,
@@ -756,21 +794,22 @@ export default function App() {
     )
   }
 
-  const currentProject = route.projectId ? projects.find(p => p.id === route.projectId) : null
+  const isAdmin = !!authUser?.isAdmin
+  const effectiveRoute = route.view === 'people' && !isAdmin ? { view: 'hub' } : route
+  const currentProject = effectiveRoute.projectId ? projects.find(p => p.id === effectiveRoute.projectId) : null
   const normalizedSearch = projectSearch.trim().toLocaleLowerCase('pt-BR')
   const searchedProjects = normalizedSearch
     ? projects.filter(p => `${p.name} ${p.desc || ''}`.toLocaleLowerCase('pt-BR').includes(normalizedSearch))
     : projects
-  const isAdmin = !!authUser?.isAdmin
   // Papel efetivo do usuário no projeto aberto (admin/full/view).
   const currentRole = currentProject ? effectiveProjectRole(currentProject, authUser) : 'view'
   const canEditCurrent = canEditProject(currentRole)
 
 
   let screen
-  if (route.view === 'hub') {
+  if (effectiveRoute.view === 'hub') {
     screen = <Hub projects={projects} recentProjects={searchedProjects} tasks={tasks} onNavigate={navigate} sessions={sessions} currentUserId={currentUserId} now={now} />
-  } else if (route.view === 'projects' && currentProject) {
+  } else if (effectiveRoute.view === 'projects' && currentProject) {
     screen = <ProjectDetail project={currentProject} tasks={tasks} users={users} changes={changes}
       sessions={sessions} currentUserId={currentUserId} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
       canEdit={canEditCurrent} role={currentRole}
@@ -781,30 +820,33 @@ export default function App() {
       onCopyResource={copyResourceLink} onDeleteResource={(resource) => askDeleteResource(currentProject, resource)}
       onAddResource={openAddResource}
       onNewChange={openNewChange} onEditChange={openEditChange} onAckChange={ackChange} onDecideChange={decideChange} />
-  } else if (route.view === 'projects') {
+  } else if (effectiveRoute.view === 'projects') {
     screen = <ProjectList projects={searchedProjects} tasks={tasks} folders={folders} authUser={authUser} canCreate={isAdmin}
       onOpen={(id) => setRoute({ view: 'projects', projectId: id })}
       onEdit={openEditProject} onDelete={askDeleteProject} onNew={openNewProject} onMoveProject={moveProject} onMoveFolder={moveFolder} onNewSubfolder={createFolder} onDeleteFolder={askDeleteFolder} />
-  } else if (route.view === 'list') {
+  } else if (effectiveRoute.view === 'list') {
     screen = <TaskListView tasks={tasks} projects={projects} users={users} authUser={authUser} filterProject={filterProject} mine={mine}
       currentUserId={currentUserId} onFilterProject={setFilterProject} onToggleMine={() => setMine(m => !m)}
       onMoveTask={moveTask} onNewTask={openNewTask} onEditTask={openEditTask} />
-  } else if (route.view === 'kanban') {
+  } else if (effectiveRoute.view === 'kanban') {
     screen = <Kanban tasks={tasks} projects={projects} users={users} authUser={authUser} filterProject={filterProject} mine={mine}
       currentUserId={currentUserId} onFilterProject={setFilterProject} onToggleMine={() => setMine(m => !m)}
       onMoveTask={moveTask} onNewTask={openNewTask} onEditTask={openEditTask}
       sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer} />
-  } else if (route.view === 'gantt') {
+  } else if (effectiveRoute.view === 'gantt') {
     screen = <Gantt tasks={tasks} projects={projects} filterProject={filterProject} onFilterProject={setFilterProject} />
-  } else if (route.view === 'reports') {
+  } else if (effectiveRoute.view === 'people' && isAdmin) {
+    screen = <People users={users} projects={projects} tasks={tasks} currentUserId={currentUserId}
+      onNewPerson={openNewPerson} onEditPerson={openEditPerson} onDeletePerson={askDeletePerson} />
+  } else if (effectiveRoute.view === 'reports') {
     screen = <Reports projects={projects} tasks={tasks} users={users} />
-  } else if (route.view === 'team') {
+  } else if (effectiveRoute.view === 'team') {
     screen = <TeamReport users={users} tasks={tasks} projects={projects} sessions={sessions} now={now} isAdmin={isAdmin} onSetSector={setUserSector} />
   }
 
   return (
     <div className={'app' + (mobileNavOpen ? ' nav-open' : '')}>
-      <Sidebar route={route} onNavigate={navigate} projects={searchedProjects} tasks={tasks}
+      <Sidebar route={effectiveRoute} onNavigate={navigate} projects={searchedProjects} tasks={tasks}
         folders={folders} isAdmin={isAdmin}
         collapsed={navCollapsed} mobileOpen={mobileNavOpen}
         onToggleCollapse={() => setNavCollapsed(c => !c)}
@@ -815,7 +857,7 @@ export default function App() {
         onRenameProject={renameProject} onEditProject={openEditProject} onDeleteProject={askDeleteProject} />
       <div className="nav-backdrop" onClick={() => setMobileNavOpen(false)} />
       <div className="main">
-        <TopBar title={currentProject ? currentProject.name : TITLES[route.view]} currentUser={authUser}
+        <TopBar title={currentProject ? currentProject.name : TITLES[effectiveRoute.view]} currentUser={authUser}
           canNewProject={isAdmin} onToggleMobileNav={() => setMobileNavOpen(o => !o)}
           onChangePassword={() => setModal({ type: 'password' })}
           onMySector={MY_SECTOR_ENABLED ? () => setModal({ type: 'mysector' }) : undefined}
@@ -847,6 +889,10 @@ export default function App() {
       )}
       {modal?.type === 'project' && (
         <ProjectModal project={modal.project} users={users} folders={folders} defaultFolderId={modal.defaultFolderId} isAdmin={isAdmin} onSave={saveProject} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'person' && (
+        <PeopleModal user={modal.user} currentUserId={currentUserId} projects={projects} tasks={tasks} changes={changes}
+          onOpenProject={openProjectFromPerson} onSave={saveUser} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'resource' && modal.resType === 'doc' && (
         <DocumentModal onSave={saveResource} onClose={() => setModal(null)} />
