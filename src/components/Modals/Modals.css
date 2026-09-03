@@ -6,7 +6,27 @@
 
 .field-error { font-size: 12.5px; color: var(--danger); display: flex; align-items: center; gap: 5px; }
 
+.password-field { display: flex; gap: 6px; align-items: center; }
+
+.password-field .control { flex: 1; }
+
+.password-copied { font-size: 12.5px; color: var(--success); display: flex; align-items: center; gap: 5px; }
+
 .project-modal { max-width: 900px; }
+
+.tabs-strip {
+  display: flex; gap: 22px; margin: -4px 0 20px; border-bottom: 1px solid var(--border);
+}
+
+.tabs-strip button {
+  display: flex; align-items: center; padding: 0 0 10px; border: none; background: none;
+  font-size: 14px; font-weight: 600; color: var(--fg-3); cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color var(--dur);
+}
+
+.tabs-strip button:hover { color: var(--fg-1); }
+
+.tabs-strip button.on { color: var(--fg-1); border-bottom-color: var(--brand); }
 
 .color-swatches { display: flex; gap: 10px; }
 
@@ -95,6 +115,15 @@
 .perm-name { flex: 1; min-width: 0; font-size: 13.5px; color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .perm-select { flex: 0 0 168px; width: 168px; min-width: 0; }
+
+.people-project-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 10px; border-radius: var(--r-md); border: 1px solid var(--border);
+  background: var(--surface); text-align: left; cursor: pointer; transition: background var(--dur);
+}
+
+.people-project-row:hover { background: var(--bg-subtle); }
+
 
 /* Selo do administrador na coluna "Acesso ao projeto". O slot ocupa a mesma
    largura do seletor de papel, para as linhas alinharem; o selo em si mantém
