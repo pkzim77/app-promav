@@ -125,14 +125,26 @@ export const CHANGE_KIND_MAP = Object.fromEntries(CHANGE_KINDS.map(k => [k.id, k
 
 // Tipos de notificação do sino. A cor é a identidade do tipo: aparece no chip
 // do filtro e na borda/selo do card, sempre o mesmo valor nos dois lugares.
-// Os hexadecimais são os mesmos de --proj-* (tokens.css) — em hex, e não em
-// var(), porque o código monta o fundo suave concatenando alpha ('1a').
+// Em hex, e não em var(), porque o código monta o fundo suave concatenando
+// alpha ('1a') — mexeu aqui, mexa no token correspondente em tokens.css.
+//
+// Requisição e Sugestão espelham --kind-* : quem manda é o selo do cartão da
+// mudança, para o mesmo tipo não ter duas cores no app.
+//
+// Os outros três são os --proj-* correspondentes escurecidos: o texto do chip
+// tem 11px sobre o próprio fundo a 10% de alpha, e nos tons originais o
+// contraste ficava em 4,0–4,2:1, abaixo do mínimo AA (4,5:1). Assim o conjunto
+// fica entre 4,9 e 5,8:1. O teal ainda ganhou saturação, senão escurecer o
+// aproximava demais do cinza da Sugestão.
+//
+// Se mexer numa cor, refaça DUAS contas: o contraste (o fundo do chip
+// acompanha a cor do texto) e a distância para as outras quatro.
 export const NOTIF_KINDS = [
-  { id: 'requisicao', label: 'Requisição', color: '#B0603F' }, // terracota
-  { id: 'sugestao',   label: 'Sugestão',   color: '#C0912E' }, // ocre
-  { id: 'ciencia',    label: 'Ciência',    color: '#4C7F78' }, // verde-azulado
-  { id: 'atividade',  label: 'Atividade',  color: '#5A7695' }, // azul-ardósia
-  { id: 'projeto',    label: 'Projeto',    color: '#6E6A9B' }, // índigo
+  { id: 'requisicao', label: 'Requisição', color: '#276B46' }, // verde  (--kind-requisicao)
+  { id: 'sugestao',   label: 'Sugestão',   color: '#5F5C56' }, // cinza  (--kind-sugestao)
+  { id: 'ciencia',    label: 'Ciência',    color: '#3C6F68' }, // verde-azulado (--proj-teal   escurecido)
+  { id: 'atividade',  label: 'Atividade',  color: '#506985' }, // azul-ardósia  (--proj-blue   escurecido)
+  { id: 'projeto',    label: 'Projeto',    color: '#7C5C82' }, // ameixa        (--proj-purple escurecido)
 ]
 export const NOTIF_KIND_MAP = Object.fromEntries(NOTIF_KINDS.map(k => [k.id, k]))
 

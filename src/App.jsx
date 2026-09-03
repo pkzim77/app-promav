@@ -883,7 +883,7 @@ export default function App() {
         <MySectorModal current={authUser?.sector} onSubmit={saveMySector} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'change' && (
-        <ChangeModal change={modal.change} projectId={modal.projectId} users={users} currentUserId={currentUserId}
+        <ChangeModal change={modal.change} projectId={modal.projectId} users={users}
           members={projects.find(p => p.id === modal.projectId)?.members || []}
           onSave={saveChange} onClose={() => setModal(null)} />
       )}

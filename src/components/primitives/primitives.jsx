@@ -120,7 +120,12 @@ export function SegControl({ options, value, onChange }) {
       {options.map(o => (
         <button key={o.id}
           className={value === o.id ? 'on' : ''}
-          style={value === o.id ? { boxShadow: `inset 0 0 0 1.5px ${o.color}`, color: o.text || o.color } : null}
+          // A cor da opção é OPCIONAL (CHANGE_KINDS não tem). Quando existe,
+          // tinge a borda que o .on já desenha — antes montava um box-shadow
+          // com 'undefined' dentro, que o navegador descartava, deixando o
+          // selecionado sem marca nenhuma além do fundo branco.
+          style={value === o.id && o.color ? { borderColor: o.color, color: o.text || o.color } : null}
+          aria-pressed={value === o.id}
           onClick={() => onChange(o.id)}>
           {o.label}
         </button>
