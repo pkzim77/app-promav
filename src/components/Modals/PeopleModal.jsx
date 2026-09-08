@@ -1,7 +1,7 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field } from '../primitives/primitives.jsx'
-import { SECTORS, ROLE_LABEL, effectiveProjectRole } from '../../data/store.js'
+import { SECTORS, ROLE_LABEL, effectiveProjectRole, PROJECT_HEX } from '../../data/store.js'
 // Cadastro/edição de um profissional, com as abas de dados e de acesso.
 //
 // Este componente veio de 9724d68 (tela de Profissionais). O refactor d14c415
