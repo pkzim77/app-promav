@@ -9,14 +9,19 @@ import { TaskListView } from './screens/List/List.jsx'
 import { Gantt } from './screens/Gantt/Gantt.jsx'
 import { Reports } from './screens/Reports/Reports.jsx'
 import { TeamReport } from './screens/TeamReport/TeamReport.jsx'
-import { People } from './screens/People/People.jsx'
 import { Login } from './screens/Login/Login.jsx'
 import { api } from './data/api.js'
 import { effectiveProjectRole, canEditProject, NOTIF_KIND_MAP } from './data/store.js'
 import { tocarAviso, destravarSom, avisarNoNavegador, pedirPermissao, permissaoNotificacao, suportaNotificacao } from './data/avisos.js'
 // Promav app — root: dados vêm do backend (Express + Neon) via src/data/api.js.
 
-const TITLES = { hub: 'Visão geral', projects: 'Projetos', list: 'Lista', kanban: 'Kanban', gantt: 'Gantt', people: 'Profissionais', reports: 'Relatórios', team: 'Equipe' }
+// Profissionais carrega sob demanda: o AG Grid que ela usa responde por ~1,2 MB
+// do bundle, e a tela é só de administrador. Sem isto, todo mundo baixa a
+// biblioteca no primeiro acesso mesmo sem nunca abrir a tela.
+// O módulo tem export nomeado, daí o mapeamento para default que o lazy exige.
+const People = React.lazy(() => import('./screens/People/People.jsx').then(m => ({ default: m.People })))
+
+const TITLES ={ hub: 'Visão geral', projects: 'Projetos', list: 'Lista', kanban: 'Kanban', gantt: 'Gantt', people: 'Profissionais', reports: 'Relatórios', team: 'Equipe' }
 
 // "Meu setor" (a pessoa escolhendo o próprio setor no menu da conta) está
 // pausado: entra numa próxima leva, junto do resto da gestão de setores.
@@ -869,7 +874,15 @@ export default function App() {
           onOpenNotification={openNotification}
           onDismiss={askDismissNotification} onDismissAll={askDismissAllNotifications}
           avisos={avisos} onToggleSom={alternarSom} onToggleNavegador={alternarNavegador} />
-        <div className="content">{screen}</div>
+        {/* O Suspense cobre a tela carregada sob demanda (Profissionais). As
+            demais são síncronas e passam direto. */}
+        <div className="content">
+          <React.Suspense fallback={
+            <div className="page" style={{ display: 'grid', placeItems: 'center', minHeight: 240, color: 'var(--fg-3)' }}>Carregando…</div>
+          }>
+            {screen}
+          </React.Suspense>
+        </div>
       </div>
 
       {modal?.type === 'task' && (
