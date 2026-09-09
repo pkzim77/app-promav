@@ -47,7 +47,8 @@ const TASK_SELECT = `
          to_char(t.start_date, 'YYYY-MM-DD') AS start,
          to_char(t.end_date,   'YYYY-MM-DD') AS "end",
          COALESCE((
-           SELECT json_agg(json_build_object('id', c.id, 'text', c.text, 'done', c.done) ORDER BY c.position)
+           SELECT json_agg(json_build_object('id', c.id, 'text', c.text, 'done', c.done,
+                                             'assigneeId', c.assignee_id) ORDER BY c.position)
            FROM checklist_items c WHERE c.task_id = t.id
          ), '[]'::json) AS checklist,
          COALESCE((
@@ -280,11 +281,18 @@ async function replaceChildren(client, taskId, checklist = [], memberIds = [], a
   await client.query('DELETE FROM checklist_items WHERE task_id = $1', [taskId])
   await client.query('DELETE FROM task_members WHERE task_id = $1', [taskId])
 
+  // Quem responde por CADA item. Uma atividade com duas pessoas costuma ter
+  // cada uma cuidando de uma parte; sem isto só dá para saber que "alguém do
+  // par" está devendo. Aceita null: ligar o item a alguém não é obrigatório.
+  const podeAssumir = new Set([assigneeId, ...(memberIds || [])].filter(Boolean))
   for (let i = 0; i < checklist.length; i++) {
     const item = checklist[i]
+    // Só vale quem participa da atividade — o seletor mostra só eles, mas o
+    // servidor não confia no que chega.
+    const dono = podeAssumir.has(item.assigneeId) ? item.assigneeId : null
     await client.query(
-      'INSERT INTO checklist_items (id, task_id, text, done, position) VALUES ($1, $2, $3, $4, $5)',
-      [item.id || genId('c'), taskId, item.text, !!item.done, i]
+      'INSERT INTO checklist_items (id, task_id, text, done, position, assignee_id) VALUES ($1, $2, $3, $4, $5, $6)',
+      [item.id || genId('c'), taskId, item.text, !!item.done, i, dono]
     )
   }
   // membros = lista informada, sem o responsável (ele já é o assignee).
@@ -842,15 +850,63 @@ app.patch('/api/tasks/:id/status', gate(taskProjectId, CAN.light), wrap(async (r
 // o campo "done" de itens já existentes (não cria nem remove itens).
 app.patch('/api/tasks/:id/checklist', gate(taskProjectId, CAN.light), wrap(async (req, res) => {
   const { checklist = [] } = req.body
+  // Quem pode assumir um item: só quem participa da atividade. O seletor no
+  // front já mostra apenas eles, mas o servidor confere de novo.
+  const [dono] = await q('SELECT assignee_id FROM tasks WHERE id = $1', [req.params.id])
+  if (!dono) return res.status(404).json({ error: 'Atividade não encontrada.' })
+  const membros = await q('SELECT user_id FROM task_members WHERE task_id = $1', [req.params.id])
+  const podeAssumir = new Set([dono.assignee_id, ...membros.map(m => m.user_id)].filter(Boolean))
+
   await tx(async (client) => {
     for (const item of checklist) {
       if (!item || !item.id) continue
-      await client.query('UPDATE checklist_items SET done = $2 WHERE id = $1 AND task_id = $3', [item.id, !!item.done, req.params.id])
+      // Cada campo só é tocado quando vem no corpo: marcar não desfaz a
+      // atribuição, e atribuir não mexe no que já está marcado.
+      if ('done' in item) {
+        await client.query('UPDATE checklist_items SET done = $2 WHERE id = $1 AND task_id = $3', [item.id, !!item.done, req.params.id])
+      }
+      if ('assigneeId' in item) {
+        const novo = podeAssumir.has(item.assigneeId) ? item.assigneeId : null
+        await client.query('UPDATE checklist_items SET assignee_id = $2 WHERE id = $1 AND task_id = $3', [item.id, novo, req.params.id])
+      }
     }
     await client.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [req.params.id])
+    await ajustarStatusPeloChecklist(client, req.params.id)
   })
   res.json(await getTask(req.params.id))
 }))
+
+// Quando a atividade TEM checklist, o status espelha o checklist:
+//
+//   tudo marcado      → Concluído
+//   parte marcada     → Em andamento
+//   nada marcado      → A fazer
+//
+// O cálculo do progresso (src/data/progresso.js) já contava checklist inteiro
+// marcado como concluído, mas a COLUNA status ficava para trás — o Panorama
+// dava a atividade por encerrada enquanto o Kanban ainda a mostrava em "A
+// fazer". Isto faz o status acompanhar de fato.
+//
+// A regra é simétrica de propósito. Uma primeira versão só promovia (e
+// rebaixava de Concluído para Em andamento), para não desfazer um "em
+// andamento" posto à mão. O efeito prático foi pior: desmarcar tudo deixava a
+// etapa em Em andamento, e ela sumia de onde a pessoa ia procurá-la. Espelhar
+// é mais previsível — e só acontece quando alguém mexe no checklist, nunca
+// por conta própria.
+//
+// Fica no servidor, e não no front, para valer venha a marcação de onde vier.
+async function ajustarStatusPeloChecklist(client, taskId) {
+  const { rows: [t] } = await client.query('SELECT status FROM tasks WHERE id = $1', [taskId])
+  if (!t) return
+  const { rows: [c] } = await client.query(
+    'SELECT count(*)::int AS total, count(*) FILTER (WHERE done)::int AS feitos FROM checklist_items WHERE task_id = $1',
+    [taskId]
+  )
+  if (!c.total) return                               // sem checklist: nada a inferir
+  const novo = c.feitos === c.total ? 'done' : c.feitos > 0 ? 'progress' : 'todo'
+  if (novo === t.status) return
+  await client.query('UPDATE tasks SET status = $2 WHERE id = $1', [taskId, novo])
+}
 
 // Entrar/sair de uma atividade — o usuário gerencia só a SUA participação.
 // Permitido para 'Só exibição'; adicionar/remover outras pessoas exige Edição total.
@@ -1370,6 +1426,11 @@ async function ensureSchema() {
   await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS updated_at timestamptz')
   await q('UPDATE projects SET updated_at = created_at WHERE updated_at IS NULL')
   await q('ALTER TABLE projects ALTER COLUMN updated_at SET DEFAULT now()')
+
+  // Responsável por CADA item do checklist. Uma atividade com duas pessoas
+  // costuma ter cada uma cuidando de uma parte; sem isto só dá para saber que
+  // "alguém do par" está devendo. NULL = item sem dono, que é permitido.
+  await q('ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS assignee_id text REFERENCES users(id) ON DELETE SET NULL')
 
   // ----- atividade: autoria, último toque e leitura -----
   // Quem criou a atividade. NULL nas linhas antigas (não dá para descobrir

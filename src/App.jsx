@@ -476,6 +476,17 @@ export default function App() {
     } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); flash(e.message || 'Erro ao atualizar checklist.') }
   }
 
+  // Liga um item do checklist a alguém da atividade (ou a ninguém, com null).
+  // Usa a mesma rota do marcar: o servidor só toca no campo que veio no corpo.
+  const assignChecklistItem = async (task, itemId, userId) => {
+    const next = (task.checklist || []).map(i => i.id === itemId ? { ...i, assigneeId: userId } : i)
+    setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
+    try {
+      const saved = await api.toggleChecklist(task.id, next)
+      setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
+    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); flash(e.message || 'Erro ao atribuir o item.') }
+  }
+
   const [readNewsIds, setReadNewsIds] = React.useState([])
   // Notificações limpas pela pessoa. Some da lista para sempre — ao contrário
   // de "lida", que só tira o destaque. É por usuário e fica só neste navegador.
@@ -656,7 +667,7 @@ export default function App() {
           text: `${project.name} • ${task.status === 'done' ? 'concluída' : task.status === 'progress' ? 'em andamento' : 'a fazer'}`,
           time: 'Hoje',
           priority: 4,
-          target: { view: 'projects', projectId: project.id, tab: 'atividades', focusId: `task-${task.id}` },
+          target: { view: 'projects', projectId: project.id, tab: 'etapas', focusId: `task-${task.id}` },
         })
       }
 
@@ -821,7 +832,7 @@ export default function App() {
       initialTab={route.tab} focusId={route.focusId} focusNonce={route.focusNonce}
       onBack={() => setRoute({ view: 'projects' })} onEdit={openEditProject}
       onNewTask={openNewTask} onEditTask={openEditTask} onDeleteTask={askDeleteTask}
-      onToggleChecklist={toggleChecklistItem}
+      onToggleChecklist={toggleChecklistItem} onAssignChecklist={assignChecklistItem}
       onCopyResource={copyResourceLink} onDeleteResource={(resource) => askDeleteResource(currentProject, resource)}
       onAddResource={openAddResource}
       onNewChange={openNewChange} onEditChange={openEditChange} onAckChange={ackChange} onDecideChange={decideChange} />

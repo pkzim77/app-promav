@@ -120,7 +120,7 @@ function LinksColumn({ links, onCopy, onDelete, onAdd, canDelete }) {
   )
 }
 
-// Materiais do projeto: documentos/links + imagens. Vive na Ficha técnica.
+// Materiais do projeto: documentos/links + imagens. Vive na aba Arquivos.
 // (As anotações ficam no Panorama — são o texto que se mostra ao cliente.)
 function ProjectAbout({ resources, canDelete, onCopyResource, onDeleteResource, onAddResource }) {
   const list = resources || []
@@ -166,32 +166,13 @@ function ProjectAbout({ resources, canDelete, onCopyResource, onDeleteResource, 
   )
 }
 
-// Ficha técnica — aba de trabalho da equipe: o detalhamento que sustenta o
-// Panorama (identificação da obra, convênio, medições) e todos os materiais.
-// A seção de identificação ainda não tem campos definidos; quando existirem,
-// entram no mesmo padrão do bloco `tech-grid` abaixo.
+// Arquivos do projeto — documentos, links e imagens. Era a antiga "Ficha
+// técnica", cujo único conteúdo próprio era um aviso de "campos ainda não
+// definidos" mostrado em todos os 36 projetos. O aviso saiu; os campos do
+// convênio entram quando a lista deles for fechada.
 export function ProjectTechSheet({ project, canEdit, onCopyResource, onDeleteResource, onAddResource }) {
   return (
     <div className="proj-tech">
-      <div className="card tech-section">
-        <div className="tech-section-head">
-          <span className="fact-ic"><Icon name="file" size={18} /></span>
-          <div>
-            <h3>Identificação da obra</h3>
-            <p>Dados contratuais e técnicos que não aparecem no Panorama.</p>
-          </div>
-        </div>
-        <div className="tech-empty">
-          <Icon name="sparkles" size={18} />
-          <div>
-            <strong>Campos ainda não definidos</strong>
-            <p>Aqui entram os dados técnicos do convênio — número, processo, objeto,
-              área de intervenção, contrapartida, vigência e responsabilidade técnica.
-              Assim que a lista for fechada, eles passam a ser preenchidos no cadastro do projeto.</p>
-          </div>
-        </div>
-      </div>
-
       <ProjectAbout resources={project.resources} canDelete={canEdit}
         onCopyResource={onCopyResource} onDeleteResource={onDeleteResource} onAddResource={onAddResource} />
     </div>
