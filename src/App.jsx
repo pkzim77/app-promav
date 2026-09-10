@@ -62,7 +62,16 @@ export default function App() {
 
   const currentUserId = authUser?.id || null
 
-  React.useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t) }, [])
+  // O relógio só precisa correr de segundo em segundo quando há cronômetro
+  // rodando — é a única coisa que muda a cada segundo. Sem essa guarda, o
+  // `now` no topo da árvore re-renderizava o app inteiro 86.400 vezes por dia
+  // para exibir um número parado. Parado, um tique a cada 30s basta: serve só
+  // para a virada do dia no total de hoje.
+  const cronometroAtivo = sessions.some(s => !s.end)
+  React.useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), cronometroAtivo ? 1000 : 30000)
+    return () => clearInterval(t)
+  }, [cronometroAtivo])
 
   const flash = (msg) => { setToast(msg); clearTimeout(flash._t); flash._t = setTimeout(() => setToast(null), 2400) }
 

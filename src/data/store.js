@@ -101,6 +101,46 @@ export const PROJECT_STATUSES = [
 ]
 export const PROJECT_STATUS_MAP = Object.fromEntries(PROJECT_STATUSES.map(s => [s.id, s]))
 
+// ---------- nome do projeto ----------
+// A equipe nomeia o projeto como um código: "260103_REF._ESC. JOSÉ MARQUES DE
+// SOUSA_NOVA UNIÃO" — data (AAMMNN), tipo de obra, nome e um complemento
+// (localidade ou nº do convênio). São até 62 caracteres, que como <h1> cru
+// ocupam duas linhas e escondem o que interessa.
+//
+// Aqui isso vira partes, só para EXIBIR: o nome no banco não muda, a busca
+// continua encontrando pelo código, e quem não segue o padrão (11 dos 36)
+// aparece inteiro no título, sem chips.
+const PADRAO_NOME = /^(\d{6})_(.+)$/
+
+export function partesDoProjeto(nome = '') {
+  const m = PADRAO_NOME.exec(String(nome).trim())
+  if (!m) return { codigo: null, tipo: null, titulo: nome, complemento: null }
+  const [, codigo, resto] = m
+
+  // Sem mais nenhum "_", o que sobra é o nome inteiro — caso de
+  // "260502_SINALIZE", que tem código mas nem tipo nem complemento.
+  const primeiro = resto.indexOf('_')
+  if (primeiro < 0) return { codigo, tipo: null, titulo: resto, complemento: null }
+
+  const tipo = resto.slice(0, primeiro)
+  const semTipo = resto.slice(primeiro + 1)
+  // O complemento é o ÚLTIMO trecho: o nome do meio pode conter "_", então
+  // quebramos pela direita, não pela esquerda.
+  const ultimo = semTipo.lastIndexOf('_')
+  return {
+    codigo,
+    tipo: tipo.replace(/\.$/, ''),                     // "REF." → "REF"
+    titulo: ultimo > 0 ? semTipo.slice(0, ultimo) : semTipo,
+    complemento: ultimo > 0 ? semTipo.slice(ultimo + 1) : null,
+  }
+}
+
+// "260103" → "01/26". O código é AAMMNN: ano, mês e sequência.
+export function dataDoCodigo(codigo) {
+  if (!codigo || codigo.length !== 6) return null
+  return `${codigo.slice(2, 4)}/${codigo.slice(0, 2)}`
+}
+
 // ---------- etapas do processo ----------
 // O caminho que todo projeto percorre, do levantamento à licitação. A equipe
 // já vinha recriando esta lista à mão em cada projeto — o que gerou etapas

@@ -399,22 +399,40 @@ app.post('/api/auth/change-password', wrap(async (req, res) => {
 // Admin recebe tudo; os demais recebem SOMENTE os projetos em que foram
 // incluídos (e as tarefas/sessões/pastas correspondentes). O filtro é aqui,
 // no servidor: esconder no front deixaria os dados trafegarem mesmo assim.
+// As seis listas vão numa CONSULTA SÓ. Medindo contra o Neon, um `SELECT 1`
+// leva ~234 ms: a latência da ida e volta domina, e o trabalho de cada
+// consulta é quase nada (a maior, tasks, gasta ~140 ms além da latência).
+// Eram 7 idas para admin e 8 para os demais (6 listas + o visibleProjectIds,
+// que roda em série antes); passam a ser 2 e 3. O `ids` entra como parâmetro,
+// e `$1 IS NULL` cobre o admin, que não filtra nada.
+//
+// Montado sob demanda, e não numa const no topo: o CHANGE_SELECT é declarado
+// mais abaixo no arquivo, e interpolá-lo aqui na carga do módulo estouraria
+// em temporal dead zone antes do servidor subir.
+let sqlBootstrap = null
+const montarBootstrapSql = () => (sqlBootstrap ??= `
+  SELECT
+    (SELECT COALESCE(json_agg(u), '[]'::json) FROM (SELECT ${LIST_USER} FROM users ORDER BY id) u)                                  AS users,
+    (SELECT COALESCE(json_agg(p), '[]'::json) FROM (${PROJECT_SELECT} WHERE $1::text[] IS NULL OR id = ANY($1) ORDER BY position, id) p)      AS projects,
+    (SELECT COALESCE(json_agg(t), '[]'::json) FROM (${TASK_SELECT} WHERE $1::text[] IS NULL OR t.project_id = ANY($1) ORDER BY t.id) t)       AS tasks,
+    (SELECT COALESCE(json_agg(s), '[]'::json) FROM (${SESSION_SELECT} WHERE $1::text[] IS NULL OR task_id IN (SELECT id FROM tasks WHERE project_id = ANY($1)) ORDER BY start_at) s) AS sessions,
+    (SELECT COALESCE(json_agg(f), '[]'::json) FROM (${FOLDER_SELECT} ORDER BY position, name) f)                                    AS folders,
+    (SELECT COALESCE(json_agg(c), '[]'::json) FROM (${CHANGE_SELECT} WHERE $1::text[] IS NULL OR c.project_id = ANY($1) ORDER BY c.published_at DESC) c) AS changes
+`)
+
 app.get('/api/bootstrap', wrap(async (req, res) => {
   const ids = await visibleProjectIds(req.userId)   // null = admin (sem filtro)
   const all = ids === null
 
-  const [users, projects, tasks, sessions, folders, changes] = await Promise.all([
-    q(`SELECT ${LIST_USER} FROM users ORDER BY id`),
-    all ? q(`${PROJECT_SELECT} ORDER BY position, id`)
-        : q(`${PROJECT_SELECT} WHERE id = ANY($1) ORDER BY position, id`, [ids]),
-    listTasks(ids),
-    listSessions(ids),
-    q(`${FOLDER_SELECT} ORDER BY position, name`),
-    listChanges(ids),
-  ])
+  const [linha] = await q(montarBootstrapSql(), [ids])
+  const tasks = (linha.tasks || []).map(mapTask)
+  const sessions = (linha.sessions || []).map(mapSession)
+  const changes = (linha.changes || []).map(mapChange)
+  const projects = linha.projects || []
+  const folders = linha.folders || []
 
   res.json({
-    users, projects, tasks, sessions, changes,
+    users: linha.users || [], projects, tasks, sessions, changes,
     folders: all ? folders : foldersWithProjects(folders, projects),
   })
 }))

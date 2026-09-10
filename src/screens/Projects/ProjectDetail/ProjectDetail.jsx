@@ -1,6 +1,6 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
-import { PROJECT_COLORS, fmtMed, canPublishProjectChange } from '../../../data/store.js'
+import { PROJECT_COLORS, fmtMed, canPublishProjectChange, partesDoProjeto, dataDoCodigo } from '../../../data/store.js'
 import { ProjectCover } from './ProjectCover.jsx'
 import { ProjectTechSheet } from './ProjectTechSheet.jsx'
 import { ProjectStages } from './ProjectStages.jsx'
@@ -35,22 +35,43 @@ export function ProjectDetail({ project, tasks, users, sessions, changes = [], c
     .reduce((total, c) => total + (c.acks || []).some(a => a.userId === currentUserId && !a.confirmedAt), 0)
   const color = PROJECT_COLORS[project.color]
   const canPublish = canPublishProjectChange(role)
+  const partes = partesDoProjeto(project.name)
   return (
     <div className="page">
-      <button className="btn btn-ghost btn-sm" onClick={onBack} style={{ marginBottom: 16, marginLeft: -8 }}>
-        <Icon name="chevronLeft" size={16} />Projetos
-      </button>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 22 }}>
-        <span style={{ width: 46, height: 46, borderRadius: 'var(--r-lg)', background: color, flexShrink: 0 }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ font: 'var(--text-h1)', margin: 0, letterSpacing: 'var(--tracking-tight)', overflowWrap: 'anywhere' }}>{project.name}</h1>
-          <p style={{ fontSize: 14, color: 'var(--fg-3)', margin: '5px 0 0' }}>{project.desc}</p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--fg-3)', marginTop: 10 }}>
-            <Icon name="calendar" size={15} />{fmtMed(project.start)} — {fmtMed(project.end)}
-          </div>
+      {/* Cabeçalho compacto: antes eram ~500px de moldura (voltar, quadrado de
+          46px, título em duas linhas, descrição, datas) antes de a lista
+          aparecer — mais da metade da tela num notebook. Agora o "voltar" fica
+          na mesma linha do título, e código, tipo, datas e complemento dividem
+          uma faixa só embaixo. */}
+      <div className="proj-head">
+        <button className="btn btn-ghost btn-sm proj-head-voltar" onClick={onBack} aria-label="Voltar aos projetos">
+          <Icon name="chevronLeft" size={18} />
+        </button>
+        <span className="proj-head-cor" style={{ background: color }} />
+        <div className="proj-head-nome">
+          <h1>{partes.titulo}</h1>
+          {project.desc && <p className="proj-head-desc">{project.desc}</p>}
         </div>
-        {canEdit && <button className="btn btn-secondary" onClick={() => onEdit(project)}><Icon name="pencil" size={16} />Editar</button>}
-        {canEdit && <button className="btn btn-primary" onClick={() => onNewTask(project.id)}><Icon name="plus" size={17} stroke={2.2} />Nova atividade</button>}
+        {canEdit && (
+          <button className="btn btn-secondary btn-sm proj-head-editar" onClick={() => onEdit(project)}>
+            <Icon name="pencil" size={15} />Editar
+          </button>
+        )}
+      </div>
+
+      {/* O nome do projeto é um código de até 62 caracteres. Como <h1> cru ele
+          quebrava em duas linhas; aqui as partes viram etiquetas e o título
+          fica com o que a pessoa procura. Quem não segue o padrão (12 dos 36)
+          aparece inteiro no título, sem etiqueta nenhuma. */}
+      <div className="proj-head-meta">
+        {partes.codigo && (
+          <span className="proj-head-cod" title={`Código do projeto · ${dataDoCodigo(partes.codigo)}`}>{partes.codigo}</span>
+        )}
+        {partes.tipo && <span className="proj-head-tipo">{partes.tipo}</span>}
+        {partes.complemento && <span className="proj-head-compl">{partes.complemento}</span>}
+        <span className="proj-head-datas">
+          <Icon name="calendar" size={14} />{fmtMed(project.start)} — {fmtMed(project.end)}
+        </span>
       </div>
 
       {/* Abas: Panorama (cliente) → Etapas (equipe) → Arquivos → Mudanças.

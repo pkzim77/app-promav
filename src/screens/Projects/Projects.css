@@ -603,3 +603,41 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
 /* Duas ações: a principal põe o trabalho dentro de uma etapa; a secundária
    cria atividade fora do template, que é o caso raro. */
 .et-nova { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Cabeçalho do projeto (compacto) ----------
+   O layout anterior gastava ~500px antes da primeira linha de conteúdo. Aqui
+   o "voltar" divide a linha com o título, e as etiquetas do nome ficam numa
+   faixa fina embaixo, junto das datas. */
+
+.proj-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+
+.proj-head-voltar { flex-shrink: 0; width: 32px; padding: 0; margin-left: -8px; justify-content: center; color: var(--fg-3); }
+
+.proj-head-voltar:hover { color: var(--fg-1); }
+
+.proj-head-cor { width: 12px; height: 32px; border-radius: var(--r-sm); flex-shrink: 0; }
+
+.proj-head-nome { flex: 1; min-width: 0; }
+
+.proj-head-nome h1 { font: var(--text-h2); margin: 0; letter-spacing: var(--tracking-tight); overflow-wrap: anywhere; }
+
+.proj-head-desc { font-size: 13.5px; color: var(--fg-3); margin: 2px 0 0; }
+
+.proj-head-editar { flex-shrink: 0; }
+
+.proj-head-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 18px; padding-left: 36px; font-size: 12.5px; color: var(--fg-3); }
+
+.proj-head-cod { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; padding: 2px 8px; border-radius: var(--r-sm); background: var(--bg-muted); color: var(--fg-2); cursor: help; }
+
+.proj-head-tipo { font-weight: 700; letter-spacing: 0.04em; padding: 2px 8px; border-radius: var(--r-sm); background: var(--brand-soft); color: var(--accent-strong); }
+
+.proj-head-compl { color: var(--fg-3); }
+
+.proj-head-compl::before { content: '·'; margin-right: 8px; color: var(--fg-4); }
+
+.proj-head-datas { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+
+@media (max-width: 620px) {
+  .proj-head-meta { padding-left: 0; }
+  .proj-head-datas { margin-left: 0; width: 100%; }
+}
