@@ -192,11 +192,13 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
   const { etapas, avulsas } = React.useMemo(() => agruparEtapas(doProjeto), [doProjeto])
 
   const [filtro, setFiltro] = React.useState('all')
-  // Abre sozinha a primeira etapa em andamento: é onde o trabalho está agora.
-  const [abertas, setAbertas] = React.useState(() => {
-    const emCurso = agruparEtapas(doProjeto).etapas.filter(e => e.status === 'progress')
-    return new Set(emCurso.map(e => e.n))
-  })
+  // Abre sozinhas as etapas em andamento: é onde o trabalho está agora.
+  // Reaproveita o `etapas` do useMemo acima — o inicializador do useState
+  // refazia o agrupamento inteiro por conta própria, calculando duas vezes a
+  // mesma coisa na montagem.
+  const [abertas, setAbertas] = React.useState(
+    () => new Set(etapas.filter(e => e.status === 'progress').map(e => e.n))
+  )
   const alternar = (n) => setAbertas(prev => {
     const s = new Set(prev)
     s.has(n) ? s.delete(n) : s.add(n)
