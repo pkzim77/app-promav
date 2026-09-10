@@ -182,7 +182,8 @@ const FILTROS = [
 ]
 
 export function ProjectStages({ project, tasks, users, sessions, currentUserId, now, canEdit = true,
-                               onToggleChecklist, onAssignChecklist, onNewTask, onEditTask, onDeleteTask, onStartTimer, onStopTimer }) {
+                               onToggleChecklist, onAssignChecklist, onNewTask, onNewStageItem, onCreateStages,
+                               onEditTask, onDeleteTask, onStartTimer, onStopTimer }) {
   const doProjeto = React.useMemo(() => tasks.filter(t => t.projectId === project.id), [tasks, project.id])
   const { etapas, avulsas } = React.useMemo(() => agruparEtapas(doProjeto), [doProjeto])
 
@@ -209,10 +210,20 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
   const pctEmCurso = etapas.length ? contagem.progress / etapas.length * 100 : 0
   const visiveis = filtro === 'all' ? etapas : etapas.filter(e => e.status === filtro)
 
-  if (!doProjeto.length) {
+  // 29 dos 36 projetos não tinham etapa nenhuma, e a equipe vinha recriando as
+  // 11 à mão — foi assim que surgiram as duplicatas. O botão cria de uma vez.
+  const semEtapas = etapas.length === 0
+  if (semEtapas) {
     return <EmptyState icon="list" title="Nenhuma etapa cadastrada"
-      text="As etapas do processo (levantamento, projetos, orçamento, ART…) ainda não foram criadas para este projeto."
-      action={canEdit ? <button className="btn btn-primary" onClick={() => onNewTask(project.id)}><Icon name="plus" size={17} stroke={2.2} />Adicionar atividade</button> : null} />
+      text="As 11 etapas do processo — de Contratação direta até Licitação — ainda não existem neste projeto."
+      action={canEdit ? (
+        <div className="et-nova">
+          <button className="btn btn-primary" onClick={() => onCreateStages(project.id)}>
+            <Icon name="plus" size={17} stroke={2.2} />Criar template
+          </button>
+          <button className="btn btn-ghost" onClick={() => onNewTask(project.id)}>Atividade avulsa</button>
+        </div>
+      ) : null} />
   }
 
   const repasse = { users, sessions, currentUserId, now, canEdit, onToggleChecklist, onAssignChecklist, onEditTask, onDeleteTask, onStartTimer, onStopTimer }
@@ -253,9 +264,18 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
           </button>
         ))}
         {canEdit && (
-          <button className="btn btn-primary btn-sm et-nova" onClick={() => onNewTask(project.id)}>
-            <Icon name="plus" size={16} stroke={2.2} />Nova atividade
-          </button>
+          <div className="et-nova">
+            {/* "Nova atividade" agora pergunta a ETAPA e o trabalho entra como
+                item do checklist dela. Antes criava texto livre, que não batia
+                o padrão "N · Nome" e nascia direto em "Outras atividades". */}
+            <button className="btn btn-primary btn-sm" onClick={() => onNewStageItem(project.id)}>
+              <Icon name="plus" size={16} stroke={2.2} />Nova atividade
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNewTask(project.id)}
+              title="Cria uma atividade fora do template de etapas">
+              Atividade avulsa
+            </button>
+          </div>
         )}
       </div>
 

@@ -599,3 +599,7 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
 .et-ck-dono:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
 
 .et-ck-dono-fixo { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--fg-3); }
+
+/* Duas ações: a principal põe o trabalho dentro de uma etapa; a secundária
+   cria atividade fora do template, que é o caso raro. */
+.et-nova { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

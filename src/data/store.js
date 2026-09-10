@@ -101,6 +101,37 @@ export const PROJECT_STATUSES = [
 ]
 export const PROJECT_STATUS_MAP = Object.fromEntries(PROJECT_STATUSES.map(s => [s.id, s]))
 
+// ---------- etapas do processo ----------
+// O caminho que todo projeto percorre, do levantamento à licitação. A equipe
+// já vinha recriando esta lista à mão em cada projeto — o que gerou etapas
+// duplicadas. O título gravado é "<i> · <nome>", e é esse padrão que a aba
+// Etapas lê para agrupar. A mesma lista existe em server/index.js, que é quem
+// cria as etapas; mexeu aqui, mexa lá.
+export const ETAPAS_PADRAO = [
+  'Contratação direta', 'Levantamento', 'Projetos', 'Orçamento',
+  'Relatório fotográfico', 'ART e documentos', 'Licença ambiental',
+  'Projeto básico', 'Protocolos', 'Diligências', 'Licitação',
+]
+export const tituloDaEtapa = (i) => `${i} · ${ETAPAS_PADRAO[i]}`
+
+// "2 · Projetos" → { n: 2, nome: 'Projetos' }. O separador é o ponto médio.
+export const PADRAO_ETAPA = /^(\d+)\s*·\s*(.+)$/
+
+// As etapas de um projeto, em ordem, para os seletores. Etapa duplicada entra
+// uma vez só — duas opções idênticas num <select> não ajudam ninguém a
+// escolher, e ainda esconderiam qual das cópias receberia o item.
+export function etapasDoProjeto(tasks = [], projectId) {
+  const vistas = new Map()
+  for (const t of tasks) {
+    if (t.projectId !== projectId) continue
+    const m = PADRAO_ETAPA.exec(t.title || '')
+    if (!m) continue
+    const n = Number(m[1])
+    if (!vistas.has(n)) vistas.set(n, { id: t.id, n, label: t.title, task: t })
+  }
+  return [...vistas.values()].sort((a, b) => a.n - b.n)
+}
+
 // ---------- mudanças do projeto (orientações) ----------
 // Setores da PROMAV. Cada usuário pertence a um (users.sector); é isso que faz
 // "destinatário: Engenharia" resolver para pessoas de verdade.

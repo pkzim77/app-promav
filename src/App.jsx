@@ -1,7 +1,7 @@
 import React from 'react'
 import { Sidebar, TopBar } from './components/Chrome/Chrome.jsx'
 import { Toast } from './components/primitives/primitives.jsx'
-import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal, PeopleModal } from './components/Modals/Modals.jsx'
+import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal, PeopleModal, StageItemModal } from './components/Modals/Modals.jsx'
 import { Hub } from './screens/Hub/Hub.jsx'
 import { ProjectList, ProjectDetail } from './screens/Projects/Projects.jsx'
 import { Kanban } from './screens/Kanban/Kanban.jsx'
@@ -11,7 +11,7 @@ import { Reports } from './screens/Reports/Reports.jsx'
 import { TeamReport } from './screens/TeamReport/TeamReport.jsx'
 import { Login } from './screens/Login/Login.jsx'
 import { api } from './data/api.js'
-import { effectiveProjectRole, canEditProject, NOTIF_KIND_MAP } from './data/store.js'
+import { effectiveProjectRole, canEditProject, NOTIF_KIND_MAP, etapasDoProjeto } from './data/store.js'
 import { tocarAviso, destravarSom, avisarNoNavegador, pedirPermissao, permissaoNotificacao, suportaNotificacao } from './data/avisos.js'
 // Promav app — root: dados vêm do backend (Express + Neon) via src/data/api.js.
 
@@ -476,6 +476,29 @@ export default function App() {
     } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); flash(e.message || 'Erro ao atualizar checklist.') }
   }
 
+  // "Nova atividade" na aba Etapas: escolhe a etapa e o trabalho entra como
+  // item do checklist dela, em vez de nascer como atividade solta em "Outras".
+  const openStageItem = (projectId, stageTaskId = null) =>
+    setModal({ type: 'stageItem', projectId, stageTaskId })
+
+  const addStageItem = async (taskId, text, assigneeId) => {
+    try {
+      const saved = await api.addChecklistItem(taskId, text, assigneeId)
+      setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
+      setModal(null); flash('Atividade adicionada à etapa.')
+    } catch (e) { flash(e.message || 'Erro ao adicionar a atividade.') }
+  }
+
+  // Cria de uma vez as etapas do processo que faltam no projeto. É idempotente
+  // no servidor — clicar duas vezes não duplica.
+  const createStages = async (projectId) => {
+    try {
+      const r = await api.createStages(projectId)
+      await loadData()
+      flash(r.criadas ? `${r.criadas} etapa${r.criadas === 1 ? '' : 's'} criada${r.criadas === 1 ? '' : 's'}.` : 'O projeto já tem todas as etapas.')
+    } catch (e) { flash(e.message || 'Erro ao criar as etapas.') }
+  }
+
   // Liga um item do checklist a alguém da atividade (ou a ninguém, com null).
   // Usa a mesma rota do marcar: o servidor só toca no campo que veio no corpo.
   const assignChecklistItem = async (task, itemId, userId) => {
@@ -833,6 +856,7 @@ export default function App() {
       onBack={() => setRoute({ view: 'projects' })} onEdit={openEditProject}
       onNewTask={openNewTask} onEditTask={openEditTask} onDeleteTask={askDeleteTask}
       onToggleChecklist={toggleChecklistItem} onAssignChecklist={assignChecklistItem}
+      onNewStageItem={openStageItem} onCreateStages={createStages}
       onCopyResource={copyResourceLink} onDeleteResource={(resource) => askDeleteResource(currentProject, resource)}
       onAddResource={openAddResource}
       onNewChange={openNewChange} onEditChange={openEditChange} onAckChange={ackChange} onDecideChange={decideChange} />
@@ -907,7 +931,7 @@ export default function App() {
         <MySectorModal current={authUser?.sector} onSubmit={saveMySector} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'change' && (
-        <ChangeModal change={modal.change} projectId={modal.projectId} users={users}
+        <ChangeModal change={modal.change} projectId={modal.projectId} users={users} tasks={tasks}
           members={projects.find(p => p.id === modal.projectId)?.members || []}
           onSave={saveChange} onClose={() => setModal(null)} />
       )}
@@ -926,6 +950,15 @@ export default function App() {
       )}
       {modal?.type === 'resource' && modal.resType === 'image' && (
         <ImageModal onSave={saveResource} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'stageItem' && (
+        <StageItemModal
+          etapas={etapasDoProjeto(tasks, modal.projectId)}
+          users={users}
+          members={projects.find(p => p.id === modal.projectId)?.members || []}
+          defaultStageId={modal.stageTaskId}
+          onSave={addStageItem}
+          onClose={() => setModal(null)} />
       )}
       {modal?.type === 'confirm' && (
         <ConfirmDialog title={modal.title} message={modal.message} onConfirm={modal.onConfirm} onClose={() => setModal(null)} />
