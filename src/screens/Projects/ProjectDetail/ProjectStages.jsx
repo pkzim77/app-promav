@@ -1,6 +1,6 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
-import { AvatarStack } from '../../../components/primitives/primitives.jsx'
+import { AvatarStack, SemResponsavel } from '../../../components/primitives/primitives.jsx'
 import { TaskTimerButton } from '../../../components/TimeTracker/TimeTracker.jsx'
 import { checklistStats, taskMembers } from '../../../data/store.js'
 import { EmptyState } from '../shared/EmptyState.jsx'
@@ -101,7 +101,11 @@ function Checklist({ task, responsaveis, onToggle, onAssign }) {
                 <span className="av" style={{ width: 20, height: 20, background: dono.color, fontSize: 9 }}>{dono.initials}</span>
                 {dono.name.split(' ')[0]}
               </span>
-            ) : null}
+            ) : (
+              // Etapa sem ninguém: o item também fica sem dono, e isso precisa
+              // aparecer. São 147 dos 152 itens hoje.
+              <SemResponsavel compacto />
+            )}
           </li>
         )
       })}
@@ -123,7 +127,7 @@ function CorpoDaTask({ task, users, sessions, currentUserId, now, canEdit, mostr
         {membros.length > 0
           ? <><AvatarStack users={membros} size={24} max={4} />
               <span className="et-quem">{membros[0].name.split(' ')[0]}{membros.length > 1 ? ` +${membros.length - 1}` : ''}</span></>
-          : <span className="et-sem-resp"><Icon name="flag" size={13} />Sem responsável</span>}
+          : <SemResponsavel />}
         <div className="et-botoes">
           <TaskTimerButton task={task} sessions={sessions} currentUserId={currentUserId} now={now}
             onStart={onStartTimer} onStop={onStopTimer} />

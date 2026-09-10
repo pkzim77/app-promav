@@ -1,13 +1,15 @@
 import './Kanban.css'
 import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
-import { AvatarStack, PriorityTag, ChecklistMini } from '../../components/primitives/primitives.jsx'
+import { AvatarStack, PriorityTag, ChecklistMini, SemResponsavel } from '../../components/primitives/primitives.jsx'
 import { TaskTimerButton } from '../../components/TimeTracker/TimeTracker.jsx'
 import { STATUSES, PROJECT_COLORS, taskMembers, fmtShort, effectiveProjectRole, canEditProject } from '../../data/store.js'
 // Kanban — columns by status, cross-project cards, drag & drop, filters.
 
 function KanbanCard({ task, project, users, sessions, currentUserId, now, onStartTimer, onStopTimer, onDragStart, onDragEnd, dragging, onClick }) {
-  const members = taskMembers(task).map(id => users.find(u => u.id === id))
+  // filter(Boolean) porque um id que não resolve deixaria members.length
+  // verdadeiro sem desenhar ninguém — e o marcador de "sem dono" não apareceria.
+  const members = taskMembers(task).map(id => users.find(u => u.id === id)).filter(Boolean)
   return (
     <div
       className={'kcard' + (dragging ? ' dragging' : '')}
@@ -28,7 +30,7 @@ function KanbanCard({ task, project, users, sessions, currentUserId, now, onStar
         <div className="right">
           <ChecklistMini task={task} />
           <span className="kc-date">{fmtShort(task.start)}–{fmtShort(task.end)}</span>
-          <AvatarStack users={members} size={24} max={3} />
+          {members.length ? <AvatarStack users={members} size={24} max={3} /> : <SemResponsavel compacto />}
         </div>
       </div>
     </div>
