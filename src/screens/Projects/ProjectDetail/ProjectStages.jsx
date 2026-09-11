@@ -2,7 +2,7 @@ import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
 import { AvatarStack, SemResponsavel } from '../../../components/primitives/primitives.jsx'
 import { TaskTimerButton } from '../../../components/TimeTracker/TimeTracker.jsx'
-import { checklistStats, taskMembers } from '../../../data/store.js'
+import { calcularProgresso, checklistStats, taskMembers } from '../../../data/store.js'
 import { EmptyState } from '../shared/EmptyState.jsx'
 
 // Etapas — substitui a antiga aba Atividades. As duas mostravam a MESMA tabela
@@ -212,8 +212,20 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
     todo: etapas.filter(e => e.status === 'todo').length,
   }
   const itens = checklistDaEtapa(doProjeto)
-  const pctEtapas = etapas.length ? Math.round(contagem.done / etapas.length * 100) : 0
-  const pctEmCurso = etapas.length ? contagem.progress / etapas.length * 100 : 0
+
+  // Mesmo cálculo do Panorama (src/data/progresso.js), sobre a MESMA lista de
+  // atividades: toda atividade pesa 100/N, concluída entra inteira e as demais
+  // entram com a fração do checklist já marcada. Antes saía daqui um
+  // `done / total` — contagem seca de etapas fechadas, que ignorava tudo já
+  // marcado dentro de uma etapa em curso e dava, para o mesmo projeto, um
+  // número sempre menor que o da primeira aba.
+  const prog = React.useMemo(() => calcularProgresso(doProjeto), [doProjeto])
+  const pctExecutado = Math.round(prog.executado)
+  // Hachurado: o que ainda falta marcar nas atividades em andamento. A parte
+  // já marcada delas está no sólido, então desenhar a fatia inteira contaria
+  // duas vezes o mesmo trabalho.
+  const pctEmCurso = prog.detalhes.reduce(
+    (a, d) => a + (d.fatia === 'emAndamento' ? d.peso - d.executado : 0), 0)
   const visiveis = filtro === 'all' ? etapas : etapas.filter(e => e.status === filtro)
 
   // 29 dos 36 projetos não tinham etapa nenhuma, e a equipe vinha recriando as
@@ -239,23 +251,23 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
       <div className="card et-resumo">
         <div className="et-resumo-topo">
           <div>
-            <span className="et-resumo-lab">Progresso das etapas</span>
+            <span className="et-resumo-lab">Progresso do projeto</span>
             <div className="et-resumo-sub">
               <b>{contagem.done} de {etapas.length}</b> etapas
               {itens.total > 0 && <> · <b>{itens.done} de {itens.total}</b> itens</>}
             </div>
           </div>
-          <span className="et-resumo-pct">{pctEtapas}%</span>
+          <span className="et-resumo-pct">{pctExecutado}%</span>
         </div>
-        {/* Sólido conta no percentual; hachurado é o que está em curso e ainda
-            não conta — sem isso a barra misturaria feito com fazendo. */}
+        {/* Sólido é o executado: etapa concluída inteira + a parte marcada das
+            demais. Hachurado é o que falta marcar nas que já começaram. */}
         <div className="et-barra">
-          <i className="feito" style={{ width: pctEtapas + '%' }} />
+          <i className="feito" style={{ width: pctExecutado + '%' }} />
           <i className="curso" style={{ width: pctEmCurso + '%' }} />
         </div>
         <div className="et-legenda">
-          <span><i className="sw feito" />{contagem.done} concluídas — contam no percentual</span>
-          <span><i className="sw curso" />{contagem.progress} em andamento — não contam</span>
+          <span><i className="sw feito" />{contagem.done} concluídas — contam inteiras</span>
+          <span><i className="sw curso" />{contagem.progress} em andamento — contam pelo checklist marcado</span>
           <span><i className="sw falta" />{contagem.todo} pendentes</span>
         </div>
       </div>
