@@ -18,7 +18,10 @@ import { EmptyState } from '../shared/EmptyState.jsx'
 const PADRAO_ETAPA = /^(\d+)\s*·\s*(.+)$/
 
 const ORDEM_STATUS = { todo: 0, progress: 1, done: 2 }
+const ORDEM_BOTOES = ['todo', 'progress', 'done']
 const ROTULO_STATUS = { todo: 'PENDENTE', progress: 'EM ANDAMENTO', done: 'CONCLUÍDA' }
+// Mesmos estados em caixa normal: o selo grita, o botão não precisa gritar.
+const ROTULO_BOTAO = { todo: 'Pendente', progress: 'Em andamento', done: 'Concluída' }
 
 // O status NÃO vira nome de classe direto. 'progress' colidia com a .progress
 // global do kit (a barra de progresso: height 7px, overflow hidden), e a linha
@@ -62,6 +65,32 @@ function SeloEtapa({ status }) {
     <span className={'et-selo ' + CLASSE_STATUS[status]}>
       <span className="et-selo-dot" />{ROTULO_STATUS[status]}
     </span>
+  )
+}
+
+// Troca o status na própria linha. Numa atividade SEM checklist não havia
+// nada clicável aqui — o estado só mudava abrindo o modal ou arrastando no
+// Kanban, então na prática ela ficava parada em "pendente" para sempre.
+//
+// Sem gate de canEdit, igual ao checklist: PATCH /tasks/:id/status usa o
+// mesmo CAN.light no servidor, o mesmo que libera marcar item para quem só
+// visualiza. Quem faz o serviço registra que fez.
+function SeletorStatus({ task, onMoveTask }) {
+  if (!onMoveTask) return null
+  const atual = task.status || 'todo'
+  return (
+    <div className="et-status" role="group" aria-label={`Status: ${task.title}`}>
+      <span className="et-status-lab">Status</span>
+      {ORDEM_BOTOES.map(id => (
+        <button key={id} type="button"
+          className={'et-status-bt ' + CLASSE_STATUS[id] + (atual === id ? ' on' : '')}
+          aria-pressed={atual === id}
+          disabled={atual === id}
+          onClick={() => onMoveTask(task.id, id)}>
+          {ROTULO_BOTAO[id]}
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -113,16 +142,30 @@ function Checklist({ task, responsaveis, onToggle, onAssign }) {
   )
 }
 
-function CorpoDaTask({ task, users, sessions, currentUserId, now, canEdit, mostrarTitulo,
-                      onToggleChecklist, onAssignChecklist, onEditTask, onDeleteTask, onStartTimer, onStopTimer }) {
+function CorpoDaTask({ task, users, sessions, currentUserId, now, canEdit, mostrarTitulo, avulsa = false,
+                      onToggleChecklist, onAssignChecklist, onMoveTask, onEditTask, onDeleteTask, onStartTimer, onStopTimer }) {
   const membros = taskMembers(task).map(id => users.find(u => u.id === id)).filter(Boolean)
   const semChecklist = !(task.checklist || []).length
   return (
     <div className="et-task">
-      {mostrarTitulo && <div className="et-task-tit">{task.title}</div>}
+      {mostrarTitulo && (
+        <div className="et-task-tit">
+          {task.title}
+          {/* Fora do template não há cabeçalho de etapa para carregar o estado,
+              então ele vem para o título. Com checklist o selo é a única pista;
+              sem checklist quem mostra é o seletor logo abaixo, e repetir aqui
+              seria dizer a mesma coisa duas vezes na mesma caixa. */}
+          {avulsa && !semChecklist && <SeloEtapa status={task.status || 'todo'} />}
+        </div>
+      )}
       {semChecklist
-        ? <p className="et-vazio">Esta etapa não tem checklist.</p>
+        ? <p className="et-vazio">{avulsa ? 'Esta atividade não tem checklist.' : 'Esta etapa não tem checklist.'}</p>
         : <Checklist task={task} responsaveis={membros} onToggle={onToggleChecklist} onAssign={onAssignChecklist} />}
+      {/* O seletor aparece exatamente onde o checklist NÃO decide o status:
+          ajustarStatusPeloChecklist() (server/index.js) espelha o status a cada
+          marcação e sai cedo quando não há itens. Com checklist, um seletor aqui
+          seria desfeito no clique seguinte; sem checklist, nada o encosta. */}
+      {semChecklist && <SeletorStatus task={task} onMoveTask={onMoveTask} />}
       <div className="et-acoes">
         {membros.length > 0
           ? <><AvatarStack users={membros} size={24} max={4} />
@@ -186,7 +229,7 @@ const FILTROS = [
 ]
 
 export function ProjectStages({ project, tasks, users, sessions, currentUserId, now, canEdit = true,
-                               onToggleChecklist, onAssignChecklist, onNewTask, onNewStageItem, onCreateStages,
+                               onToggleChecklist, onAssignChecklist, onMoveTask, onNewTask, onNewStageItem, onCreateStages,
                                onEditTask, onDeleteTask, onStartTimer, onStopTimer }) {
   const doProjeto = React.useMemo(() => tasks.filter(t => t.projectId === project.id), [tasks, project.id])
   const { etapas, avulsas } = React.useMemo(() => agruparEtapas(doProjeto), [doProjeto])
@@ -244,7 +287,7 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
       ) : null} />
   }
 
-  const repasse = { users, sessions, currentUserId, now, canEdit, onToggleChecklist, onAssignChecklist, onEditTask, onDeleteTask, onStartTimer, onStopTimer }
+  const repasse = { users, sessions, currentUserId, now, canEdit, onToggleChecklist, onAssignChecklist, onMoveTask, onEditTask, onDeleteTask, onStartTimer, onStopTimer }
 
   return (
     <div className="proj-etapas">
@@ -315,7 +358,7 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
           </summary>
           <div className="et-avulsas-corpo">
             {avulsas.map(t => (
-              <CorpoDaTask key={t.id} task={t} mostrarTitulo {...repasse} />
+              <CorpoDaTask key={t.id} task={t} mostrarTitulo avulsa {...repasse} />
             ))}
           </div>
         </details>

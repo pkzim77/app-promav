@@ -864,7 +864,7 @@ export default function App() {
       initialTab={route.tab} focusId={route.focusId} focusNonce={route.focusNonce}
       onBack={() => setRoute({ view: 'projects' })} onEdit={openEditProject}
       onNewTask={openNewTask} onEditTask={openEditTask} onDeleteTask={askDeleteTask}
-      onToggleChecklist={toggleChecklistItem} onAssignChecklist={assignChecklistItem}
+      onToggleChecklist={toggleChecklistItem} onAssignChecklist={assignChecklistItem} onMoveTask={moveTask}
       onNewStageItem={openStageItem} onCreateStages={createStages}
       onCopyResource={copyResourceLink} onDeleteResource={(resource) => askDeleteResource(currentProject, resource)}
       onAddResource={openAddResource}
