@@ -410,6 +410,30 @@ export function taskProgress(task) {
 // Progresso do projeto: percentual executado segundo os PESOS das atividades
 // (ver src/data/progresso.js). Antes era a média simples do progresso de cada
 // atividade — o que fazia um serviço de 3 dias pesar igual a um de 3 meses.
-export function projectProgress(tasks, projectId) {
-  return Math.round(progressoExecutado(tasks.filter(t => t.projectId === projectId)))
+//
+// Recebe JÁ as atividades do projeto. A versão anterior recebia a lista
+// inteira mais um projectId e filtrava por conta própria, o que parecia
+// cômodo e custava caro: numa tela de cards, cada card varria todas as
+// atividades, e o total virava projetos × atividades a cada render — de novo
+// a cada tecla digitada na busca, que é o que remonta a lista. Quem tem a
+// lista de muitos projetos agrupa uma vez com tasksByProject().
+export function projectProgress(tasksDoProjeto) {
+  return Math.round(progressoExecutado(tasksDoProjeto))
 }
+
+// Atividades agrupadas por projeto, numa passada só: O(atividades) em vez de
+// um filter por projeto. Use dentro de um useMemo com [tasks].
+export function tasksByProject(tasks) {
+  const porProjeto = new Map()
+  for (const t of tasks || []) {
+    const lista = porProjeto.get(t.projectId)
+    if (lista) lista.push(t)
+    else porProjeto.set(t.projectId, [t])
+  }
+  return porProjeto
+}
+
+// Projeto sem atividade nenhuma. Referência única e congelada: devolver [] a
+// cada chamada criaria um array novo por render, quebrando qualquer memo de
+// quem receber isto como prop.
+export const SEM_ATIVIDADES = Object.freeze([])

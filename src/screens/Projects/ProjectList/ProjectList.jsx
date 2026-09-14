@@ -1,12 +1,13 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
 import { ProgressBar } from '../../../components/primitives/primitives.jsx'
-import { PROJECT_COLORS, projectProgress, fmtShort, effectiveProjectRole, canEditProject } from '../../../data/store.js'
+import { PROJECT_COLORS, SEM_ATIVIDADES, projectProgress, tasksByProject, fmtShort, effectiveProjectRole, canEditProject } from '../../../data/store.js'
 import { EmptyState } from '../shared/EmptyState.jsx'
 
 function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete, draggable, dragging, dropHint, onDragStart, onDragEnd, onDragOver, onDrop }) {
-  const pct = projectProgress(tasks, project.id)
-  const count = tasks.filter(t => t.projectId === project.id).length
+  // `tasks` são só as DESTE projeto — o pai agrupa uma vez (tasksByProject).
+  const pct = projectProgress(tasks)
+  const count = tasks.length
   const color = PROJECT_COLORS[project.color]
   const role = effectiveProjectRole(project, authUser)
   const canEdit = canEditProject(role)
@@ -102,6 +103,9 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
   const [drag, setDrag] = React.useState(null)
   const dragRef = React.useRef(null)
   const [dropHint, setDropHint] = React.useState(null)
+
+  // Uma passada sobre as atividades em vez de dois filters por card.
+  const porProjeto = React.useMemo(() => tasksByProject(tasks), [tasks])
 
   const folderIds = React.useMemo(() => new Set(folders.map(f => f.id)), [folders])
   // Pasta atual é válida? (pode ter sido excluída) — senão, volta à raiz.
@@ -254,7 +258,7 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
           )}
           {projs.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 18 }}>
-              {projs.map(p => <ProjectGridCard key={p.id} project={p} tasks={tasks} authUser={authUser} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete}
+              {projs.map(p => <ProjectGridCard key={p.id} project={p} tasks={porProjeto.get(p.id) || SEM_ATIVIDADES} authUser={authUser} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete}
                 draggable={canMove} dragging={drag?.id === p.id} dropHint={dropHint?.key === 'p:' + p.id ? dropHint.mode : null}
                 onDragStart={startDrag(p.id)} onDragEnd={clearDrag} onDragOver={overProject(p)} onDrop={dropProject(p)} />)}
             </div>

@@ -3,7 +3,7 @@ import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
 import { ProgressBar } from '../../components/primitives/primitives.jsx'
 import { sameDay, fmtDur } from '../../components/TimeTracker/TimeTracker.jsx'
-import { PROJECT_COLORS, projectProgress } from '../../data/store.js'
+import { PROJECT_COLORS, SEM_ATIVIDADES, projectProgress, tasksByProject } from '../../data/store.js'
 // Hub / Visão geral — summary stats + big navigation cards + recent projects.
 
 function StatCard({ num, label }) {
@@ -29,6 +29,9 @@ export function Hub({ projects, recentProjects: searchedProjects = projects, tas
   const recentProjects = [...searchedProjects]
     .sort((a, b) => new Date(b.created) - new Date(a.created))
     .slice(0, 10)
+  // Agrupa uma vez; os 10 cards abaixo pegam as suas por id em vez de cada um
+  // varrer a lista inteira duas vezes.
+  const porProjeto = React.useMemo(() => tasksByProject(tasks), [tasks])
   const inProgress = tasks.filter(t => t.status === 'progress').length
   const done = tasks.filter(t => t.status === 'done').length
   const todayMs = (sessions || []).filter(s => s.userId === currentUserId && sameDay(s.start, now))
@@ -66,8 +69,9 @@ export function Hub({ projects, recentProjects: searchedProjects = projects, tas
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 14 }}>
         {recentProjects.map(p => {
-          const pct = projectProgress(tasks, p.id)
-          const count = tasks.filter(t => t.projectId === p.id).length
+          const doProjeto = porProjeto.get(p.id) || SEM_ATIVIDADES
+          const pct = projectProgress(doProjeto)
+          const count = doProjeto.length
           return (
             <button key={p.id} className="card" style={{ padding: 18, textAlign: 'left' }} onClick={() => onNavigate({ view: 'projects', projectId: p.id })}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 12 }}>
