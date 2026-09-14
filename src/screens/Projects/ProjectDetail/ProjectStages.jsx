@@ -1,8 +1,8 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
-import { AvatarStack, SemResponsavel } from '../../../components/primitives/primitives.jsx'
+import { AvatarStack, SegControl, SemResponsavel } from '../../../components/primitives/primitives.jsx'
 import { TaskTimerButton } from '../../../components/TimeTracker/TimeTracker.jsx'
-import { calcularProgresso, checklistStats, taskMembers } from '../../../data/store.js'
+import { STATUSES, calcularProgresso, checklistStats, taskMembers } from '../../../data/store.js'
 import { EmptyState } from '../shared/EmptyState.jsx'
 
 // Etapas — substitui a antiga aba Atividades. As duas mostravam a MESMA tabela
@@ -18,10 +18,14 @@ import { EmptyState } from '../shared/EmptyState.jsx'
 const PADRAO_ETAPA = /^(\d+)\s*·\s*(.+)$/
 
 const ORDEM_STATUS = { todo: 0, progress: 1, done: 2 }
-const ORDEM_BOTOES = ['todo', 'progress', 'done']
 const ROTULO_STATUS = { todo: 'PENDENTE', progress: 'EM ANDAMENTO', done: 'CONCLUÍDA' }
-// Mesmos estados em caixa normal: o selo grita, o botão não precisa gritar.
+
+// Opções do seletor: as MESMAS de STATUSES (ids, cores) usadas no TaskModal,
+// só que com o vocabulário desta aba. Aqui o estado é de uma ETAPA, e o selo
+// no cabeçalho já diz PENDENTE/CONCLUÍDA — escrever "A fazer"/"Concluído" no
+// mesmo cartão daria dois nomes ao mesmo estado.
 const ROTULO_BOTAO = { todo: 'Pendente', progress: 'Em andamento', done: 'Concluída' }
+const OPCOES_STATUS = STATUSES.map(s => ({ ...s, label: ROTULO_BOTAO[s.id] }))
 
 // O status NÃO vira nome de classe direto. 'progress' colidia com a .progress
 // global do kit (a barra de progresso: height 7px, overflow hidden), e a linha
@@ -81,15 +85,8 @@ function SeletorStatus({ task, onMoveTask }) {
   return (
     <div className="et-status" role="group" aria-label={`Status: ${task.title}`}>
       <span className="et-status-lab">Status</span>
-      {ORDEM_BOTOES.map(id => (
-        <button key={id} type="button"
-          className={'et-status-bt ' + CLASSE_STATUS[id] + (atual === id ? ' on' : '')}
-          aria-pressed={atual === id}
-          disabled={atual === id}
-          onClick={() => onMoveTask(task.id, id)}>
-          {ROTULO_BOTAO[id]}
-        </button>
-      ))}
+      <SegControl options={OPCOES_STATUS} value={atual}
+        onChange={(id) => { if (id !== atual) onMoveTask(task.id, id) }} />
     </div>
   )
 }

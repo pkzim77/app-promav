@@ -569,27 +569,13 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
 
 .et-botoes { margin-left: auto; display: flex; align-items: center; gap: 7px; }
 
-/* Trocar o estado sem abrir a atividade. Aparece em atividade sem checklist
-   (onde não havia nada clicável) e nas avulsas, que ficam fora do cabeçalho
-   de etapa e por isso não mostravam estado nenhum. */
-.et-status { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* Trocar o estado sem abrir a atividade. O seletor em si é o .seg do kit — o
+   mesmo do TaskModal —, então aqui fica só a linha que o rotula. */
+.et-status { display: flex; align-items: center; gap: 10px; }
 
-.et-status-lab { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--fg-3); margin-right: 2px; }
+.et-status-lab { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--fg-3); flex-shrink: 0; }
 
-.et-status-bt { font-family: inherit; font-size: 12px; font-weight: 600; padding: 4px 11px; border-radius: var(--r-full); border: 1px solid var(--border); background: var(--surface); color: var(--fg-3); cursor: pointer; }
-
-.et-status-bt:hover:not(:disabled) { border-color: var(--border-strong); color: var(--fg-2); }
-
-/* Só o estado atual recebe cor; os outros dois ficam neutros, senão as três
-   cores disputam a atenção e nenhuma diz onde a atividade está. O atual vai
-   desabilitado — clicar nele seria um PATCH que não muda nada. */
-.et-status-bt.on { font-weight: 700; cursor: default; }
-
-.et-status-bt.et-todo.on { background: var(--status-todo-soft); color: var(--status-todo); border-color: var(--status-todo); }
-
-.et-status-bt.et-prog.on { background: var(--status-progress-soft); color: var(--status-progress); border-color: var(--status-progress); }
-
-.et-status-bt.et-done.on { background: var(--status-done-soft); color: var(--status-done); border-color: var(--status-done); }
+.et-status .seg { flex: 1; min-width: 0; }
 
 .et-avulsas { border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-subtle); }
 
