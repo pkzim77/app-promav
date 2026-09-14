@@ -48,22 +48,21 @@ const peopleGridTheme = themeQuartz.withParams({
   spacing: 8,
 })
 
-function NoRowsOverlay() {
+// O AG Grid tem UM só overlay de lista vazia. Havia aqui um segundo
+// componente ligado em `noMatchingRowsOverlayComponent`, propriedade que não
+// existe — era descartada em silêncio, e filtrar até zerar mostrava "Nenhum
+// profissional cadastrado · Cadastre um profissional" numa lista que tinha
+// dezenas de cadastros. Quem separa os dois casos agora é o componente: se a
+// grade TEM linhas e mesmo assim está vazia, quem esvaziou foi o filtro.
+function NoRowsOverlay({ total }) {
+  const semCadastro = !total
   return (
     <div className="empty">
       <div className="ic"><Icon name="users" size={26} stroke={1.9} /></div>
-      <h3>Nenhum profissional cadastrado</h3>
-      <p>Cadastre um profissional para vê-lo listado aqui.</p>
-    </div>
-  )
-}
-
-function NoMatchingRowsOverlay() {
-  return (
-    <div className="empty">
-      <div className="ic"><Icon name="users" size={26} stroke={1.9} /></div>
-      <h3>Nenhum profissional encontrado</h3>
-      <p>Não há profissionais que combinem com os filtros aplicados.</p>
+      <h3>{semCadastro ? 'Nenhum profissional cadastrado' : 'Nenhum profissional encontrado'}</h3>
+      <p>{semCadastro
+        ? 'Cadastre um profissional para vê-lo listado aqui.'
+        : 'Não há profissionais que combinem com os filtros aplicados.'}</p>
     </div>
   )
 }
@@ -259,6 +258,10 @@ export function People({ users = [], projects = [], tasks = [], currentUserId = 
     filterParams: { buttons: ['reset'] },
   }), [])
 
+  // O overlay precisa saber quantos profissionais existem para distinguir
+  // "não há cadastro" de "o filtro não achou nada".
+  const noRowsParams = React.useMemo(() => ({ total: people.length }), [people.length])
+
   const handleRowClicked = React.useCallback((event) => {
     // Os botões de editar/excluir ficam dentro da própria linha; um clique
     // neles não deve também contar como "clique na linha" — senão excluir
@@ -295,7 +298,7 @@ export function People({ users = [], projects = [], tasks = [], currentUserId = 
             rowHeight={58}
             headerHeight={40}
             noRowsOverlayComponent={NoRowsOverlay}
-            noMatchingRowsOverlayComponent={NoMatchingRowsOverlay}
+            noRowsOverlayComponentParams={noRowsParams}
           />
         </div>
       </div>
