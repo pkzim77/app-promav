@@ -1,12 +1,29 @@
 import './People.css'
 import React from 'react'
 import { AgGridReact } from 'ag-grid-react'
-import { ModuleRegistry, AllCommunityModule, themeQuartz } from 'ag-grid-community'
+import { ModuleRegistry, ClientSideRowModelModule, TextFilterModule, ValidationModule, themeQuartz } from 'ag-grid-community'
 import { Avatar } from '../../components/primitives/primitives.jsx'
 import { Icon } from '../../components/Icon.jsx'
 import { taskMembers } from '../../data/store.js'
 
-ModuleRegistry.registerModules([AllCommunityModule])
+// Só os módulos que esta tela usa. AllCommunityModule agrega 44 — trazia
+// paginação, exportação CSV, todos os editores de célula, os filtros de data
+// e número, row model infinito... nada disso aparece aqui, e o pedaço da tela
+// ficava maior que o app inteiro.
+//
+//   ClientSideRowModel → rowData local; já traz a ordenação (sortable/sort)
+//   TextFilter         → agTextColumnFilter + o floating filter do cabeçalho,
+//                        e o FilterValue de que o filterValueGetter depende
+//
+// Redimensionar e fixar coluna (resizable, pinned) não são módulos: vêm no
+// núcleo. Nem a API da grade é registrada, porque a tela não chama nenhuma.
+const modulos = [ClientSideRowModelModule, TextFilterModule]
+
+// Em desenvolvimento, o ValidationModule troca falhas silenciosas por uma
+// mensagem dizendo qual módulo falta. Em produção ele sai no build.
+if (import.meta.env.DEV) modulos.push(ValidationModule)
+
+ModuleRegistry.registerModules(modulos)
 
 // Cores espelhadas de src/styles/tokens.css — a Theming API do AG Grid não lê
 // custom properties, então os valores precisam ser mantidos em sincronia à mão.
