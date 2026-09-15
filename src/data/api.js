@@ -106,6 +106,10 @@ export const api = {
   pulse: () => req('GET', '/pulse'),
   // Registra que a pessoa abriu a atividade — permitido para 'Só exibição'.
   viewTask: (id) => req('POST', `/tasks/${id}/view`),
+  // Acrescenta um item ao checklist de uma atividade — exige Edição total.
+  addChecklistItem: (taskId, text, assigneeId) => req('POST', `/tasks/${taskId}/checklist`, { text, assigneeId }),
+  // Cria de uma vez as etapas do processo que faltam no projeto.
+  createStages: (projectId) => req('POST', `/projects/${projectId}/stages`),
 
   // ----- mudanças do projeto (orientações) -----
   publishChange: (projectId, data) => req('POST', `/projects/${projectId}/changes`, data),

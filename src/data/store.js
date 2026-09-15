@@ -101,6 +101,77 @@ export const PROJECT_STATUSES = [
 ]
 export const PROJECT_STATUS_MAP = Object.fromEntries(PROJECT_STATUSES.map(s => [s.id, s]))
 
+// ---------- nome do projeto ----------
+// A equipe nomeia o projeto como um código: "260103_REF._ESC. JOSÉ MARQUES DE
+// SOUSA_NOVA UNIÃO" — data (AAMMNN), tipo de obra, nome e um complemento
+// (localidade ou nº do convênio). São até 62 caracteres, que como <h1> cru
+// ocupam duas linhas e escondem o que interessa.
+//
+// Aqui isso vira partes, só para EXIBIR: o nome no banco não muda, a busca
+// continua encontrando pelo código, e quem não segue o padrão (11 dos 36)
+// aparece inteiro no título, sem chips.
+const PADRAO_NOME = /^(\d{6})_(.+)$/
+
+export function partesDoProjeto(nome = '') {
+  const m = PADRAO_NOME.exec(String(nome).trim())
+  if (!m) return { codigo: null, tipo: null, titulo: nome, complemento: null }
+  const [, codigo, resto] = m
+
+  // Sem mais nenhum "_", o que sobra é o nome inteiro — caso de
+  // "260502_SINALIZE", que tem código mas nem tipo nem complemento.
+  const primeiro = resto.indexOf('_')
+  if (primeiro < 0) return { codigo, tipo: null, titulo: resto, complemento: null }
+
+  const tipo = resto.slice(0, primeiro)
+  const semTipo = resto.slice(primeiro + 1)
+  // O complemento é o ÚLTIMO trecho: o nome do meio pode conter "_", então
+  // quebramos pela direita, não pela esquerda.
+  const ultimo = semTipo.lastIndexOf('_')
+  return {
+    codigo,
+    tipo: tipo.replace(/\.$/, ''),                     // "REF." → "REF"
+    titulo: ultimo > 0 ? semTipo.slice(0, ultimo) : semTipo,
+    complemento: ultimo > 0 ? semTipo.slice(ultimo + 1) : null,
+  }
+}
+
+// "260103" → "01/26". O código é AAMMNN: ano, mês e sequência.
+export function dataDoCodigo(codigo) {
+  if (!codigo || codigo.length !== 6) return null
+  return `${codigo.slice(2, 4)}/${codigo.slice(0, 2)}`
+}
+
+// ---------- etapas do processo ----------
+// O caminho que todo projeto percorre, do levantamento à licitação. A equipe
+// já vinha recriando esta lista à mão em cada projeto — o que gerou etapas
+// duplicadas. O título gravado é "<i> · <nome>", e é esse padrão que a aba
+// Etapas lê para agrupar. A mesma lista existe em server/index.js, que é quem
+// cria as etapas; mexeu aqui, mexa lá.
+export const ETAPAS_PADRAO = [
+  'Contratação direta', 'Levantamento', 'Projetos', 'Orçamento',
+  'Relatório fotográfico', 'ART e documentos', 'Licença ambiental',
+  'Projeto básico', 'Protocolos', 'Diligências', 'Licitação',
+]
+export const tituloDaEtapa = (i) => `${i} · ${ETAPAS_PADRAO[i]}`
+
+// "2 · Projetos" → { n: 2, nome: 'Projetos' }. O separador é o ponto médio.
+export const PADRAO_ETAPA = /^(\d+)\s*·\s*(.+)$/
+
+// As etapas de um projeto, em ordem, para os seletores. Etapa duplicada entra
+// uma vez só — duas opções idênticas num <select> não ajudam ninguém a
+// escolher, e ainda esconderiam qual das cópias receberia o item.
+export function etapasDoProjeto(tasks = [], projectId) {
+  const vistas = new Map()
+  for (const t of tasks) {
+    if (t.projectId !== projectId) continue
+    const m = PADRAO_ETAPA.exec(t.title || '')
+    if (!m) continue
+    const n = Number(m[1])
+    if (!vistas.has(n)) vistas.set(n, { id: t.id, n, label: t.title, task: t })
+  }
+  return [...vistas.values()].sort((a, b) => a.n - b.n)
+}
+
 // ---------- mudanças do projeto (orientações) ----------
 // Setores da PROMAV. Cada usuário pertence a um (users.sector); é isso que faz
 // "destinatário: Engenharia" resolver para pessoas de verdade.
@@ -339,6 +410,30 @@ export function taskProgress(task) {
 // Progresso do projeto: percentual executado segundo os PESOS das atividades
 // (ver src/data/progresso.js). Antes era a média simples do progresso de cada
 // atividade — o que fazia um serviço de 3 dias pesar igual a um de 3 meses.
-export function projectProgress(tasks, projectId) {
-  return Math.round(progressoExecutado(tasks.filter(t => t.projectId === projectId)))
+//
+// Recebe JÁ as atividades do projeto. A versão anterior recebia a lista
+// inteira mais um projectId e filtrava por conta própria, o que parecia
+// cômodo e custava caro: numa tela de cards, cada card varria todas as
+// atividades, e o total virava projetos × atividades a cada render — de novo
+// a cada tecla digitada na busca, que é o que remonta a lista. Quem tem a
+// lista de muitos projetos agrupa uma vez com tasksByProject().
+export function projectProgress(tasksDoProjeto) {
+  return Math.round(progressoExecutado(tasksDoProjeto))
 }
+
+// Atividades agrupadas por projeto, numa passada só: O(atividades) em vez de
+// um filter por projeto. Use dentro de um useMemo com [tasks].
+export function tasksByProject(tasks) {
+  const porProjeto = new Map()
+  for (const t of tasks || []) {
+    const lista = porProjeto.get(t.projectId)
+    if (lista) lista.push(t)
+    else porProjeto.set(t.projectId, [t])
+  }
+  return porProjeto
+}
+
+// Projeto sem atividade nenhuma. Referência única e congelada: devolver [] a
+// cada chamada criaria um array novo por render, quebrando qualquer memo de
+// quem receber isto como prop.
+export const SEM_ATIVIDADES = Object.freeze([])

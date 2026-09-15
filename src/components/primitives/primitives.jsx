@@ -42,6 +42,20 @@ export function AvatarStack({ users, size = 24, max = 4 }) {
   )
 }
 
+// Atividade sem responsável é pendência de gestão, não um campo em branco.
+// Um travessão discreto some no meio da tela e a lacuna nunca é resolvida —
+// hoje são 25 de 81 atividades e 147 de 152 itens de checklist sem dono.
+// Fica FORA do Panorama de propósito: aquela é a aba que se projeta em reunião
+// com o cliente, e não é lá que a equipe resolve a própria escala.
+export function SemResponsavel({ compacto = false }) {
+  return (
+    <span className={'sem-resp' + (compacto ? ' compacto' : '')} title="Ninguém foi definido como responsável">
+      <Icon name="flag" size={compacto ? 11 : 13} />
+      {compacto ? 'sem dono' : 'Sem responsável'}
+    </span>
+  )
+}
+
 export function StatusTag({ status }) {
   const s = STATUS_MAP[status]
   return (

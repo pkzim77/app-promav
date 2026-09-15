@@ -47,7 +47,8 @@ const TASK_SELECT = `
          to_char(t.start_date, 'YYYY-MM-DD') AS start,
          to_char(t.end_date,   'YYYY-MM-DD') AS "end",
          COALESCE((
-           SELECT json_agg(json_build_object('id', c.id, 'text', c.text, 'done', c.done) ORDER BY c.position)
+           SELECT json_agg(json_build_object('id', c.id, 'text', c.text, 'done', c.done,
+                                             'assigneeId', c.assignee_id) ORDER BY c.position)
            FROM checklist_items c WHERE c.task_id = t.id
          ), '[]'::json) AS checklist,
          COALESCE((
@@ -280,11 +281,18 @@ async function replaceChildren(client, taskId, checklist = [], memberIds = [], a
   await client.query('DELETE FROM checklist_items WHERE task_id = $1', [taskId])
   await client.query('DELETE FROM task_members WHERE task_id = $1', [taskId])
 
+  // Quem responde por CADA item. Uma atividade com duas pessoas costuma ter
+  // cada uma cuidando de uma parte; sem isto só dá para saber que "alguém do
+  // par" está devendo. Aceita null: ligar o item a alguém não é obrigatório.
+  const podeAssumir = new Set([assigneeId, ...(memberIds || [])].filter(Boolean))
   for (let i = 0; i < checklist.length; i++) {
     const item = checklist[i]
+    // Só vale quem participa da atividade — o seletor mostra só eles, mas o
+    // servidor não confia no que chega.
+    const dono = podeAssumir.has(item.assigneeId) ? item.assigneeId : null
     await client.query(
-      'INSERT INTO checklist_items (id, task_id, text, done, position) VALUES ($1, $2, $3, $4, $5)',
-      [item.id || genId('c'), taskId, item.text, !!item.done, i]
+      'INSERT INTO checklist_items (id, task_id, text, done, position, assignee_id) VALUES ($1, $2, $3, $4, $5, $6)',
+      [item.id || genId('c'), taskId, item.text, !!item.done, i, dono]
     )
   }
   // membros = lista informada, sem o responsável (ele já é o assignee).
@@ -391,22 +399,40 @@ app.post('/api/auth/change-password', wrap(async (req, res) => {
 // Admin recebe tudo; os demais recebem SOMENTE os projetos em que foram
 // incluídos (e as tarefas/sessões/pastas correspondentes). O filtro é aqui,
 // no servidor: esconder no front deixaria os dados trafegarem mesmo assim.
+// As seis listas vão numa CONSULTA SÓ. Medindo contra o Neon, um `SELECT 1`
+// leva ~234 ms: a latência da ida e volta domina, e o trabalho de cada
+// consulta é quase nada (a maior, tasks, gasta ~140 ms além da latência).
+// Eram 7 idas para admin e 8 para os demais (6 listas + o visibleProjectIds,
+// que roda em série antes); passam a ser 2 e 3. O `ids` entra como parâmetro,
+// e `$1 IS NULL` cobre o admin, que não filtra nada.
+//
+// Montado sob demanda, e não numa const no topo: o CHANGE_SELECT é declarado
+// mais abaixo no arquivo, e interpolá-lo aqui na carga do módulo estouraria
+// em temporal dead zone antes do servidor subir.
+let sqlBootstrap = null
+const montarBootstrapSql = () => (sqlBootstrap ??= `
+  SELECT
+    (SELECT COALESCE(json_agg(u), '[]'::json) FROM (SELECT ${LIST_USER} FROM users ORDER BY id) u)                                  AS users,
+    (SELECT COALESCE(json_agg(p), '[]'::json) FROM (${PROJECT_SELECT} WHERE $1::text[] IS NULL OR id = ANY($1) ORDER BY position, id) p)      AS projects,
+    (SELECT COALESCE(json_agg(t), '[]'::json) FROM (${TASK_SELECT} WHERE $1::text[] IS NULL OR t.project_id = ANY($1) ORDER BY t.id) t)       AS tasks,
+    (SELECT COALESCE(json_agg(s), '[]'::json) FROM (${SESSION_SELECT} WHERE $1::text[] IS NULL OR task_id IN (SELECT id FROM tasks WHERE project_id = ANY($1)) ORDER BY start_at) s) AS sessions,
+    (SELECT COALESCE(json_agg(f), '[]'::json) FROM (${FOLDER_SELECT} ORDER BY position, name) f)                                    AS folders,
+    (SELECT COALESCE(json_agg(c), '[]'::json) FROM (${CHANGE_SELECT} WHERE $1::text[] IS NULL OR c.project_id = ANY($1) ORDER BY c.published_at DESC) c) AS changes
+`)
+
 app.get('/api/bootstrap', wrap(async (req, res) => {
   const ids = await visibleProjectIds(req.userId)   // null = admin (sem filtro)
   const all = ids === null
 
-  const [users, projects, tasks, sessions, folders, changes] = await Promise.all([
-    q(`SELECT ${LIST_USER} FROM users ORDER BY id`),
-    all ? q(`${PROJECT_SELECT} ORDER BY position, id`)
-        : q(`${PROJECT_SELECT} WHERE id = ANY($1) ORDER BY position, id`, [ids]),
-    listTasks(ids),
-    listSessions(ids),
-    q(`${FOLDER_SELECT} ORDER BY position, name`),
-    listChanges(ids),
-  ])
+  const [linha] = await q(montarBootstrapSql(), [ids])
+  const tasks = (linha.tasks || []).map(mapTask)
+  const sessions = (linha.sessions || []).map(mapSession)
+  const changes = (linha.changes || []).map(mapChange)
+  const projects = linha.projects || []
+  const folders = linha.folders || []
 
   res.json({
-    users, projects, tasks, sessions, changes,
+    users: linha.users || [], projects, tasks, sessions, changes,
     folders: all ? folders : foldersWithProjects(folders, projects),
   })
 }))
@@ -842,15 +868,63 @@ app.patch('/api/tasks/:id/status', gate(taskProjectId, CAN.light), wrap(async (r
 // o campo "done" de itens já existentes (não cria nem remove itens).
 app.patch('/api/tasks/:id/checklist', gate(taskProjectId, CAN.light), wrap(async (req, res) => {
   const { checklist = [] } = req.body
+  // Quem pode assumir um item: só quem participa da atividade. O seletor no
+  // front já mostra apenas eles, mas o servidor confere de novo.
+  const [dono] = await q('SELECT assignee_id FROM tasks WHERE id = $1', [req.params.id])
+  if (!dono) return res.status(404).json({ error: 'Atividade não encontrada.' })
+  const membros = await q('SELECT user_id FROM task_members WHERE task_id = $1', [req.params.id])
+  const podeAssumir = new Set([dono.assignee_id, ...membros.map(m => m.user_id)].filter(Boolean))
+
   await tx(async (client) => {
     for (const item of checklist) {
       if (!item || !item.id) continue
-      await client.query('UPDATE checklist_items SET done = $2 WHERE id = $1 AND task_id = $3', [item.id, !!item.done, req.params.id])
+      // Cada campo só é tocado quando vem no corpo: marcar não desfaz a
+      // atribuição, e atribuir não mexe no que já está marcado.
+      if ('done' in item) {
+        await client.query('UPDATE checklist_items SET done = $2 WHERE id = $1 AND task_id = $3', [item.id, !!item.done, req.params.id])
+      }
+      if ('assigneeId' in item) {
+        const novo = podeAssumir.has(item.assigneeId) ? item.assigneeId : null
+        await client.query('UPDATE checklist_items SET assignee_id = $2 WHERE id = $1 AND task_id = $3', [item.id, novo, req.params.id])
+      }
     }
     await client.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [req.params.id])
+    await ajustarStatusPeloChecklist(client, req.params.id)
   })
   res.json(await getTask(req.params.id))
 }))
+
+// Quando a atividade TEM checklist, o status espelha o checklist:
+//
+//   tudo marcado      → Concluído
+//   parte marcada     → Em andamento
+//   nada marcado      → A fazer
+//
+// O cálculo do progresso (src/data/progresso.js) já contava checklist inteiro
+// marcado como concluído, mas a COLUNA status ficava para trás — o Panorama
+// dava a atividade por encerrada enquanto o Kanban ainda a mostrava em "A
+// fazer". Isto faz o status acompanhar de fato.
+//
+// A regra é simétrica de propósito. Uma primeira versão só promovia (e
+// rebaixava de Concluído para Em andamento), para não desfazer um "em
+// andamento" posto à mão. O efeito prático foi pior: desmarcar tudo deixava a
+// etapa em Em andamento, e ela sumia de onde a pessoa ia procurá-la. Espelhar
+// é mais previsível — e só acontece quando alguém mexe no checklist, nunca
+// por conta própria.
+//
+// Fica no servidor, e não no front, para valer venha a marcação de onde vier.
+async function ajustarStatusPeloChecklist(client, taskId) {
+  const { rows: [t] } = await client.query('SELECT status FROM tasks WHERE id = $1', [taskId])
+  if (!t) return
+  const { rows: [c] } = await client.query(
+    'SELECT count(*)::int AS total, count(*) FILTER (WHERE done)::int AS feitos FROM checklist_items WHERE task_id = $1',
+    [taskId]
+  )
+  if (!c.total) return                               // sem checklist: nada a inferir
+  const novo = c.feitos === c.total ? 'done' : c.feitos > 0 ? 'progress' : 'todo'
+  if (novo === t.status) return
+  await client.query('UPDATE tasks SET status = $2 WHERE id = $1', [taskId, novo])
+}
 
 // Entrar/sair de uma atividade — o usuário gerencia só a SUA participação.
 // Permitido para 'Só exibição'; adicionar/remover outras pessoas exige Edição total.
@@ -867,6 +941,75 @@ app.post('/api/tasks/:id/membership', gate(taskProjectId, CAN.light), wrap(async
   }
   await q('UPDATE tasks SET updated_at = now() WHERE id = $1', [req.params.id])
   res.json(await getTask(req.params.id))
+}))
+
+// Criar as etapas que faltam no projeto, de uma vez. Idempotente: só insere o
+// que ainda não existe, então clicar duas vezes não duplica — que é justamente
+// como a equipe acabou com "9 · Diligências" repetida em três projetos.
+//
+// São três idas ao banco: conferir o projeto, inserir, reler o que entrou.
+// Antes eram ~15 — uma consulta para listar os títulos existentes e, dentro de
+// uma transação, um INSERT por etapa. Com o Postgres do outro lado da rede o
+// custo é quase todo de ida e volta, então criar as 11 etapas levava segundos
+// de espera. O filtro do que já existe virou o NOT EXISTS do próprio INSERT, e
+// as 11 linhas entram de uma vez — um único INSERT já é atômico, sem transação.
+app.post('/api/projects/:id/stages', gate((req) => req.params.id, CAN.edit), wrap(async (req, res) => {
+  const [p] = await q("SELECT to_char(COALESCE(start_date, now()::date), 'YYYY-MM-DD') AS inicio FROM projects WHERE id = $1", [req.params.id])
+  if (!p) return res.status(404).json({ error: 'Projeto não encontrado.' })
+
+  const titulos = ETAPAS_PADRAO.map((nome, i) => `${i} · ${nome}`)
+  const ids = titulos.map(() => genId('t'))
+  const novas = await q(
+    `INSERT INTO tasks (id, project_id, title, status, priority, start_date, end_date, created_by)
+     SELECT e.id, $1, e.title, 'todo', 'medium', $2::date, $2::date + $3::int, $4
+     FROM unnest($5::text[], $6::text[]) AS e(id, title)
+     WHERE NOT EXISTS (SELECT 1 FROM tasks t WHERE t.project_id = $1 AND t.title = e.title)
+     RETURNING id`,
+    [req.params.id, p.inicio, DIAS_PRAZO_ATIVIDADE, req.userId, ids, titulos])
+
+  // Devolve as etapas prontas. Sem isto o cliente só sabia quantas foram e
+  // precisava recarregar o bootstrap inteiro (54 KB) para enxergar 11 linhas.
+  const tasks = novas.length
+    ? (await q(`${TASK_SELECT} WHERE t.id = ANY($1) ORDER BY t.id`, [novas.map(r => r.id)])).map(mapTask)
+    : []
+  res.json({ criadas: novas.length, jaExistiam: ETAPAS_PADRAO.length - novas.length, tasks })
+}))
+
+// Acrescentar um item ao checklist de uma atividade. Exige Edição total: o
+// item é trabalho novo, diferente de MARCAR um item existente (que 'Só
+// exibição' pode fazer, pela rota PATCH).
+app.post('/api/tasks/:id/checklist', gate(taskProjectId, CAN.edit), wrap(async (req, res) => {
+  const text = String(req.body.text || '').trim()
+  if (!text) return res.status(400).json({ error: 'Escreva o que precisa ser feito.' })
+
+  const [t] = await q('SELECT assignee_id, project_id FROM tasks WHERE id = $1', [req.params.id])
+  if (!t) return res.status(404).json({ error: 'Atividade não encontrada.' })
+
+  // Aqui o dono pode ser QUALQUER pessoa da equipe do projeto, não só quem já
+  // está na etapa: uma etapa recém-criada não tem ninguém, e exigir que a
+  // pessoa entrasse antes deixaria o seletor vazio justo na hora de distribuir
+  // o trabalho. Quem for escolhido entra na etapa (task_members) — sem isso a
+  // atribuição não passaria na validação das outras rotas.
+  const daEquipe = await q(
+    `SELECT user_id FROM project_members WHERE project_id = $1
+     UNION SELECT id FROM users WHERE is_admin`, [t.project_id])
+  const podeAssumir = new Set([t.assignee_id, ...daEquipe.map(m => m.user_id)].filter(Boolean))
+  const dono = podeAssumir.has(req.body.assigneeId) ? req.body.assigneeId : null
+
+  await tx(async (client) => {
+    if (dono && dono !== t.assignee_id) {
+      await client.query('INSERT INTO task_members (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.params.id, dono])
+    }
+    const { rows: [pos] } = await client.query(
+      'SELECT COALESCE(max(position), -1) + 1 AS n FROM checklist_items WHERE task_id = $1', [req.params.id])
+    await client.query(
+      'INSERT INTO checklist_items (id, task_id, text, done, position, assignee_id) VALUES ($1, $2, $3, false, $4, $5)',
+      [genId('c'), req.params.id, text, pos.n, dono])
+    await client.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [req.params.id])
+    // Item novo numa etapa concluída a devolve para "em andamento".
+    await ajustarStatusPeloChecklist(client, req.params.id)
+  })
+  res.status(201).json(await getTask(req.params.id))
 }))
 
 // Registrar que a pessoa ABRIU a atividade. Não é edição — 'Só exibição'
@@ -968,6 +1111,7 @@ const CHANGE_SELECT = `
          to_char(c.change_date, 'YYYY-MM-DD') AS "changeDate",
          c.responsible_id  AS "responsibleId",
          c.task_id         AS "taskId",
+         c.checklist_item_id AS "checklistItemId",
          c.affects_budget  AS "affectsBudget",
          c.published_by    AS "publishedBy",
          (extract(epoch FROM c.published_at) * 1000)::bigint AS "publishedAt",
@@ -1035,21 +1179,76 @@ async function abrirCiencia(client, changeId, projectId, autorId, targetSectors 
   }
 }
 
-// Cria a atividade da mudança e devolve o id. A urgência vira a prioridade do
-// cartão. Sem destinatário-pessoa, nasce sem responsável — alguém do setor assume.
-async function criarAtividadeDaMudanca(client, { projectId, title, alvos = [], changeDate, urgency }) {
-  const taskId = genId('t')
-  const [responsavel, ...demais] = alvos
-  await client.query(
-    `INSERT INTO tasks (id, project_id, title, assignee_id, status, priority, start_date, end_date)
-     VALUES ($1, $2, $3, $4, 'todo', $5, $6::date, $6::date + $7::int)`,
-    [taskId, projectId, title, responsavel || null, normUrgency(urgency), changeDate, DIAS_PRAZO_ATIVIDADE]
-  )
-  // Destinatários além do primeiro viram membros da atividade.
-  for (const u of demais) {
-    await client.query('INSERT INTO task_members (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [taskId, u])
+// Etapas do processo, na ordem. Espelha ETAPAS_PADRAO de src/data/store.js —
+// mexeu lá, mexa aqui. O título gravado é "<i> · <nome>", padrão que a aba
+// Etapas lê para agrupar as atividades.
+const ETAPAS_PADRAO = [
+  'Contratação direta', 'Levantamento', 'Projetos', 'Orçamento',
+  'Relatório fotográfico', 'ART e documentos', 'Licença ambiental',
+  'Projeto básico', 'Protocolos', 'Diligências', 'Licitação',
+]
+
+// ---------- mudança vira item de checklist dentro de uma etapa ----------
+//
+// Uma mudança quase sempre acontece DENTRO de uma etapa: revisar o projeto
+// elétrico é trabalho da etapa "2 · Projetos", não uma etapa nova. Por isso
+// ela entra como item do checklist da etapa escolhida, em vez de virar mais
+// um cartão solto no quadro.
+//
+// Atividade sem etapa escolhida vai para uma atividade-abrigo do projeto, que
+// fica fora do template numerado e por isso aparece em "Outras atividades".
+const TAREFA_SEM_ETAPA = 'Mudanças sem etapa'
+
+// A urgência entra no PREFIXO porque item de checklist não tem campo de
+// prioridade — sem isto uma requisição urgente viraria uma linha igual às
+// outras, e o sinal de urgência se perderia por completo.
+function tituloDoItem({ kind, urgency, title }) {
+  const tipo = kind === 'sugestao' ? 'Sugestão' : 'Requisição'
+  const urgente = normUrgency(urgency) === 'high' ? ' urgente' : ''
+  return `[${tipo}${urgente}] ${String(title).trim()}`
+}
+
+// A etapa escolhida, ou a atividade-abrigo (criada na primeira necessidade).
+async function hospedeiroDaMudanca(client, projectId, stageTaskId, changeDate) {
+  if (stageTaskId) {
+    // Só aceita etapa do próprio projeto — o seletor já filtra, o servidor confere.
+    const { rows: [t] } = await client.query(
+      'SELECT id FROM tasks WHERE id = $1 AND project_id = $2', [stageTaskId, projectId])
+    if (t) return t.id
   }
-  return taskId
+  const { rows: [existe] } = await client.query(
+    'SELECT id FROM tasks WHERE project_id = $1 AND title = $2 ORDER BY created_at LIMIT 1',
+    [projectId, TAREFA_SEM_ETAPA])
+  if (existe) return existe.id
+  const id = genId('t')
+  await client.query(
+    `INSERT INTO tasks (id, project_id, title, status, priority, start_date, end_date)
+     VALUES ($1, $2, $3, 'todo', 'medium', $4::date, $4::date + $5::int)`,
+    [id, projectId, TAREFA_SEM_ETAPA, changeDate, DIAS_PRAZO_ATIVIDADE])
+  return id
+}
+
+// Cria o item e devolve { taskId, itemId }. O primeiro destinatário-pessoa
+// vira dono do item — e entra como membro da etapa, senão a atribuição não
+// passaria na validação de quem pode assumir.
+async function itemDeChecklistDaMudanca(client, { projectId, stageTaskId, kind, urgency, title, changeDate, alvos = [] }) {
+  const taskId = await hospedeiroDaMudanca(client, projectId, stageTaskId, changeDate)
+  const dono = alvos[0] || null
+  if (dono) {
+    const { rows: [t] } = await client.query('SELECT assignee_id FROM tasks WHERE id = $1', [taskId])
+    if (t.assignee_id !== dono) {
+      await client.query('INSERT INTO task_members (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [taskId, dono])
+    }
+  }
+  const { rows: [pos] } = await client.query(
+    'SELECT COALESCE(max(position), -1) + 1 AS n FROM checklist_items WHERE task_id = $1', [taskId])
+  const itemId = genId('c')
+  await client.query(
+    'INSERT INTO checklist_items (id, task_id, text, done, position, assignee_id) VALUES ($1, $2, $3, false, $4, $5)',
+    [itemId, taskId, tituloDoItem({ kind, urgency, title }), pos.n, dono])
+  // A etapa que recebeu trabalho novo não pode continuar "concluída".
+  await ajustarStatusPeloChecklist(client, taskId)
+  return { taskId, itemId }
 }
 
 // Descobre o projeto de uma mudança (para o gate das rotas /changes/:id).
@@ -1087,6 +1286,7 @@ app.post('/api/projects/:id/changes', gate((req) => req.params.id, CAN.publishCh
     title, description, requester = '', changeDate,
     kind, urgency, targetUserIds = [], targetSectors = [], targetSector = null,
     affectsBudget = false,
+    stageTaskId = null,   // etapa que recebe a mudança; null = "Sem etapa"
   } = req.body
   if (!String(title || '').trim()) return res.status(400).json({ error: 'Informe o que mudou, em uma linha.' })
   if (!String(description || '').trim()) return res.status(400).json({ error: 'Descreva a mudança para quem vai fazer.' })
@@ -1110,24 +1310,31 @@ app.post('/api/projects/:id/changes', gate((req) => req.params.id, CAN.publishCh
 
   const id = genId('mc')
   await tx(async (client) => {
-    // Requisição obriga: já nasce como cartão no quadro. Sugestão é proposta —
-    // vira atividade só quando alguém aceitar.
-    const taskId = tipo === 'requisicao'
-      ? await criarAtividadeDaMudanca(client, {
-          projectId: req.params.id, title: String(title).trim(),
-          alvos, changeDate, urgency,
+    // Requisição obriga: já entra como item do checklist da etapa. Sugestão é
+    // proposta — só vira item quando alguém aceitar.
+    const criado = tipo === 'requisicao'
+      ? await itemDeChecklistDaMudanca(client, {
+          projectId: req.params.id, stageTaskId, kind: tipo,
+          title, urgency, changeDate, alvos,
         })
       : null
+    // Sugestão ainda não vira item — mas a etapa escolhida fica guardada em
+    // task_id para o /decide saber onde pôr o item quando alguém aceitar.
+    const etapaEscolhida = stageTaskId
+      ? (await client.query('SELECT id FROM tasks WHERE id = $1 AND project_id = $2', [stageTaskId, req.params.id])).rows[0]?.id || null
+      : null
+    const taskId = criado?.taskId || etapaEscolhida
+    const itemId = criado?.itemId || null
 
     await client.query(
       `INSERT INTO changes (id, project_id, title, description, origin, change_date,
                             responsible_id, target_sector, target_sectors, target_user_ids, task_id, affects_budget,
                             kind, urgency, emitter_user_id, emitter_sector,
-                            published_by, published_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, now())`,
+                            published_by, published_at, checklist_item_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, now(), $18)`,
       [id, req.params.id, String(title).trim(), String(description).trim(), String(requester || '').trim(),
       changeDate, alvos[0] || null, alvoSetor, JSON.stringify(alvosSetores), JSON.stringify(alvos), taskId, !!affectsBudget,
-       tipo, normUrgency(urgency), emissorPessoa || null, emissorSetor, req.userId]
+       tipo, normUrgency(urgency), emissorPessoa || null, emissorSetor, req.userId, itemId]
     )
     await abrirCiencia(client, id, req.params.id, req.userId, alvosSetores, alvos)
   })
@@ -1145,7 +1352,7 @@ app.put('/api/changes/:id', gate(changeProjectId, CAN.edit), wrap(async (req, re
   if (!String(description || '').trim()) return res.status(400).json({ error: 'Descreva a mudança para quem vai fazer.' })
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(changeDate || ''))) return res.status(400).json({ error: 'Informe a data da mudança.' })
 
-  const [atual] = await q('SELECT project_id, task_id FROM changes WHERE id = $1', [req.params.id])
+  const [atual] = await q('SELECT project_id, task_id, checklist_item_id, kind FROM changes WHERE id = $1', [req.params.id])
   if (!atual) return res.status(404).json({ error: 'Mudança não encontrada.' })
 
   const alvosSetores = normSetores(targetSectors, targetSector)
@@ -1171,14 +1378,23 @@ app.put('/api/changes/:id', gate(changeProjectId, CAN.edit), wrap(async (req, re
       changeDate, alvos[0] || null, alvoSetor, JSON.stringify(alvosSetores), JSON.stringify(alvos), normUrgency(urgency),
        req.userId]
     )
-    if (atual.task_id) {
-      await client.query('UPDATE tasks SET title = $2, assignee_id = $3, priority = $4 WHERE id = $1',
-        [atual.task_id, String(title).trim(), alvos[0] || null, normUrgency(urgency)])
-      // Refaz os membros da atividade a partir dos destinatários extras.
-      await client.query('DELETE FROM task_members WHERE task_id = $1', [atual.task_id])
-      for (const u of alvos.slice(1)) {
-        await client.query('INSERT INTO task_members (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [atual.task_id, u])
+    // Editar a mudança reescreve o ITEM de checklist que ela criou — nunca a
+    // etapa que o hospeda. Antes daqui a mudança tinha atividade própria e
+    // este bloco renomeava essa atividade; agora task_id aponta para a etapa,
+    // e renomeá-la trocaria o nome de "2 · Projetos" pelo texto da mudança.
+    if (atual.checklist_item_id) {
+      await client.query('UPDATE checklist_items SET text = $2 WHERE id = $1',
+        [atual.checklist_item_id, tituloDoItem({ kind: atual.kind, urgency, title })])
+      // O destinatário principal assume o item, e entra na etapa para que a
+      // atribuição seja válida.
+      const dono = alvos[0] || null
+      if (dono && atual.task_id) {
+        const { rows: [t] } = await client.query('SELECT assignee_id FROM tasks WHERE id = $1', [atual.task_id])
+        if (t && t.assignee_id !== dono) {
+          await client.query('INSERT INTO task_members (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [atual.task_id, dono])
+        }
       }
+      await client.query('UPDATE checklist_items SET assignee_id = $2 WHERE id = $1', [atual.checklist_item_id, dono])
     }
     await abrirCiencia(client, req.params.id, atual.project_id, req.userId, alvosSetores, alvos)
   })
@@ -1195,7 +1411,7 @@ app.post('/api/changes/:id/decide', gate(changeProjectId, CAN.light), wrap(async
   if (!aceitar && !motivo) return res.status(400).json({ error: 'Recusar exige um motivo registrado.' })
 
   const [c] = await q(
-    `SELECT project_id, kind, decision, task_id, title, target_user_ids, target_sector, target_sectors, urgency,
+    `SELECT project_id, kind, decision, task_id, checklist_item_id, title, target_user_ids, target_sector, target_sectors, urgency,
             to_char(change_date, 'YYYY-MM-DD') AS change_date
      FROM changes WHERE id = $1`, [req.params.id])
   if (!c) return res.status(404).json({ error: 'Mudança não encontrada.' })
@@ -1211,17 +1427,23 @@ app.post('/api/changes/:id/decide', gate(changeProjectId, CAN.light), wrap(async
 
   await tx(async (client) => {
     let taskId = c.task_id
-    if (aceitar && !taskId) {
-      taskId = await criarAtividadeDaMudanca(client, {
-        projectId: c.project_id, title: c.title, alvos: normAlvos(c.target_user_ids),
-        changeDate: c.change_date, urgency: c.urgency,
+    let itemId = c.checklist_item_id
+    // Aceitar é o que transforma a sugestão em trabalho: só aí ela vira item
+    // do checklist, na etapa escolhida na publicação.
+    if (aceitar && !itemId) {
+      const criado = await itemDeChecklistDaMudanca(client, {
+        projectId: c.project_id, stageTaskId: c.task_id, kind: 'sugestao',
+        title: c.title, urgency: c.urgency, changeDate: c.change_date,
+        alvos: normAlvos(c.target_user_ids),
       })
+      taskId = criado.taskId
+      itemId = criado.itemId
     }
     await client.query(
       `UPDATE changes SET decision = $2, decided_by = $3, decided_at = now(),
-                          decision_reason = $4, task_id = $5
+                          decision_reason = $4, task_id = $5, checklist_item_id = $6
        WHERE id = $1`,
-      [req.params.id, aceitar ? 'aceita' : 'recusada', req.userId, motivo || null, taskId]
+      [req.params.id, aceitar ? 'aceita' : 'recusada', req.userId, motivo || null, taskId, itemId]
     )
   })
   res.json(await getChange(req.params.id))
@@ -1352,6 +1574,9 @@ async function ensureSchema() {
   await q('ALTER TABLE changes ADD COLUMN IF NOT EXISTS decided_by text REFERENCES users(id) ON DELETE SET NULL')
   await q('ALTER TABLE changes ADD COLUMN IF NOT EXISTS decided_at timestamptz')
   await q('ALTER TABLE changes ADD COLUMN IF NOT EXISTS decision_reason text')
+  // O item de checklist que a mudança criou dentro da etapa. task_id passa a
+  // apontar para a ETAPA hospedeira, não para uma atividade própria.
+  await q('ALTER TABLE changes ADD COLUMN IF NOT EXISTS checklist_item_id text REFERENCES checklist_items(id) ON DELETE SET NULL')
   // Uma linha por (mudança, pessoa). confirmed_at NULL = ainda não deu ciência.
   await q(`
     CREATE TABLE IF NOT EXISTS change_acks (
@@ -1370,6 +1595,11 @@ async function ensureSchema() {
   await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS updated_at timestamptz')
   await q('UPDATE projects SET updated_at = created_at WHERE updated_at IS NULL')
   await q('ALTER TABLE projects ALTER COLUMN updated_at SET DEFAULT now()')
+
+  // Responsável por CADA item do checklist. Uma atividade com duas pessoas
+  // costuma ter cada uma cuidando de uma parte; sem isto só dá para saber que
+  // "alguém do par" está devendo. NULL = item sem dono, que é permitido.
+  await q('ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS assignee_id text REFERENCES users(id) ON DELETE SET NULL')
 
   // ----- atividade: autoria, último toque e leitura -----
   // Quem criou a atividade. NULL nas linhas antigas (não dá para descobrir

@@ -79,9 +79,11 @@ export function TimeClock({ currentUser, tasks, projects, sessions, now, onStart
   return (
     <div className="userselect" ref={ref}>
       <button className={'ponto-pill' + (active ? ' on' : '')} onClick={() => setOpen(o => !o)} title="Cronômetro por atividade">
+        {/* Parado, o rótulo só mostra o total de hoje a partir de um minuto:
+            abaixo disso o fmtDur arredonda para "0min", que lê como defeito. */}
         {active
           ? <><span className="ponto-dot" /><span className="ponto-time">{fmtClock(now - active.start)}</span></>
-          : <><Icon name="timer" size={17} /><span className="ponto-today">{todayTotal > 0 ? fmtDur(todayTotal) : 'Cronômetro'}</span></>}
+          : <><Icon name="timer" size={17} /><span className="ponto-today">{todayTotal >= 60000 ? fmtDur(todayTotal) : 'Cronômetro'}</span></>}
       </button>
       {open && (
         <div className="menu ponto-pop">
