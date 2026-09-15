@@ -268,23 +268,50 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
     (a, d) => a + (d.fatia === 'emAndamento' ? d.peso - d.executado : 0), 0)
   const visiveis = filtro === 'all' ? etapas : etapas.filter(e => e.status === filtro)
 
+  const semEtapas = etapas.length === 0
+  const repasse = { users, sessions, currentUserId, now, canEdit, onToggleChecklist, onAssignChecklist, onMoveTask, onEditTask, onDeleteTask, onStartTimer, onStopTimer }
+
+  // O que está fora do template numerado. Com etapas na tela é o apêndice da
+  // lista, fechado. Sem template, é tudo o que o projeto tem — e ficava
+  // escondido atrás do aviso de "nenhuma etapa", que saía sozinho e dava a
+  // impressão de projeto vazio mesmo com atividades cadastradas. Aqui ele
+  // aparece nos dois casos, já aberto quando é o único conteúdo.
+  const blocoAvulsas = avulsas.length > 0 && (
+    <details className="et-avulsas" open={semEtapas}>
+      <summary>
+        <Icon name="chevronRight" size={14} className="et-seta" />
+        {semEtapas
+          ? `Atividades deste projeto (${avulsas.length})`
+          : `Outras atividades (${avulsas.length}) — fora do template de etapas`}
+      </summary>
+      <div className="et-avulsas-corpo">
+        {avulsas.map(t => (
+          <CorpoDaTask key={t.id} task={t} mostrarTitulo avulsa {...repasse} />
+        ))}
+      </div>
+    </details>
+  )
+
   // 29 dos 36 projetos não tinham etapa nenhuma, e a equipe vinha recriando as
   // 11 à mão — foi assim que surgiram as duplicatas. O botão cria de uma vez.
-  const semEtapas = etapas.length === 0
   if (semEtapas) {
-    return <EmptyState icon="list" title="Nenhuma etapa cadastrada"
-      text="As 11 etapas do processo — de Contratação direta até Licitação — ainda não existem neste projeto."
-      action={canEdit ? (
-        <div className="et-nova">
-          <button className="btn btn-primary" onClick={() => onCreateStages(project.id)}>
-            <Icon name="plus" size={17} stroke={2.2} />Criar template
-          </button>
-          <button className="btn btn-ghost" onClick={() => onNewTask(project.id)}>Atividade avulsa</button>
-        </div>
-      ) : null} />
+    return (
+      <div className="proj-etapas">
+        <EmptyState icon="list" title="Nenhuma etapa cadastrada"
+          text={'As 11 etapas do processo — de Contratação direta até Licitação — ainda não existem neste projeto.'
+            + (avulsas.length ? ' As atividades já cadastradas estão logo abaixo.' : '')}
+          action={canEdit ? (
+            <div className="et-nova">
+              <button className="btn btn-primary" onClick={() => onCreateStages(project.id)}>
+                <Icon name="plus" size={17} stroke={2.2} />Criar template
+              </button>
+              <button className="btn btn-ghost" onClick={() => onNewTask(project.id)}>Atividade avulsa</button>
+            </div>
+          ) : null} />
+        {blocoAvulsas}
+      </div>
+    )
   }
-
-  const repasse = { users, sessions, currentUserId, now, canEdit, onToggleChecklist, onAssignChecklist, onMoveTask, onEditTask, onDeleteTask, onStartTimer, onStopTimer }
 
   return (
     <div className="proj-etapas">
@@ -347,19 +374,7 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
         </ol>
       )}
 
-      {avulsas.length > 0 && (
-        <details className="et-avulsas">
-          <summary>
-            <Icon name="chevronRight" size={14} className="et-seta" />
-            Outras atividades ({avulsas.length}) — fora do template de etapas
-          </summary>
-          <div className="et-avulsas-corpo">
-            {avulsas.map(t => (
-              <CorpoDaTask key={t.id} task={t} mostrarTitulo avulsa {...repasse} />
-            ))}
-          </div>
-        </details>
-      )}
+      {blocoAvulsas}
     </div>
   )
 }
