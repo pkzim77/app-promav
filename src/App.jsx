@@ -1,7 +1,7 @@
 import React from 'react'
 import { Sidebar, TopBar } from './components/Chrome/Chrome.jsx'
 import { Toast } from './components/primitives/primitives.jsx'
-import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal, PeopleModal } from './components/Modals/Modals.jsx'
+import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal, KmzModal, PeopleModal } from './components/Modals/Modals.jsx'
 import { Hub } from './screens/Hub/Hub.jsx'
 import { ProjectList, ProjectDetail } from './screens/Projects/Projects.jsx'
 import { Kanban } from './screens/Kanban/Kanban.jsx'
@@ -902,6 +902,9 @@ export default function App() {
       )}
       {modal?.type === 'resource' && modal.resType === 'image' && (
         <ImageModal onSave={saveResource} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'resource' && modal.resType === 'kmz' && (
+        <KmzModal onSave={saveResource} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'confirm' && (
         <ConfirmDialog title={modal.title} message={modal.message} onConfirm={modal.onConfirm} onClose={() => setModal(null)} />

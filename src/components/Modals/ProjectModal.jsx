@@ -1,10 +1,18 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
-import { Modal, Field } from '../primitives/primitives.jsx'
-import { PROJECT_HEX, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, PREFEITURAS, SECRETARIAS, canonizar, parseBRL } from '../../data/store.js'
+import { Modal, Field, SegControl } from '../primitives/primitives.jsx'
+import { PROJECT_HEX, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, PROJECT_TYPES, TIPOS_COM_KMZ, PREFEITURAS, SECRETARIAS, canonizar, parseBRL } from '../../data/store.js'
 import { dateError } from './shared/formHelpers.js'
 import { MoneyInput } from './shared/MoneyInput.jsx'
 import { ResourceEditor } from './ResourceModals.jsx'
+import { ehArquivoKmz } from './shared/kmzGeo.js'
+
+// Carregado sob demanda: arrasta JSZip + togeojson (~90 KB) para ler o .kmz, e
+// só serve quando a aba "Tipo de obra" de um projeto já salvo é aberta — não
+// faz sentido pesar o modal de projeto, que carrega sempre, com isso.
+const KmzSegmentsEditor = React.lazy(() =>
+  import('./KmzSegmentsEditor.jsx').then(m => ({ default: m.KmzSegmentsEditor }))
+)
 
 // Equipe do projeto — lista única que resolve duas coisas de uma vez:
 //  • acesso: quem não estiver na lista NÃO enxerga o projeto no sistema
@@ -153,7 +161,17 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const [estimadoText, setEstimadoText] = React.useState(moneyText(project?.valorEstimado))
   const [orcadoText, setOrcadoText] = React.useState(moneyText(project?.valorOrcado))
   const [projStatus, setProjStatus] = React.useState(project?.status || 'planejamento')
+  const [tipo, setTipo] = React.useState(project?.tipo || 'construcao')
   const [touched, setTouched] = React.useState(false)
+  const [tab, setTab] = React.useState('geral') // 'geral' | 'tipo'
+
+  // .kmz já anexados (só existem depois que o projeto foi criado — o upload
+  // em si acontece na Ficha técnica, que já tem o fluxo de envio de arquivo).
+  const kmzResources = resources.filter(ehArquivoKmz)
+  // Aplica uma edição de trecho (nome, extensão executada) dentro do recurso
+  // certo, sem mexer nos outros — o KmzSegmentsEditor devolve o recurso já
+  // atualizado, então é só substituir pelo id.
+  const updateResource = (atualizado) => setResources(rs => rs.map(r => r.id === atualizado.id ? atualizado : r))
 
   const dErr = dateError(start, end)
   const nameErr = touched && !name.trim() ? 'Informe um nome.' : null
@@ -165,12 +183,12 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
 
   const save = () => {
     setTouched(true)
-    if (!name.trim() || !prefeitura.trim() || dErr) return
-    if (badMoney(estimadoText) || badMoney(orcadoText)) return
+    if (!name.trim() || !prefeitura.trim() || dErr) { setTab('geral'); return }
+    if (badMoney(estimadoText) || badMoney(orcadoText)) { setTab('geral'); return }
     onSave({
       ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start, end, notes: notes.trim(), resources, members,
       prefeitura: prefeitura.trim(), secretaria: secretaria.trim(), responsibleIds,
-      origemRecurso, valorEstimado: parseBRL(estimadoText), valorOrcado: parseBRL(orcadoText), status: projStatus,
+      origemRecurso, valorEstimado: parseBRL(estimadoText), valorOrcado: parseBRL(orcadoText), status: projStatus, tipo,
     })
   }
 
@@ -180,6 +198,54 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
         <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
         <button className="btn btn-primary" onClick={save}>{editing ? 'Salvar alterações' : 'Criar projeto'}</button>
       </>}>
+      <div className="proj-tabs">
+        <button type="button" className={'proj-tab' + (tab === 'geral' ? ' on' : '')} onClick={() => setTab('geral')}>
+          <Icon name="file" size={15} />Geral
+        </button>
+        <button type="button" className={'proj-tab' + (tab === 'tipo' ? ' on' : '')} onClick={() => setTab('tipo')}>
+          <Icon name="landmark" size={15} />Tipo de obra
+        </button>
+      </div>
+
+      {tab === 'tipo' ? (
+        <>
+          <Field label="Tipo de projeto">
+            <SegControl options={PROJECT_TYPES} value={tipo} onChange={setTipo} />
+          </Field>
+          {TIPOS_COM_KMZ.includes(tipo) && (
+            <div className="field">
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                Arquivo .kmz
+                <span style={{ fontWeight: 400, color: 'var(--fg-4)', fontSize: 12.5 }}>área/trecho georreferenciado do serviço</span>
+              </label>
+              {kmzResources.length > 0 && kmzResources.map(r => (
+                <div className="kmz-edit-file" key={r.id}>
+                  <div className="res-edit-row">
+                    <span className="res-edit-ic"><Icon name="map" size={15} /></span>
+                    <span className="res-edit-info">
+                      <span className="res-edit-label">{r.label || r.filename || r.url}</span>
+                    </span>
+                  </div>
+                  {/* Só dá pra ler o arquivo depois de salvo (precisa do fileId
+                      já gravado no banco) — antes disso não há o que editar aqui. */}
+                  {r.fileId && (
+                    <React.Suspense fallback={<p className="kmz-msg">Carregando trechos…</p>}>
+                      <KmzSegmentsEditor resource={r} onChange={updateResource} />
+                    </React.Suspense>
+                  )}
+                </div>
+              ))}
+              <p className="ro-hint" style={{ marginTop: kmzResources.length ? 10 : 0 }}>
+                <Icon name="flag" size={14} />
+                {editing
+                  ? 'Adicione ou remova o arquivo pela aba Ficha técnica do projeto.'
+                  : 'Salve o projeto primeiro — depois volte na Ficha técnica para anexar o .kmz.'}
+              </p>
+            </div>
+          )}
+        </>
+      ) : (
+      <>
       <Field label="Nome do projeto">
         <input className="control" value={name?? ''} autoFocus placeholder="Ex.: Rebrand 2026" onChange={e => setName(e.target.value)} />
         {nameErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{nameErr}</span>}
@@ -261,6 +327,8 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
         <Field label="Data de término"><input type="date" className="control" value={end??''} onChange={e => setEnd(e.target.value)} /></Field>
       </div>
       {dErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{dErr}</span>}
+      </>
+      )}
     </Modal>
   )
 }

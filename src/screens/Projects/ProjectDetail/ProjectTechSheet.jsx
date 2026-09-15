@@ -1,7 +1,13 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
-import { formatBytes } from '../../../data/store.js'
+import { formatBytes, TIPOS_COM_KMZ } from '../../../data/store.js'
 import { api } from '../../../data/api.js'
+import { ehArquivoKmz } from '../../../components/Modals/shared/kmzGeo.js'
+// Carregado sob demanda: o visualizador arrasta o Leaflet junto (~150 KB) e só
+// serve quando alguém abre um mapa — não faz sentido pesar a Ficha técnica.
+const KmzViewerModal = React.lazy(() =>
+  import('../../../components/Modals/KmzViewerModal.jsx').then(m => ({ default: m.KmzViewerModal }))
+)
 
 // Mostra a "origem" (domínio) de uma URL — útil como subtítulo do link.
 function urlHost(url) {
@@ -120,19 +126,70 @@ function LinksColumn({ links, onCopy, onDelete, onAdd, canDelete }) {
   )
 }
 
+// Coluna de arquivos .kmz (área/trecho georreferenciado) — só aparece para
+// projetos de piçarramento/pavimentação (ver TIPOS_COM_KMZ em store.js).
+function MapsColumn({ maps, onCopy, onDelete, onAdd, onView, canDelete }) {
+  return (
+    <div className="res-col card">
+      <div className="res-col-head">
+        <Icon name="map" size={16} /><h3>Mapas (.kmz)</h3>
+        <span className="res-col-count">{maps.length}</span>
+        <ColAddButton label="Adicionar arquivo .kmz" onClick={() => onAdd('kmz')} />
+      </div>
+      {maps.length === 0 ? (
+        <p className="res-col-empty">Nenhum arquivo .kmz ainda.</p>
+      ) : (
+        <div className="doc-list">
+          {maps.map(r => (
+            // Não é link: o navegador não renderiza .kmz — abrir a URL só
+            // baixaria o arquivo. Quem desenha o traçado é o KmzViewerModal.
+            // (div com role=button porque a linha já contém o menu de opções,
+            // e <button> dentro de <button> é HTML inválido.)
+            <div key={r.id} className="doc-row doc-row-action" role="button" tabIndex={0}
+              onClick={() => onView(r)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onView(r) } }}>
+              <span className="doc-ic"><Icon name="map" size={17} /></span>
+              <span className="doc-info">
+                <span className="doc-name">{resourceTitle(r)}</span>
+                <span className="doc-sub">{resourceSub(r)}</span>
+              </span>
+              <Icon name="map" size={14} className="doc-open" />
+              <ResourceMenu resource={r} onCopy={onCopy} onDelete={onDelete} canDelete={canDelete} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Materiais do projeto: documentos/links + imagens. Vive na Ficha técnica.
 // (As anotações ficam no Panorama — são o texto que se mostra ao cliente.)
-function ProjectAbout({ resources, canDelete, onCopyResource, onDeleteResource, onAddResource }) {
+function ProjectAbout({ project, resources, canDelete, onCopyResource, onDeleteResource, onAddResource }) {
   const list = resources || []
-  const docs = list.filter(r => r.type === 'doc')
+  const aceitaKmz = TIPOS_COM_KMZ.includes(project.tipo)
+  // Antes da coluna de mapas existir, um .kmz só podia ser anexado como
+  // documento. ehArquivoKmz reconhece esses pela extensão para que apareçam
+  // no mapa sem precisar reenviar o arquivo — e, quando o projeto não aceita
+  // .kmz, eles seguem listados em Documentos para não sumirem da tela.
+  const maps = aceitaKmz ? list.filter(ehArquivoKmz) : []
+  const docs = list.filter(r => r.type === 'doc' && !(aceitaKmz && ehArquivoKmz(r)))
   const links = list.filter(r => r.type === 'link')
   const images = list.filter(r => r.type === 'image')
+  // Recurso .kmz aberto no visualizador de mapa (null = fechado).
+  const [viewing, setViewing] = React.useState(null)
   return (
     <div style={{ marginBottom: 22 }}>
       <div className="res-grid">
         <DocsColumn docs={docs} onCopy={onCopyResource} onDelete={onDeleteResource} onAdd={onAddResource} canDelete={canDelete} />
         <LinksColumn links={links} onCopy={onCopyResource} onDelete={onDeleteResource} onAdd={onAddResource} canDelete={canDelete} />
+        {aceitaKmz && <MapsColumn maps={maps} onCopy={onCopyResource} onDelete={onDeleteResource} onAdd={onAddResource} onView={setViewing} canDelete={canDelete} />}
       </div>
+      {viewing && (
+        <React.Suspense fallback={null}>
+          <KmzViewerModal resource={viewing} onClose={() => setViewing(null)} />
+        </React.Suspense>
+      )}
 
       <div className="card" style={{ padding: 20, marginTop: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14 }}>
@@ -192,7 +249,7 @@ export function ProjectTechSheet({ project, canEdit, onCopyResource, onDeleteRes
         </div>
       </div>
 
-      <ProjectAbout resources={project.resources} canDelete={canEdit}
+      <ProjectAbout project={project} resources={project.resources} canDelete={canEdit}
         onCopyResource={onCopyResource} onDeleteResource={onDeleteResource} onAddResource={onAddResource} />
     </div>
   )

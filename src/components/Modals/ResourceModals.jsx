@@ -5,7 +5,7 @@ import { MAX_FILE_BYTES, formatBytes } from '../../data/store.js'
 
 // Editor de recursos do projeto: documentos, links e imagens (por URL) que
 // ajudam a entender o projeto. Cada item = { id, type: 'doc'|'link'|'image', url, label }.
-const RES_ICON = { doc: 'file', image: 'image', link: 'link' }
+const RES_ICON = { doc: 'file', image: 'image', link: 'link', kmz: 'map' }
 const RES_PLACEHOLDER = {
   doc:   { url: 'URL do documento (Google Docs, PDF…)', label: 'Nome do documento' },
   link:  { url: 'URL do link (https://…)',              label: 'Texto do link (opcional)' },
@@ -82,6 +82,45 @@ export function DocumentModal({ onSave, onClose }) {
         <FilePicker file={file} onPick={onPick} error={err} />
       </Field>
       <Field label="Nome do documento">
+        <input className="control" value={name} placeholder="Opcional — usa o nome do arquivo se vazio"
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); save() } }} />
+      </Field>
+    </Modal>
+  )
+}
+
+// Modal para adicionar um arquivo .KMZ (área/trecho georreferenciado do
+// serviço) — só aparece para projetos de piçarramento/pavimentação. Mesmo
+// fluxo do documento: sobe pro banco e vira um recurso do tipo 'kmz'.
+export function KmzModal({ onSave, onClose }) {
+  const [file, setFile] = React.useState(null)
+  const [name, setName] = React.useState('')
+  const [err, setErr] = React.useState(null)
+  const [saving, setSaving] = React.useState(false)
+
+  const onPick = (f, fileErr) => {
+    if (f && !/\.kmz$/i.test(f.name)) { setFile(null); setErr('Selecione um arquivo .kmz.'); return }
+    setFile(fileErr ? null : f); setErr(fileErr)
+  }
+
+  const save = async () => {
+    if (!file) { setErr('Selecione um arquivo .kmz.'); return }
+    setSaving(true)
+    try { await onSave({ upload: true, file, kind: 'kmz', label: name.trim() }) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Modal title="Novo arquivo .kmz" onClose={onClose}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
+        <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Enviando…' : 'Adicionar .kmz'}</button>
+      </>}>
+      <Field label="Arquivo .kmz">
+        <FilePicker accept=".kmz" file={file} onPick={onPick} error={err} />
+      </Field>
+      <Field label="Nome">
         <input className="control" value={name} placeholder="Opcional — usa o nome do arquivo se vazio"
           onChange={e => setName(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); save() } }} />

@@ -10,6 +10,9 @@ import cors from 'cors'
 import compression from 'compression'
 import { q, tx } from './db.js'
 import { requireAuth, signToken, verifyPassword, hashPassword } from './auth.js'
+// Módulo puro (sem DOM/React) compartilhado com o frontend — só assim o
+// backend concorda com a tela sobre o que conta como arquivo de mapa.
+import { ehArquivoKmz } from '../src/components/Modals/shared/kmzGeo.js'
 
 const app = express()
 
@@ -92,6 +95,7 @@ const PROJECT_SELECT = `
          valor_convenio::float8   AS "valorEstimado",
          valor_disponivel::float8 AS "valorOrcado",
          status,
+         tipo,
          responsible_ids AS "responsibleIds",
          default_role AS "defaultRole",
          created_at AS created,
@@ -106,24 +110,51 @@ const PROJECT_SELECT = `
 // Lista de pastas, na ordem em que devem aparecer na sidebar.
 const FOLDER_SELECT = 'SELECT id, name, position, parent_id AS "parentId" FROM folders'
 
+// Edições que a equipe faz em cima do desenho de um .kmz: renomear um trecho
+// e/ou registrar quantos metros já foram executados. `id` casa com a posição
+// que o parser do navegador atribui (kmzGeo.js/montarFeatures) — texto livre,
+// então a única validação possível aqui é não deixar passar lixo.
+function normSegmentos(input) {
+  if (!Array.isArray(input)) return []
+  return input
+    .map((s) => {
+      if (!s || typeof s.id !== 'string' || !s.id) return null
+      const nome = typeof s.nome === 'string' ? s.nome.trim().slice(0, 200) : ''
+      const exec = Number(s.extensaoExecutadaM)
+      const item = { id: s.id }
+      if (nome) item.nome = nome
+      if (Number.isFinite(exec) && exec >= 0) item.extensaoExecutadaM = exec
+      // Sem nome nem extensão executada não há edição nenhuma para guardar.
+      return (item.nome || item.extensaoExecutadaM != null) ? item : null
+    })
+    .filter(Boolean)
+}
+
 // Normaliza os recursos do projeto antes de gravar. Há dois formatos:
 //  • externo  → { id, type, url, label }            (link colado: docs.google, etc.)
 //  • upload   → { id, type, fileId, filename, mime, size, label }  (arquivo no banco)
+// Um .kmz (novo ou o legado salvo como 'doc', ver ehArquivoKmz) ainda carrega
+// `segments`: as edições de nome/execução feitas na aba "Tipo de obra".
 function normalizeResources(input) {
   if (!Array.isArray(input)) return []
   return input
     .map((r) => {
       if (!r) return null
-      const type = ['image', 'doc', 'link'].includes(r.type) ? r.type : 'link'
+      const type = ['image', 'doc', 'link', 'kmz'].includes(r.type) ? r.type : 'link'
       const label = typeof r.label === 'string' ? r.label.trim() : ''
       if (r.fileId) {
-        return {
+        const base = {
           id: r.id || genId('r'), type, fileId: r.fileId,
           filename: typeof r.filename === 'string' ? r.filename : '',
           mime: typeof r.mime === 'string' ? r.mime : '',
           size: Number(r.size) || 0,
           label,
         }
+        if (ehArquivoKmz(base)) {
+          const segments = normSegmentos(r.segments)
+          if (segments.length) base.segments = segments
+        }
+        return base
       }
       if (typeof r.url === 'string' && r.url.trim()) {
         return { id: r.id || genId('r'), type, url: r.url.trim(), label }
@@ -137,8 +168,12 @@ function normalizeResources(input) {
 // Origem do recurso e status do projeto: listas fixas (espelham store.js).
 const ORIGENS_RECURSO = ['federal', 'estadual', 'municipal', 'emenda', 'outro']
 const PROJ_STATUSES = ['planejamento', 'andamento', 'revisao', 'pendente', 'diligencia', 'paralisado', 'concluido']
+// Tipo de obra: mesma lista de PROJECT_TYPES (store.js). Texto livre na coluna,
+// então um tipo novo não pede migração — basta entrar aqui e lá.
+const PROJ_TIPOS = ['picarramento', 'pavimentacao', 'construcao', 'reforma']
 const normOrigem = (v) => (ORIGENS_RECURSO.includes(v) ? v : 'federal')
 const normProjStatus = (v) => (PROJ_STATUSES.includes(v) ? v : 'planejamento')
+const normTipo = (v) => (PROJ_TIPOS.includes(v) ? v : 'construcao')
 // Valor do convênio: número >= 0 ou null (não informado).
 const normValor = (v) => {
   if (v === null || v === undefined || v === '') return null
@@ -550,11 +585,11 @@ app.get('/api/projects', wrap(async (req, res) => {
 app.post('/api/projects', requireAdmin, wrap(async (req, res) => {
   const {
     name, desc = '', color = 'indigo', folderId = null, start, end, notes = '', resources = [], defaultRole = 'full', members = [],
-    prefeitura = '', secretaria = '', origemRecurso, valorEstimado, valorOrcado, status, responsibleIds = [],
+    prefeitura = '', secretaria = '', origemRecurso, valorEstimado, valorOrcado, status, tipo, responsibleIds = [],
   } = req.body
   try {
   const id = genId('p')
-  
+
   await tx(async (client) => {
     const [{ position }] = await client.query(
       'SELECT COALESCE(max(position), -1) + 1 AS position FROM projects WHERE folder_id IS NOT DISTINCT FROM $1',
@@ -563,11 +598,11 @@ app.post('/api/projects', requireAdmin, wrap(async (req, res) => {
     const clean = normalizeResources(resources)
     await client.query(
       `INSERT INTO projects (id, name, description, color, folder_id, position, start_date, end_date, notes, resources,
-                            prefeitura, secretaria, origem_recurso, valor_convenio, valor_disponivel, status, responsible_ids, default_role)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+                            prefeitura, secretaria, origem_recurso, valor_convenio, valor_disponivel, status, tipo, responsible_ids, default_role)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
       [id, name, desc, color, folderId || null, position, start, end, notes, JSON.stringify(clean),
        String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso),
-       normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status),
+       normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status), normTipo(tipo),
        JSON.stringify(normResponsibles(responsibleIds)), normDefaultRole(defaultRole)]
     )
     await replaceMembers(client, id, members)
@@ -607,18 +642,18 @@ app.put('/api/projects/reorder', requireAdmin, wrap(async (req, res) => {
 app.put('/api/projects/:id', gate((req) => req.params.id, CAN.edit), wrap(async (req, res) => {
   const {
     name, desc = '', color, folderId = null, start, end, notes = '', resources = [], defaultRole, members,
-    prefeitura = '', secretaria = '', origemRecurso, valorEstimado, valorOrcado, status, responsibleIds = [],
+    prefeitura = '', secretaria = '', origemRecurso, valorEstimado, valorOrcado, status, tipo, responsibleIds = [],
   } = req.body
   const clean = normalizeResources(resources)
   const isAdmin = req.projectRole === 'admin'
   const ok = await tx(async (client) => {
     const r = await client.query(
       `UPDATE projects SET name = $2, description = $3, color = $4, folder_id = $5, start_date = $6, end_date = $7, notes = $8, resources = $9,
-                           prefeitura = $10, secretaria = $11, origem_recurso = $12, valor_convenio = $13, valor_disponivel = $14, status = $15, responsible_ids = $16,
+                           prefeitura = $10, secretaria = $11, origem_recurso = $12, valor_convenio = $13, valor_disponivel = $14, status = $15, tipo = $16, responsible_ids = $17,
                            updated_at = now()
        WHERE id = $1 RETURNING id`,
       [req.params.id, name, desc, color, folderId || null, start, end, notes, JSON.stringify(clean),
-       String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso), normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status), JSON.stringify(normResponsibles(responsibleIds))]
+       String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso), normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status), normTipo(tipo), JSON.stringify(normResponsibles(responsibleIds))]
     )
     if (!r.rows.length) return false
     await pruneOrphanFiles(client, req.params.id, clean) // remove arquivos não referenciados
@@ -756,7 +791,7 @@ app.post('/api/projects/:id/files',
     if (buffer.length > MAX_FILE_BYTES) {
       return res.status(413).json({ error: 'Arquivo maior que o limite de 25 MB.' })
     }
-    const kind = ['doc', 'image'].includes(req.query.kind) ? req.query.kind : 'doc'
+    const kind = ['doc', 'image', 'kmz'].includes(req.query.kind) ? req.query.kind : 'doc'
     const filename = (req.query.filename || 'arquivo').toString().slice(0, 255)
     const label = (req.query.label || '').toString().trim()
     // mime real vem na query (o corpo é enviado como octet-stream — ver api.js).
@@ -1312,6 +1347,9 @@ async function ensureSchema() {
   // A coluna é text livre, então status novos não pedem migração: basta entrar
   // na lista aqui e em PROJECT_STATUSES (store.js), que é quem dá rótulo e cor.
   await q("ALTER TABLE projects ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'planejamento'")
+  // Tipo de obra: piçarramento | pavimentacao | construcao | reforma. Mesma
+  // ideia do status acima — texto livre, lista fica em PROJ_TIPOS/store.js.
+  await q("ALTER TABLE projects ADD COLUMN IF NOT EXISTS tipo text NOT NULL DEFAULT 'construcao'")
   // Profissionais responsáveis: lista (jsonb) de ids de usuários.
   await q(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS responsible_ids jsonb NOT NULL DEFAULT '[]'::jsonb`)
 

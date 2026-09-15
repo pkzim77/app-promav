@@ -214,3 +214,97 @@
 .dest-linha { display: flex; align-items: center; gap: 6px; }
 
 .dest-linha .control { flex: 1; min-width: 0; }
+
+/* ---------- Visualizador de .kmz (mapa Leaflet) ---------- */
+
+.kmz-modal { max-width: 1180px; }
+
+/* Barra de ferramentas: fundo, histórico e enquadrar. */
+.kmz-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 12px; }
+.kmz-tool { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--fg-3); font-weight: 600; }
+.kmz-tool input[type="checkbox"] { accent-color: var(--brand); width: 15px; height: 15px; }
+.kmz-select { width: auto; min-width: 190px; padding: 6px 10px; font-size: 12.5px; }
+.kmz-tool-btn { display: inline-flex; align-items: center; gap: 7px; margin-left: auto; padding: 7px 12px;
+  font-size: 12.5px; font-weight: 600; color: var(--fg-3); border: 1px solid var(--border);
+  border-radius: var(--r-md); background: var(--surface); transition: border-color var(--dur), color var(--dur); }
+.kmz-tool-btn:hover { border-color: var(--brand); color: var(--brand); }
+
+/* Linha do tempo do acervo histórico (Esri Wayback). */
+.kmz-hist { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-subtle); }
+.kmz-hist-range { flex: 1; accent-color: var(--brand); min-width: 120px; }
+.kmz-hist-nav { display: flex; padding: 4px; border-radius: var(--r-sm); color: var(--fg-3); }
+.kmz-hist-nav:hover:not(:disabled) { background: var(--bg-muted); color: var(--fg-1); }
+.kmz-hist-nav:disabled { opacity: .35; cursor: default; }
+.kmz-hist-data { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; min-width: 90px; }
+.kmz-hist-data strong { font-size: 13.5px; color: var(--fg-1); font-variant-numeric: tabular-nums; }
+.kmz-hist-data span { font-size: 11px; color: var(--fg-4); }
+
+/* Mapa + painel de medidas. */
+.kmz-layout { display: grid; grid-template-columns: 1fr 268px; gap: 14px; align-items: start; }
+.kmz-mapwrap { position: relative; }
+.kmz-map { height: min(58vh, 520px); border-radius: var(--r-md); border: 1px solid var(--border); overflow: hidden; }
+/* O Leaflet põe z-index alto nos próprios painéis; sem isto os controles do
+   mapa passam por cima do cabeçalho e do rodapé do modal. */
+.kmz-map .leaflet-pane,
+.kmz-map .leaflet-top,
+.kmz-map .leaflet-bottom { z-index: 1; }
+
+/* Selo com a data da imagem histórica — sai junto em print de tela. */
+.kmz-selo { position: absolute; left: 12px; bottom: 12px; z-index: 2; padding: 5px 10px; border-radius: var(--r-sm);
+  background: rgba(17, 17, 17, .78); color: #fff; font-size: 11.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums; pointer-events: none; }
+
+.kmz-side { display: flex; flex-direction: column; gap: 10px; max-height: min(58vh, 520px); }
+.kmz-totais { display: flex; flex-direction: column; gap: 8px; }
+.kmz-total { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-subtle); }
+.kmz-total-num { display: block; font-size: 19px; font-weight: 700; color: var(--brand); font-variant-numeric: tabular-nums; }
+.kmz-total-rot { display: block; font-size: 11.5px; color: var(--fg-4); margin-top: 1px; }
+
+.kmz-feats { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.kmz-feat { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 1px; padding: 7px 9px;
+  border-radius: var(--r-sm); border: 1px solid transparent; transition: background var(--dur), border-color var(--dur); }
+.kmz-feat:hover { background: var(--bg-subtle); }
+.kmz-feat.on { background: var(--brand-soft); border-color: var(--brand); }
+.kmz-feat-nome { font-size: 12.5px; font-weight: 600; color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kmz-feat-medida { font-size: 11.5px; color: var(--fg-4); font-variant-numeric: tabular-nums; }
+
+.kmz-msg { margin: 10px 2px 0; font-size: 12.5px; color: var(--fg-4); display: flex; align-items: center; gap: 6px; }
+.kmz-msg-error { color: var(--danger); }
+.kmz-popup strong { display: block; font-size: 13px; margin-bottom: 2px; }
+.kmz-popup p { margin: 0; font-size: 12px; color: #555; }
+.kmz-popup-medida { font-weight: 600; color: #b23c17 !important; font-variant-numeric: tabular-nums; }
+
+/* Em tela estreita o painel desce para baixo do mapa. */
+@media (max-width: 860px) {
+  .kmz-layout { grid-template-columns: 1fr; }
+
+/* ---------- Editor de trechos do .kmz (aba "Tipo de obra") ---------- */
+
+.kmz-edit-file { margin-bottom: 6px; }
+.kmz-edit { padding: 10px 8px 4px; }
+
+.kmz-edit-totais { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 10px; font-size: 12px; color: var(--fg-4); }
+.kmz-edit-totais strong { color: var(--fg-1); font-variant-numeric: tabular-nums; }
+
+.kmz-edit-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+
+.kmz-edit-row { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 8px; }
+.kmz-edit-nome { min-width: 0; }
+.kmz-edit-calc { font-size: 12px; color: var(--fg-4); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.kmz-edit-exec { display: flex; align-items: center; gap: 4px; }
+.kmz-edit-exec input { width: 76px; text-align: right; padding: 6px 8px; }
+.kmz-edit-exec span { font-size: 12px; color: var(--fg-4); }
+
+.kmz-edit-pct { font-size: 11.5px; font-weight: 700; color: var(--fg-4); background: var(--bg-subtle);
+  border-radius: var(--r-sm); padding: 3px 7px; min-width: 38px; text-align: center; font-variant-numeric: tabular-nums; }
+.kmz-edit-pct.done { color: var(--brand); background: var(--brand-soft); }
+
+@media (max-width: 640px) {
+  .kmz-edit-row { grid-template-columns: 1fr; }
+  .kmz-edit-calc, .kmz-edit-exec, .kmz-edit-pct { justify-self: start; }
+}
+
+  .kmz-side { max-height: 220px; }
+}
