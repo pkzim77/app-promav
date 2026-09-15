@@ -218,6 +218,26 @@ function Etapa({ etapa, aberta, onToggleAberta, ...resto }) {
   )
 }
 
+// Criar o template fala com o banco, e demora o que a rede demorar. Sem
+// nenhum sinal o clique parecia não ter pegado: a pessoa clicava de novo, e
+// era assim que projetos acabavam com a mesma etapa cadastrada duas vezes.
+// O rótulo muda junto com o giro — só a animação não diz nada a quem usa
+// leitor de tela, e ela some inteira sob prefers-reduced-motion.
+function BotaoCriarTemplate({ projectId, onCreateStages }) {
+  const [criando, setCriando] = React.useState(false)
+  const criar = async () => {
+    setCriando(true)
+    try { await onCreateStages(projectId) } finally { setCriando(false) }
+  }
+  return (
+    <button className="btn btn-primary" onClick={criar} disabled={criando} aria-busy={criando}>
+      {criando
+        ? <><span className="spin" aria-hidden="true" />Criando etapas…</>
+        : <><Icon name="plus" size={17} stroke={2.2} />Criar template</>}
+    </button>
+  )
+}
+
 const FILTROS = [
   { id: 'all', label: 'Todas' },
   { id: 'progress', label: 'Em andamento' },
@@ -302,9 +322,7 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
             + (avulsas.length ? ' As atividades já cadastradas estão logo abaixo.' : '')}
           action={canEdit ? (
             <div className="et-nova">
-              <button className="btn btn-primary" onClick={() => onCreateStages(project.id)}>
-                <Icon name="plus" size={17} stroke={2.2} />Criar template
-              </button>
+              <BotaoCriarTemplate projectId={project.id} onCreateStages={onCreateStages} />
               <button className="btn btn-ghost" onClick={() => onNewTask(project.id)}>Atividade avulsa</button>
             </div>
           ) : null} />

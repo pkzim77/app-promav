@@ -57,6 +57,18 @@ input, textarea, select { font-family: inherit; }
 
 .btn:active { transform: scale(.98); }
 
+/* Botão esperando o servidor ou faltando um campo. Não havia estilo nenhum
+   para :disabled — o botão ficava idêntico ao clicável, e a única diferença
+   era o clique não fazer nada. */
+.btn:disabled { opacity: .6; pointer-events: none; }
+
+/* Giro de espera. Anda junto com um rótulo no gerúndio, nunca sozinho: sob
+   prefers-reduced-motion a regra lá embaixo zera a animação e sobra um anel
+   parado, e leitor de tela não vê giro nenhum de qualquer forma. */
+.spin { flex: none; width: 15px; height: 15px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; animation: girar .7s linear infinite; }
+
+@keyframes girar { to { transform: rotate(360deg); } }
+
 .btn-primary { background: var(--brand); color: #fff; }
 
 .btn-primary:hover { background: var(--brand-hover); }
