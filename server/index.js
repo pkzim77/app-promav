@@ -946,22 +946,33 @@ app.post('/api/tasks/:id/membership', gate(taskProjectId, CAN.light), wrap(async
 // Criar as etapas que faltam no projeto, de uma vez. Idempotente: só insere o
 // que ainda não existe, então clicar duas vezes não duplica — que é justamente
 // como a equipe acabou com "9 · Diligências" repetida em três projetos.
+//
+// São três idas ao banco: conferir o projeto, inserir, reler o que entrou.
+// Antes eram ~15 — uma consulta para listar os títulos existentes e, dentro de
+// uma transação, um INSERT por etapa. Com o Postgres do outro lado da rede o
+// custo é quase todo de ida e volta, então criar as 11 etapas levava segundos
+// de espera. O filtro do que já existe virou o NOT EXISTS do próprio INSERT, e
+// as 11 linhas entram de uma vez — um único INSERT já é atômico, sem transação.
 app.post('/api/projects/:id/stages', gate((req) => req.params.id, CAN.edit), wrap(async (req, res) => {
   const [p] = await q("SELECT to_char(COALESCE(start_date, now()::date), 'YYYY-MM-DD') AS inicio FROM projects WHERE id = $1", [req.params.id])
   if (!p) return res.status(404).json({ error: 'Projeto não encontrado.' })
 
-  const jaTem = new Set((await q("SELECT title FROM tasks WHERE project_id = $1 AND title ~ '^[0-9]+ · '", [req.params.id])).map(t => t.title))
-  const criar = ETAPAS_PADRAO.map((nome, i) => `${i} · ${nome}`).filter(t => !jaTem.has(t))
+  const titulos = ETAPAS_PADRAO.map((nome, i) => `${i} · ${nome}`)
+  const ids = titulos.map(() => genId('t'))
+  const novas = await q(
+    `INSERT INTO tasks (id, project_id, title, status, priority, start_date, end_date, created_by)
+     SELECT e.id, $1, e.title, 'todo', 'medium', $2::date, $2::date + $3::int, $4
+     FROM unnest($5::text[], $6::text[]) AS e(id, title)
+     WHERE NOT EXISTS (SELECT 1 FROM tasks t WHERE t.project_id = $1 AND t.title = e.title)
+     RETURNING id`,
+    [req.params.id, p.inicio, DIAS_PRAZO_ATIVIDADE, req.userId, ids, titulos])
 
-  await tx(async (client) => {
-    for (const title of criar) {
-      await client.query(
-        `INSERT INTO tasks (id, project_id, title, status, priority, start_date, end_date, created_by)
-         VALUES ($1, $2, $3, 'todo', 'medium', $4::date, $4::date + $5::int, $6)`,
-        [genId('t'), req.params.id, title, p.inicio, DIAS_PRAZO_ATIVIDADE, req.userId])
-    }
-  })
-  res.json({ criadas: criar.length, jaExistiam: ETAPAS_PADRAO.length - criar.length })
+  // Devolve as etapas prontas. Sem isto o cliente só sabia quantas foram e
+  // precisava recarregar o bootstrap inteiro (54 KB) para enxergar 11 linhas.
+  const tasks = novas.length
+    ? (await q(`${TASK_SELECT} WHERE t.id = ANY($1) ORDER BY t.id`, [novas.map(r => r.id)])).map(mapTask)
+    : []
+  res.json({ criadas: novas.length, jaExistiam: ETAPAS_PADRAO.length - novas.length, tasks })
 }))
 
 // Acrescentar um item ao checklist de uma atividade. Exige Edição total: o

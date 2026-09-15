@@ -500,10 +500,16 @@ export default function App() {
 
   // Cria de uma vez as etapas do processo que faltam no projeto. É idempotente
   // no servidor — clicar duas vezes não duplica.
+  //
+  // A rota devolve as etapas já montadas, então elas entram direto no estado.
+  // Antes vinha só a contagem e era preciso um loadData() atrás, ou seja, o
+  // bootstrap inteiro de novo — a parte mais demorada do clique, e a única que
+  // crescia junto com o resto do banco.
   const createStages = async (projectId) => {
     try {
       const r = await api.createStages(projectId)
-      await loadData()
+      if (r.tasks?.length) setTasks(ts => [...ts, ...r.tasks])
+      else await loadData() // nada novo: releitura barata que reconcilia o estado
       flash(r.criadas ? `${r.criadas} etapa${r.criadas === 1 ? '' : 's'} criada${r.criadas === 1 ? '' : 's'}.` : 'O projeto já tem todas as etapas.')
     } catch (e) { flash(e.message || 'Erro ao criar as etapas.') }
   }
