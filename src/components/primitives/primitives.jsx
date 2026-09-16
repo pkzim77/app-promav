@@ -227,10 +227,29 @@ export function SegControl({ options, value, onChange }) {
   )
 }
 
-export function Toast({ message }) {
+// Aviso do rodapé — o único retorno que o app dá depois de salvar, e 27 das 60
+// mensagens são falhas. Todas saíam iguais a um sucesso: fundo escuro, ✓ verde
+// e 2,4 segundos até sumir. Erro agora vem com triângulo, faixa vermelha e sem
+// prazo: quem desviou o olhar ainda encontra o aviso na tela.
+//
+// A região fica sempre no DOM, mesmo vazia. Leitor de tela só anuncia o que
+// ENTRA numa região que já existia — aparecendo junto com o texto, a mensagem
+// passaria em silêncio.
+export function Toast({ aviso, onClose }) {
+  const erro = aviso?.tipo === 'erro'
   return (
-    <div className="toast-wrap">
-      <div className="toast"><span className="ic"><Icon name="check" size={16} stroke={2.5} /></span>{message}</div>
+    <div className="toast-wrap" role="status" aria-live="polite">
+      {aviso && (
+        <div className={'toast' + (erro ? ' erro' : '')}>
+          <span className="ic"><Icon name={erro ? 'alert' : 'check'} size={16} stroke={2.5} /></span>
+          {aviso.msg}
+          {erro && (
+            <button className="toast-x" onClick={onClose} aria-label="Fechar aviso">
+              <Icon name="x" size={15} stroke={2.5} />
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }

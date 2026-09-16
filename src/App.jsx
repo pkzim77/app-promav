@@ -73,7 +73,17 @@ export default function App() {
     return () => clearInterval(t)
   }, [cronometroAtivo])
 
-  const flash = (msg) => { setToast(msg); clearTimeout(flash._t); flash._t = setTimeout(() => setToast(null), 2400) }
+  // Sucesso some sozinho; erro fica até a pessoa fechar. São 27 das 60
+  // mensagens do app, e 2,4 segundos não bastam para ler uma falha e ainda
+  // decidir o que fazer com ela — ainda mais quando chegava com a mesma cara
+  // de confirmação. Quem escreve a mensagem não precisa lembrar do tipo: é o
+  // falhou() que se usa no catch.
+  const flash = (msg, tipo = 'ok') => {
+    clearTimeout(flash._t)
+    setToast({ msg, tipo })
+    if (tipo !== 'erro') flash._t = setTimeout(() => setToast(null), 2400)
+  }
+  const falhou = (msg) => flash(msg, 'erro')
 
   // Busca todos os dados do backend (após autenticar).
   const loadData = React.useCallback(async () => {
@@ -165,11 +175,11 @@ export default function App() {
       setSessions(await api.startTimer(currentUserId, taskId))
       const t = tasks.find(x => x.id === taskId)
       flash(`Cronômetro iniciado${t ? ': ' + t.title : ''}.`)
-    } catch (e) { flash('Erro ao iniciar cronômetro.') }
+    } catch (e) { falhou('Erro ao iniciar cronômetro.') }
   }
   const stopTimer = async () => {
     try { setSessions(await api.stopTimer(currentUserId)); flash('Cronômetro parado.') }
-    catch (e) { flash('Erro ao parar cronômetro.') }
+    catch (e) { falhou('Erro ao parar cronômetro.') }
   }
 
   const navigate = (r) => {
@@ -191,7 +201,7 @@ export default function App() {
       setAuthUser(u => u ? { ...u, sector } : u)
       setUsers(us => us.map(u => u.id === currentUserId ? { ...u, sector } : u))
       setModal(null); flash('Setor atualizado.')
-    } catch (e) { flash(e.message || 'Erro ao salvar o setor.') }
+    } catch (e) { falhou(e.message || 'Erro ao salvar o setor.') }
   }
 
   // Setor da pessoa — define quem é cobrado quando a mudança vai para um setor.
@@ -200,7 +210,7 @@ export default function App() {
       await api.setUserSector(user.id, sector)
       setUsers(us => us.map(u => u.id === user.id ? { ...u, sector } : u))
       flash('Setor atualizado.')
-    } catch (e) { flash(e.message || 'Erro ao definir o setor.') }
+    } catch (e) { falhou(e.message || 'Erro ao definir o setor.') }
   }
 
   // ----- mudanças do projeto (orientações) -----
@@ -217,7 +227,7 @@ export default function App() {
       if (!data.id) await loadData() // traz a atividade recém-criada
       setModal(null)
       flash(data.id ? 'Mudança atualizada — a equipe precisa confirmar de novo.' : 'Mudança publicada e equipe avisada.')
-    } catch (e) { flash(e.message || 'Erro ao salvar a mudança.') }
+    } catch (e) { falhou(e.message || 'Erro ao salvar a mudança.') }
   }
 
   // Aceitar cria a atividade; por isso recarrega tudo depois de aceitar.
@@ -232,7 +242,7 @@ export default function App() {
       setChanges(cs => cs.map(c => c.id === saved.id ? saved : c))
       if (accept) await loadData()
       flash(accept ? 'Sugestão aceita — atividade criada no quadro.' : 'Sugestão recusada.')
-    } catch (e) { flash(e.message || 'Erro ao decidir a sugestão.') }
+    } catch (e) { falhou(e.message || 'Erro ao decidir a sugestão.') }
   }
 
   const ackChange = async (change) => {
@@ -240,7 +250,7 @@ export default function App() {
       const saved = await api.ackChange(change.id)
       setChanges(cs => cs.map(c => c.id === saved.id ? saved : c))
       flash('Ciência confirmada.')
-    } catch (e) { flash(e.message || 'Erro ao confirmar.') }
+    } catch (e) { falhou(e.message || 'Erro ao confirmar.') }
   }
 
   // ----- projects -----
@@ -255,7 +265,7 @@ export default function App() {
     try {
       const saved = await api.updateProject(project.id, { ...project, name: name.trim() })
       setProjects(ps => ps.map(p => p.id === saved.id ? saved : p)); flash('Projeto renomeado.')
-    } catch (e) { flash(e.message || 'Erro ao renomear projeto.') }
+    } catch (e) { falhou(e.message || 'Erro ao renomear projeto.') }
   }
   const saveProject = async (data) => {
     try {
@@ -267,7 +277,7 @@ export default function App() {
         setProjects(ps => [...ps, saved]); flash('Projeto criado.')
       }
       setModal(null)
-    } catch (e) { flash(e.message || 'Erro ao salvar projeto.') }
+    } catch (e) { falhou(e.message || 'Erro ao salvar projeto.') }
   }
   const saveUser = async (data) => {
     try {
@@ -286,7 +296,7 @@ export default function App() {
       setUsers(us => data.id ? us.map(u => u.id === saved.id ? saved : u) : [saved, ...us])
       setModal(null)
       flash(data.id ? 'Profissional atualizado.' : 'Profissional criado.')
-    } catch (e) { flash(e.message || 'Erro ao salvar profissional.') }
+    } catch (e) { falhou(e.message || 'Erro ao salvar profissional.') }
   }
   const askDeletePerson = (user) => setModal({
     type: 'confirm', title: 'Excluir profissional?',
@@ -296,7 +306,7 @@ export default function App() {
         await api.deleteUser(user.id)
         setUsers(us => us.filter(u => u.id !== user.id))
         setModal(null); flash('Profissional excluído.')
-      } catch (e) { flash(e.message || 'Erro ao excluir profissional.') }
+      } catch (e) { falhou(e.message || 'Erro ao excluir profissional.') }
     },
   })
   const askDeleteProject = (project) => setModal({
@@ -308,7 +318,7 @@ export default function App() {
         setProjects(ps => ps.filter(p => p.id !== project.id))
         setTasks(ts => ts.filter(t => t.projectId !== project.id))
         setModal(null); setRoute({ view: 'projects' }); flash('Projeto excluído.')
-      } catch (e) { flash('Erro ao excluir projeto.') }
+      } catch (e) { falhou('Erro ao excluir projeto.') }
     },
   })
 
@@ -325,14 +335,14 @@ export default function App() {
         : await api.addResource(project.id, payload)
       setProjects(ps => ps.map(p => p.id === saved.id ? saved : p))
       setModal(null); flash('Material adicionado.')
-    } catch (e) { flash(e.message || 'Erro ao adicionar material.') }
+    } catch (e) { falhou(e.message || 'Erro ao adicionar material.') }
   }
 
   // Copia o link de um recurso (documento/link) para a área de transferência.
   const copyResourceLink = async (resource) => {
     const url = resource.fileId ? api.fileUrl(resource.fileId) : resource.url
     try { await navigator.clipboard.writeText(url); flash('Link copiado.') }
-    catch (e) { flash('Não foi possível copiar o link.') }
+    catch (e) { falhou('Não foi possível copiar o link.') }
   }
   // Remove um documento/link do projeto (endpoint dedicado; exige Edição total).
   const askDeleteResource = (project, resource) => setModal({
@@ -343,7 +353,7 @@ export default function App() {
         const saved = await api.deleteResource(project.id, resource.id)
         setProjects(ps => ps.map(p => p.id === saved.id ? saved : p))
         setModal(null); flash('Item removido.')
-      } catch (e) { flash(e.message || 'Erro ao remover item.') }
+      } catch (e) { falhou(e.message || 'Erro ao remover item.') }
     },
   })
 
@@ -355,7 +365,7 @@ export default function App() {
     try {
       const saved = await api.createFolder(name.trim(), parent)
       setFolders(fs => [...fs, saved]); flash(parent ? 'Subpasta criada.' : 'Pasta criada.')
-    } catch (e) { flash(e.message || 'Erro ao criar pasta.') }
+    } catch (e) { falhou(e.message || 'Erro ao criar pasta.') }
   }
   const renameFolder = async (folder) => {
     const name = window.prompt('Novo nome da pasta:', folder.name)
@@ -363,7 +373,7 @@ export default function App() {
     try {
       const saved = await api.renameFolder(folder.id, name.trim())
       setFolders(fs => fs.map(f => f.id === saved.id ? saved : f)); flash('Pasta renomeada.')
-    } catch (e) { flash(e.message || 'Erro ao renomear pasta.') }
+    } catch (e) { falhou(e.message || 'Erro ao renomear pasta.') }
   }
   const askDeleteFolder = (folder) => setModal({
     type: 'confirm', title: 'Excluir pasta?',
@@ -386,7 +396,7 @@ export default function App() {
           return fs.filter(f => !removed.has(f.id))
         })
         setModal(null); flash('Pasta excluída.')
-      } catch (e) { flash(e.message || 'Erro ao excluir pasta.') }
+      } catch (e) { falhou(e.message || 'Erro ao excluir pasta.') }
     },
   })
 
@@ -404,7 +414,7 @@ export default function App() {
       return pos < 0 ? f : { ...f, parentId: parent, position: pos }
     }))
     try { await api.reorderFolders(parent, order) }
-    catch (e) { flash(e.message || 'Erro ao mover pasta.'); loadData() }
+    catch (e) { falhou(e.message || 'Erro ao mover pasta.'); loadData() }
   }
   const moveProject = async (draggedId, newFolderId, beforeId) => {
     const folder = newFolderId || null
@@ -418,7 +428,7 @@ export default function App() {
       return pos < 0 ? p : { ...p, folderId: folder, position: pos }
     }))
     try { await api.reorderProjects(folder, order) }
-    catch (e) { flash(e.message || 'Erro ao mover projeto.'); loadData() }
+    catch (e) { falhou(e.message || 'Erro ao mover projeto.'); loadData() }
   }
 
   // ----- tasks -----
@@ -442,7 +452,7 @@ export default function App() {
         setTasks(ts => [...ts, saved]); flash('Atividade criada.')
       }
       setModal(null)
-    } catch (e) { flash('Erro ao salvar atividade.') }
+    } catch (e) { falhou('Erro ao salvar atividade.') }
   }
   const askDeleteTask = (task) => setModal({
     type: 'confirm', title: 'Excluir atividade?',
@@ -451,7 +461,7 @@ export default function App() {
       try {
         await api.deleteTask(task.id)
         setTasks(ts => ts.filter(t => t.id !== task.id)); setModal(null); flash('Atividade excluída.')
-      } catch (e) { flash('Erro ao excluir atividade.') }
+      } catch (e) { falhou('Erro ao excluir atividade.') }
     },
   })
   const moveTask = async (id, status) => {
@@ -462,7 +472,7 @@ export default function App() {
       const saved = await api.moveTask(id, status)
       setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
       flash(`Atividade movida para ${labels[status]}.`)
-    } catch (e) { setTasks(prev); flash('Erro ao mover atividade.') }
+    } catch (e) { setTasks(prev); falhou('Erro ao mover atividade.') }
   }
   // Entrar/sair de uma atividade (só a própria participação). Disponível para 'Só exibição'.
   const toggleMyMembership = async (task, join) => {
@@ -473,7 +483,7 @@ export default function App() {
       const saved = await api.toggleMembership(task.id, join)
       setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
       flash(join ? 'Você entrou na atividade.' : 'Você saiu da atividade.')
-    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); flash(e.message || 'Erro ao atualizar participação.') }
+    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao atualizar participação.') }
   }
   // Marca/desmarca um item de checklist (otimista). Disponível também para 'Só exibição'.
   const toggleChecklistItem = async (task, itemId) => {
@@ -482,7 +492,7 @@ export default function App() {
     try {
       const saved = await api.toggleChecklist(task.id, next)
       setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
-    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); flash(e.message || 'Erro ao atualizar checklist.') }
+    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao atualizar checklist.') }
   }
 
   // "Nova atividade" na aba Etapas: escolhe a etapa e o trabalho entra como
@@ -495,7 +505,7 @@ export default function App() {
       const saved = await api.addChecklistItem(taskId, text, assigneeId)
       setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
       setModal(null); flash('Atividade adicionada à etapa.')
-    } catch (e) { flash(e.message || 'Erro ao adicionar a atividade.') }
+    } catch (e) { falhou(e.message || 'Erro ao adicionar a atividade.') }
   }
 
   // Cria de uma vez as etapas do processo que faltam no projeto. É idempotente
@@ -511,7 +521,7 @@ export default function App() {
       if (r.tasks?.length) setTasks(ts => [...ts, ...r.tasks])
       else await loadData() // nada novo: releitura barata que reconcilia o estado
       flash(r.criadas ? `${r.criadas} etapa${r.criadas === 1 ? '' : 's'} criada${r.criadas === 1 ? '' : 's'}.` : 'O projeto já tem todas as etapas.')
-    } catch (e) { flash(e.message || 'Erro ao criar as etapas.') }
+    } catch (e) { falhou(e.message || 'Erro ao criar as etapas.') }
   }
 
   // Liga um item do checklist a alguém da atividade (ou a ninguém, com null).
@@ -522,7 +532,7 @@ export default function App() {
     try {
       const saved = await api.toggleChecklist(task.id, next)
       setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
-    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); flash(e.message || 'Erro ao atribuir o item.') }
+    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao atribuir o item.') }
   }
 
   const [readNewsIds, setReadNewsIds] = React.useState([])
@@ -808,13 +818,13 @@ export default function App() {
   // ignora o pedido.
   const alternarNavegador = async () => {
     if (avisos.navegador) { setAvisos(a => ({ ...a, navegador: false })); return }
-    if (!suportaNotificacao()) { flash('Este navegador não suporta notificações do sistema.'); return }
+    if (!suportaNotificacao()) { falhou('Este navegador não suporta notificações do sistema.'); return }
     const permissao = await pedirPermissao()
     if (permissao === 'granted') {
       setAvisos(a => ({ ...a, navegador: true }))
       flash('Avisos do navegador ativados.')
     } else if (permissao === 'denied') {
-      flash('Permissão negada. Libere as notificações nas configurações do navegador.')
+      falhou('Permissão negada. Libere as notificações nas configurações do navegador.')
     }
   }
   const markAllNewsAsRead = () => setReadNewsIds(prev => Array.from(new Set([...prev, ...visibleNotifications.map(item => item.id)])))
@@ -981,7 +991,7 @@ export default function App() {
       {modal?.type === 'password' && (
         <ChangePasswordModal onSubmit={changePassword} onClose={() => setModal(null)} />
       )}
-      {toast && <Toast message={toast} />}
+      <Toast aviso={toast} onClose={() => setToast(null)} />
     </div>
   )
 }
