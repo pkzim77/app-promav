@@ -28,6 +28,9 @@
   overflow-y: scroll;
   box-shadow: var(--shadow-lg); 
   animation: rise var(--dur-slow) var(--ease-out); 
+  /* A caixa recebe o foco ao abrir, para o leitor de tela anunciar o título.
+     Sem isto o navegador desenharia um anel em volta do modal inteiro. */
+  outline: none;
 }
 
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid var(--border); }

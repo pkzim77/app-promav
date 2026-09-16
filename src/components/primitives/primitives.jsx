@@ -104,17 +104,77 @@ export function ChecklistMini({ task }) {
   )
 }
 
+// Enquanto está aberto, o modal é a tela inteira para o teclado. Antes o Tab
+// saía da caixa e ia parar nos botões da página atrás — dava para chegar em
+// "Excluir projeto" sem ver, com o modal ainda na frente —, e ao fechar o foco
+// caía no <body>, então o próximo Tab recomeçava do canto da página.
+const FOCAVEIS = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
 export function Modal({ title, onClose, children, footer, className = '' }) {
+  const caixa = React.useRef(null)
+  const tituloId = React.useId()
+
+  // onClose costuma ser uma arrow escrita no JSX, ou seja, outra função a cada
+  // render. Numa dependência do efeito, o modal se desmontaria e devolveria o
+  // foco à origem a cada tecla digitada.
+  const fechar = React.useRef(onClose)
+  fechar.current = onClose
+
+  // Quem abriu o modal, para o foco voltar para lá no fim. Precisa ser lido
+  // AQUI, durante o render: o autoFocus de um campo é aplicado no commit, que
+  // acontece antes de qualquer useEffect — lido lá dentro, isto guardaria o
+  // próprio campo do modal, e no fim o foco seria devolvido a um elemento que
+  // acabou de sair da tela, ou seja, a lugar nenhum.
+  const origem = React.useRef(null)
+  if (origem.current === null) origem.current = document.activeElement
+
   React.useEffect(() => {
-    const h = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', h)
-    return () => window.removeEventListener('keydown', h)
-  }, [onClose])
+    const caixaNo = caixa.current
+    // Campo com autoFocus já se resolveu sozinho. Se ninguém pegou o foco, ele
+    // vai para a caixa, e o leitor de tela anuncia o título do diálogo.
+    if (!caixa.current.contains(document.activeElement)) caixa.current.focus()
+
+    const aoTeclar = (e) => {
+      if (e.key === 'Escape') { fechar.current(); return }
+      if (e.key !== 'Tab') return
+      // offsetParent descarta o que está escondido (campo de aba fechada, por
+      // exemplo): o foco não pode parar em algo que ninguém enxerga.
+      const lista = [...caixa.current.querySelectorAll(FOCAVEIS)].filter(el => el.offsetParent !== null)
+      if (!lista.length) { e.preventDefault(); return }
+      const primeiro = lista[0]
+      const ultimo = lista[lista.length - 1]
+      const atual = document.activeElement
+      if (!caixa.current.contains(atual)) { e.preventDefault(); (e.shiftKey ? ultimo : primeiro).focus() }
+      else if (!e.shiftKey && atual === ultimo) { e.preventDefault(); primeiro.focus() }
+      else if (e.shiftKey && atual === primeiro) { e.preventDefault(); ultimo.focus() }
+    }
+
+    window.addEventListener('keydown', aoTeclar)
+    return () => {
+      window.removeEventListener('keydown', aoTeclar)
+
+      // O StrictMode roda efeito → limpeza → efeito de novo no mesmo instante,
+      // com o modal ainda na tela. Devolver o foco ali tiraria o cursor do
+      // campo com autoFocus toda vez que o modal abrisse em desenvolvimento.
+      // Fechou de verdade quando a caixa já saiu do documento — e o navegador,
+      // ao remover o que estava focado, deixou o foco no <body>.
+      const fechouMesmo = !document.contains(caixaNo) || document.activeElement === document.body
+      if (!fechouMesmo) return
+
+      // Devolve o foco a quem abriu — a não ser que aquele botão tenha saído
+      // da tela junto com o que o modal acabou de excluir.
+      const voltarPara = origem.current
+      if (voltarPara instanceof HTMLElement && voltarPara !== document.body && document.contains(voltarPara)) voltarPara.focus()
+    }
+  }, [])
+
   return (
     <div className="scrim" onMouseDown={onClose}>
-      <div className={'modal ' + className} onMouseDown={(e) => e.stopPropagation()}>
+      <div ref={caixa} className={'modal ' + className} tabIndex={-1}
+        role="dialog" aria-modal="true" aria-labelledby={tituloId}
+        onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>{title}</h3>
+          <h3 id={tituloId}>{title}</h3>
           <button className="btn-icon" onClick={onClose} aria-label="Fechar"><Icon name="x" size={20} /></button>
         </div>
         <div className="modal-body">{children}</div>
