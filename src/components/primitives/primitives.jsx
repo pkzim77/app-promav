@@ -124,8 +124,27 @@ export function Modal({ title, onClose, children, footer, className = '' }) {
   )
 }
 
+// O <label> não apontava para nada: clicar no texto não focava o campo, e o
+// leitor de tela anunciava "edição de texto" sem dizer de quê. São 52 usos de
+// <Field> e 59 campos no app, nenhum com id — escrever um a um seria pedir
+// para esquecer metade, então o id nasce aqui.
+//
+// Quando o conteúdo não é um campo nativo (SegControl, MoneyInput, uma tag de
+// leitura), htmlFor não teria a quem apontar: aí o Field inteiro vira um grupo
+// com aquele nome, que é o que o leitor de tela precisa para anunciar os
+// botões de status como "Status".
+const CAMPOS_NATIVOS = new Set(['input', 'textarea', 'select'])
+
 export function Field({ label, children }) {
-  return <div className="field"><label>{label}</label>{children}</div>
+  const id = React.useId()
+  let alvo = null
+  const conteudo = React.Children.map(children, (filho) => {
+    if (alvo || !React.isValidElement(filho) || !CAMPOS_NATIVOS.has(filho.type)) return filho
+    alvo = filho.props.id || id
+    return filho.props.id ? filho : React.cloneElement(filho, { id })
+  })
+  if (!alvo) return <div className="field" role="group" aria-labelledby={id}><label id={id}>{label}</label>{children}</div>
+  return <div className="field"><label htmlFor={alvo}>{label}</label>{conteudo}</div>
 }
 
 export function SegControl({ options, value, onChange }) {
