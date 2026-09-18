@@ -160,6 +160,11 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
     ...(isAdmin ? [{ id: 'people', label: 'Profissionais', icon: 'users' }] : []),
     { id: 'reports', label: 'Relatórios Dos Projetos', icon: 'trendingUp' },
     { id: 'team', label: 'Relatórios Da Equipe', icon: 'users' },
+    // Quem escreve vê o próprio relatório; quem recebe vê o de todo mundo. São
+    // telas diferentes de verdade, não a mesma com permissão diferente.
+    ...(isAdmin
+      ? [{ id: 'weeklyreports', label: 'Relatórios Individuais', icon: 'file' }]
+      : [{ id: 'myreport', label: 'Meu Relatório', icon: 'file' }]),
   ]
 
   // Um botão de projeto (a "lista de tarefas"), reutilizado dentro e fora das pastas.
