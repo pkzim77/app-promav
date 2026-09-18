@@ -1477,6 +1477,160 @@ app.post('/api/changes/:id/ack', gate(changeProjectId, CAN.light), wrap(async (r
   res.json(await getChange(req.params.id))
 }))
 
+// ---------- relatorio semanal ----------
+
+// A semana e identificada pela SEXTA que a encerra — e quando a equipe manda.
+// Sabado e domingo pertencem a sexta que passou; quem abre a tela no domingo
+// continua vendo o relatorio da semana que acabou, nao um em branco.
+const DIA_MS = 86400000
+function sextaDe(iso) {
+  const base = /^\d{4}-\d{2}-\d{2}$/.test(String(iso || '')) ? iso : new Date().toISOString().slice(0, 10)
+  const d = new Date(base + 'T00:00:00Z')
+  const dow = d.getUTCDay()  // 0 dom ... 6 sab
+  const delta = dow === 6 ? -1 : dow === 0 ? -2 : 5 - dow
+  return new Date(d.getTime() + delta * DIA_MS).toISOString().slice(0, 10)
+}
+const maisDias = (iso, n) => new Date(new Date(iso + 'T00:00:00Z').getTime() + n * DIA_MS).toISOString().slice(0, 10)
+
+// Sanitizacao do texto rico. Vale ser explicito sobre o porque:
+//
+// 1. XSS — o relatorio de um colaborador e lido pelo admin. Sem limpar aqui,
+//    quem escreve escolhe o que roda na tela de quem le. Limpar so no cliente
+//    nao vale nada: a rota aceita qualquer corpo.
+// 2. Tamanho — um editor tipo Word aceita Ctrl+V de print de tela, e o
+//    navegador cola a imagem como data:base64 DENTRO do HTML. Um print vira
+//    500 KB a 2 MB numa coluna de texto.
+//
+// A regra que resolve os dois: lista fechada de tags e NENHUM atributo. Sem
+// atributo nao ha on*, href javascript: nem src data:. O editor do cliente
+// ainda converte o que e colado para texto puro, mas isto aqui e a garantia.
+const TAGS_OK = ['b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li', 'br', 'p', 'div']
+const LIMITE_TEXTO = 20 * 1024
+const LIMITE_STATUS = 2 * 1024
+
+function limparHtml(bruto, limite = LIMITE_TEXTO) {
+  if (typeof bruto !== 'string' || !bruto) return ''
+  const limpo = bruto
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<\s*(script|style)[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+    // Reescreve cada tag sem nenhum atributo; o que nao esta na lista some.
+    .replace(/<\s*(\/?)\s*([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g, (_, barra, tag) =>
+      TAGS_OK.includes(tag.toLowerCase()) ? '<' + barra + tag.toLowerCase() + '>' : '')
+    // '<' que sobrou nao abria tag nenhuma: e texto que a pessoa digitou.
+    .replace(/</g, '&lt;')
+    .replace(/&lt;(\/?)(b|strong|i|em|u|ul|ol|li|br|p|div)>/g, '<$1$2>')
+  return limpo.length > limite ? limpo.slice(0, limite) : limpo
+}
+
+// Texto visivel, para saber se o relatorio tem conteudo de verdade.
+const semTags = (html) => String(html || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
+
+const mapRelatorio = (r) => ({
+  id: r.id,
+  userId: r.user_id,
+  week: r.week instanceof Date ? r.week.toISOString().slice(0, 10) : String(r.week).slice(0, 10),
+  projectIds: r.project_ids || [],
+  developed: r.developed || '',
+  statuses: r.statuses || {},
+  sentAt: r.sent_at,
+  updatedAt: r.updated_at,
+})
+
+const COLUNAS_REL = 'id, user_id, week, project_ids, developed, statuses, sent_at, updated_at'
+
+// Duas listas, e a diferenca entre elas importa:
+//
+// `disponiveis` sao todos os projetos da pessoa — so para ela poder escolher.
+// `projectIds` sao os da SEMANA: onde ela cronometrou tempo ou onde a atividade
+// sob sua responsabilidade mudou. So estes vem pre-marcados.
+//
+// Marcar tudo o que a pessoa tem seria pior que a pagina em branco: Alvaro esta
+// em 26 projetos, e o relatorio dele sairia listando os 26. O modelo em uso
+// lista dois — os que ele tocou.
+async function sugerirDaSemana(userId, semana) {
+  const de = maisDias(semana, -4)   // segunda
+  const ate = maisDias(semana, 3)   // domingo seguinte (exclusivo)
+  const [projetos, atividades] = await Promise.all([
+    q(`SELECT DISTINCT p.id
+         FROM projects p
+         LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = $1
+         LEFT JOIN tasks t ON t.project_id = p.id AND t.assignee_id = $1
+        WHERE pm.user_id IS NOT NULL OR t.id IS NOT NULL`, [userId]),
+    q(`SELECT DISTINCT t.title, t.project_id, t.status::text AS status
+         FROM tasks t
+         LEFT JOIN time_sessions s ON s.task_id = t.id AND s.user_id = $1
+              AND s.start_at >= $2::date AND s.start_at < $3::date
+        WHERE s.id IS NOT NULL
+           OR (t.assignee_id = $1 AND t.updated_at >= $2::date AND t.updated_at < $3::date)
+        ORDER BY t.title`, [userId, de, ate]),
+  ])
+  const daSemana = [...new Set(atividades.map(a => a.project_id))]
+  return {
+    projectIds: daSemana,
+    disponiveis: projetos.map(r => r.id),
+    atividades: atividades.map(a => ({ title: a.title, projectId: a.project_id, status: a.status })),
+  }
+}
+
+// O relatorio da propria pessoa. Sem registro ainda, devolve null e a sugestao:
+// a tela monta o rascunho, o banco so recebe linha quando alguem salva.
+app.get('/api/weekly-reports/me', wrap(async (req, res) => {
+  const semana = sextaDe(req.query.week)
+  const [r] = await q(`SELECT ${COLUNAS_REL} FROM weekly_reports WHERE user_id = $1 AND week = $2::date`, [req.userId, semana])
+  res.json({ week: semana, report: r ? mapRelatorio(r) : null, sugestao: await sugerirDaSemana(req.userId, semana) })
+}))
+
+// Salva rascunho ou envia. Mesma linha nos dois casos — `send` so carimba a
+// hora. Reenviar depois de corrigir e permitido: o carimbo e atualizado.
+app.put('/api/weekly-reports/me', wrap(async (req, res) => {
+  const semana = sextaDe(req.body.week)
+  const enviar = !!req.body.send
+  const developed = limparHtml(req.body.developed)
+  const projectIds = (Array.isArray(req.body.projectIds) ? req.body.projectIds : [])
+    .filter(id => typeof id === 'string').slice(0, 30)
+
+  // Status so dos projetos declarados: sem isto, desmarcar um projeto deixaria
+  // o texto dele guardado para sempre, invisivel na tela e no PDF.
+  const statuses = {}
+  const brutos = req.body.statuses && typeof req.body.statuses === 'object' ? req.body.statuses : {}
+  for (const id of projectIds) {
+    const limpo = limparHtml(brutos[id], LIMITE_STATUS)
+    if (semTags(limpo)) statuses[id] = limpo
+  }
+
+  if (enviar && !semTags(developed)) return res.status(400).json({ error: 'Escreva o que foi desenvolvido antes de enviar.' })
+  if (enviar && !projectIds.length) return res.status(400).json({ error: 'Selecione ao menos um projeto antes de enviar.' })
+
+  const [r] = await q(
+    `INSERT INTO weekly_reports (id, user_id, week, project_ids, developed, statuses, sent_at, updated_at)
+     VALUES ($1, $2, $3::date, $4::text[], $5, $6::jsonb, CASE WHEN $7 THEN now() ELSE NULL END, now())
+     ON CONFLICT (user_id, week) DO UPDATE SET
+       project_ids = EXCLUDED.project_ids,
+       developed   = EXCLUDED.developed,
+       statuses    = EXCLUDED.statuses,
+       sent_at     = CASE WHEN $7 THEN now() ELSE weekly_reports.sent_at END,
+       updated_at  = now()
+     RETURNING ${COLUNAS_REL}`,
+    [genId('wr'), req.userId, semana, projectIds, developed, JSON.stringify(statuses), enviar])
+  res.json(mapRelatorio(r))
+}))
+
+// Painel do admin: o que foi enviado naquela semana, e quem falta.
+// Rascunho de outra pessoa nao aparece — relatorio so existe depois de enviado.
+app.get('/api/weekly-reports', requireAdmin, wrap(async (req, res) => {
+  const semana = sextaDe(req.query.week)
+  const [enviados, pessoas] = await Promise.all([
+    q(`SELECT ${COLUNAS_REL} FROM weekly_reports WHERE week = $1::date AND sent_at IS NOT NULL ORDER BY sent_at`, [semana]),
+    q('SELECT id FROM users WHERE is_active AND NOT is_dev ORDER BY id'),
+  ])
+  const entregou = new Set(enviados.map(r => r.user_id))
+  res.json({
+    week: semana,
+    reports: enviados.map(mapRelatorio),
+    faltando: pessoas.map(p => p.id).filter(id => !entregou.has(id)),
+  })
+}))
+
 // ---------- middleware de erro ----------
 app.use((err, _req, res, _next) => {
   if (err.type === 'entity.too.large') {
@@ -1641,6 +1795,29 @@ async function ensureSchema() {
       PRIMARY KEY (project_id, user_id)
     )
   `)
+
+  // ----- relatorio semanal -----
+  // Uma linha por pessoa por semana, atualizada no lugar: o rascunho e o
+  // enviado sao o MESMO registro. Salvar automatico criando linha nova faria
+  // um relatorio virar duzentas.
+  //
+  // So texto. O PDF nunca e gravado: ele se regenera daqui em milissegundos, e
+  // guardar ~80 KB por relatorio custaria uns 40 MB/ano — mais de quatro vezes
+  // o banco inteiro de hoje, para armazenar o que ja esta em `developed`.
+  await q(`
+    CREATE TABLE IF NOT EXISTS weekly_reports (
+      id          text PRIMARY KEY,
+      user_id     text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      week        date NOT NULL,
+      project_ids text[] NOT NULL DEFAULT '{}',
+      developed   text NOT NULL DEFAULT '',
+      statuses    jsonb NOT NULL DEFAULT '{}'::jsonb,
+      sent_at     timestamptz,
+      updated_at  timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (user_id, week)
+    )
+  `)
+  await q('CREATE INDEX IF NOT EXISTS weekly_reports_week_idx ON weekly_reports (week)')
 
   // Equipe de desenvolvimento do app: contas que mantêm o sistema, não gente
   // que toca obra. Ficam fora da equipe dos projetos (e da responsabilidade),
