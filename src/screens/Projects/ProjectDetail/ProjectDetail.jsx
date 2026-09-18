@@ -111,8 +111,11 @@ export function ProjectDetail({ project, tasks, users, sessions, changes = [], c
       {tab === 'panorama' ? (
         <ProjectCover project={project} tasks={tasks} users={users} />
       ) : tab === 'tecnica' ? (
+        // "Lançar execução" abre o cadastro do projeto direto na aba "Tipo de
+        // obra", onde ficam os metros executados de cada trecho do .kmz.
         <ProjectTechSheet project={project} canEdit={canEdit}
-          onCopyResource={onCopyResource} onDeleteResource={onDeleteResource} onAddResource={onAddResource} />
+          onCopyResource={onCopyResource} onDeleteResource={onDeleteResource} onAddResource={onAddResource}
+          onEditSegments={() => onEdit(project, 'tipo')} />
       ) : tab === 'mudancas' ? (
         <ProjectChanges project={project} changes={changes} tasks={tasks} users={users}
           currentUserId={currentUserId} canEdit={canEdit} canPublish={canPublish} onNew={onNewChange} onEdit={onEditChange}

@@ -27,8 +27,9 @@ function buildResource(type, url, label) {
 // ----- Modais dedicados (um por tipo de recurso) -----
 // São independentes de propósito: cada um pode ganhar campos próprios no futuro.
 
-// Campo de seleção de arquivo reutilizado pelos modais de upload.
-function FilePicker({ accept, file, onPick, error }) {
+// Campo de seleção de arquivo reutilizado pelos modais de upload — e pela
+// aba "Tipo de obra" do modal de projeto, que anexa o .kmz da obra.
+export function FilePicker({ accept, file, onPick, error }) {
   const inputRef = React.useRef(null)
   const pick = (f) => {
     if (f && f.size > MAX_FILE_BYTES) { onPick(f, `Arquivo maior que ${formatBytes(MAX_FILE_BYTES)}.`); return }

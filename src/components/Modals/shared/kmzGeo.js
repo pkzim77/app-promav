@@ -120,11 +120,36 @@ export async function extrairKml(buffer, nomeArquivo = '', JSZip) {
   return entrada.async('string')
 }
 
-// Monta a lista que a tela mostra: um item por feature, já medido.
-export function montarFeatures(geojson) {
+// Pasta do Google Earth em que cada Placemark está, na ordem do documento —
+// a mesma em que o togeojson percorre os Placemarks, por isso o índice casa
+// com o de montarFeatures. Pasta aninhada: vale a mais próxima. Quem desenha
+// no Google Earth costuma separar por rua ou localidade em pastas, e isso é
+// o grupo natural dos trechos; o <Document> raiz não conta como pasta.
+//
+// Só usa getElementsByTagName/parentNode/childNodes para funcionar tanto no
+// DOMParser do navegador quanto num DOM mínimo de teste.
+export function pastasDosPlacemarks(doc) {
+  const nomeDe = (el) => {
+    for (const filho of Array.from(el.childNodes || [])) {
+      if (filho.nodeType === 1 && filho.tagName === 'name') return String(filho.textContent || '').trim()
+    }
+    return ''
+  }
+  return Array.from(doc?.getElementsByTagName?.('Placemark') || []).map((pm) => {
+    for (let el = pm.parentNode; el && el.nodeType === 1; el = el.parentNode) {
+      if (el.tagName === 'Folder') return nomeDe(el) || null
+    }
+    return null
+  })
+}
+
+// Monta a lista que a tela mostra: um item por feature, já medido. `pastas`
+// (de pastasDosPlacemarks) dá o grupo inicial de cada trecho.
+export function montarFeatures(geojson, pastas = []) {
   return (geojson?.features || []).map((f, i) => {
     const medida = medirGeometria(f.geometry)
     const props = f.properties || {}
+    const pasta = pastas[i] || null
     return {
       // O id é a posição no arquivo — estável entre parses porque o KML de um
       // fileId já enviado não muda, e o togeojson percorre o documento sempre
@@ -134,16 +159,18 @@ export function montarFeatures(geojson) {
       nome: props.name || props.Name || `Elemento ${i + 1}`,
       descricao: limparHtml(props.description || props.Description || ''),
       tipo: f.geometry?.type || 'Desconhecido',
+      pasta,        // como veio do arquivo — não muda
+      grupo: pasta, // o que vale na tela — aplicarEdicoes pode trocar
       extensaoExecutadaM: null, // preenchido por aplicarEdicoes quando houver
       ...medida,
     }
   })
 }
 
-// Mescla as edições guardadas no projeto (renomear um trecho, registrar
-// quantos metros já foram executados) por cima dos valores calculados do
-// arquivo. `segmentos` é o que fica salvo no recurso — só o que a equipe
-// mexeu, indexado pelo mesmo id que montarFeatures atribui.
+// Mescla as edições guardadas no projeto (renomear um trecho, pô-lo num
+// grupo, registrar quantos metros já foram executados) por cima dos valores
+// calculados do arquivo. `segmentos` é o que fica salvo no recurso — só o que
+// a equipe mexeu, indexado pelo mesmo id que montarFeatures atribui.
 export function aplicarEdicoes(features, segmentos) {
   if (!Array.isArray(segmentos) || !segmentos.length) return features
   const porId = new Map(segmentos.map(s => [s.id, s]))
@@ -151,10 +178,33 @@ export function aplicarEdicoes(features, segmentos) {
     const edicao = porId.get(f.id)
     if (!edicao) return f
     const nome = typeof edicao.nome === 'string' && edicao.nome.trim() ? edicao.nome.trim() : f.nome
+    // Grupo em branco volta para a pasta do arquivo, como o nome volta para o
+    // nome do arquivo: apagar é "desfazer", não "tirar do grupo".
+    const grupo = typeof edicao.grupo === 'string' && edicao.grupo.trim() ? edicao.grupo.trim() : f.grupo
     const executada = typeof edicao.extensaoExecutadaM === 'number' && edicao.extensaoExecutadaM >= 0
       ? edicao.extensaoExecutadaM : null
-    return { ...f, nome, extensaoExecutadaM: executada }
+    return { ...f, nome, grupo, extensaoExecutadaM: executada }
   })
+}
+
+// Trechos por grupo, na ordem em que cada grupo aparece no arquivo, com os
+// totais do grupo (mesma conta de totalizar) e o percentual executado. Quem
+// não tem grupo fica junto no fim, com nome null — a tela decide o rótulo.
+export function agruparTrechos(features) {
+  const grupos = new Map()
+  for (const f of features) {
+    const chave = f.grupo || ''
+    if (!grupos.has(chave)) grupos.set(chave, { nome: f.grupo || null, trechos: [] })
+    grupos.get(chave).trechos.push(f)
+  }
+  const lista = [...grupos.values()].map((g) => {
+    const totais = totalizar(g.trechos)
+    const pct = totais.extensaoM > 0 && totais.extensaoExecutadaM > 0
+      ? Math.round((totais.extensaoExecutadaM / totais.extensaoM) * 100) : null
+    return { ...g, totais, pct }
+  })
+  // sort é estável: só empurra o "sem grupo" para o fim, sem mexer no resto.
+  return lista.sort((a, b) => (a.nome === null) - (b.nome === null))
 }
 
 // Um trecho é "de extensão" (rua, linha) quando tem comprimento e não é um

@@ -110,22 +110,25 @@ const PROJECT_SELECT = `
 // Lista de pastas, na ordem em que devem aparecer na sidebar.
 const FOLDER_SELECT = 'SELECT id, name, position, parent_id AS "parentId" FROM folders'
 
-// Edições que a equipe faz em cima do desenho de um .kmz: renomear um trecho
-// e/ou registrar quantos metros já foram executados. `id` casa com a posição
-// que o parser do navegador atribui (kmzGeo.js/montarFeatures) — texto livre,
-// então a única validação possível aqui é não deixar passar lixo.
+// Edições que a equipe faz em cima do desenho de um .kmz: renomear um trecho,
+// pô-lo num grupo (rua, localidade) e/ou registrar quantos metros já foram
+// executados. `id` casa com a posição que o parser do navegador atribui
+// (kmzGeo.js/montarFeatures) — texto livre, então a única validação possível
+// aqui é não deixar passar lixo.
 function normSegmentos(input) {
   if (!Array.isArray(input)) return []
   return input
     .map((s) => {
       if (!s || typeof s.id !== 'string' || !s.id) return null
       const nome = typeof s.nome === 'string' ? s.nome.trim().slice(0, 200) : ''
+      const grupo = typeof s.grupo === 'string' ? s.grupo.trim().slice(0, 120) : ''
       const exec = Number(s.extensaoExecutadaM)
       const item = { id: s.id }
       if (nome) item.nome = nome
+      if (grupo) item.grupo = grupo
       if (Number.isFinite(exec) && exec >= 0) item.extensaoExecutadaM = exec
-      // Sem nome nem extensão executada não há edição nenhuma para guardar.
-      return (item.nome || item.extensaoExecutadaM != null) ? item : null
+      // Sem nome, grupo nem extensão executada não há edição nenhuma para guardar.
+      return (item.nome || item.grupo || item.extensaoExecutadaM != null) ? item : null
     })
     .filter(Boolean)
 }

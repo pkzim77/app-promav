@@ -268,6 +268,36 @@
 .kmz-feat.on { background: var(--brand-soft); border-color: var(--brand); }
 .kmz-feat-nome { font-size: 12.5px; font-weight: 600; color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kmz-feat-medida { font-size: 11.5px; color: var(--fg-4); font-variant-numeric: tabular-nums; }
+/* Barra de execução do trecho: só existe quando há metros lançados. */
+.kmz-feat-bar { display: block; height: 4px; margin-top: 5px; border-radius: 2px; background: var(--bg-muted); overflow: hidden; }
+.kmz-feat-bar i { display: block; height: 100%; border-radius: 2px; background: var(--brand); }
+.kmz-feat-bar.done i { background: var(--success); }
+
+/* Grupos de trechos (rua, localidade) no painel: cabeçalho clicável com o
+   subtotal e os trechos recuados embaixo. Sem grupo nenhum, não há cabeçalho
+   e a lista fica corrida. */
+.kmz-grupo { list-style: none; }
+.kmz-grupo + .kmz-grupo { margin-top: 6px; border-top: 1px solid var(--border); padding-top: 4px; }
+.kmz-grupo-cab { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 1px; padding: 7px 9px 6px;
+  border-radius: var(--r-sm); transition: background var(--dur); }
+.kmz-grupo-cab:hover { background: var(--bg-subtle); }
+.kmz-grupo-nome { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kmz-grupo-medida { font-size: 11.5px; color: var(--fg-4); font-variant-numeric: tabular-nums; }
+.kmz-grupo-itens { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.kmz-grupo-itens.recuado { padding-left: 8px; }
+.kmz-popup-grupo { font-size: 11px !important; text-transform: uppercase; letter-spacing: 0.04em; color: #777 !important; }
+
+/* Aviso de equipe no painel: trechos ainda sem execução lançada. */
+.kmz-hint { margin: 0; padding: 8px 10px; font-size: 11.5px; line-height: 1.45; color: var(--fg-3);
+  border: 1.5px dashed var(--border-strong); border-radius: var(--r-sm); }
+
+/* Legenda das cores do traçado, sobre o mapa. Só aparece com execução lançada. */
+.kmz-legenda { position: absolute; right: 12px; bottom: 12px; z-index: 2; display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px; border-radius: var(--r-sm); background: rgba(17, 17, 17, .78); color: #fff; font-size: 11px; font-weight: 600;
+  pointer-events: none; }
+.kmz-legenda i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; margin-left: 6px; }
+.kmz-legenda i:first-child { margin-left: 0; }
 
 .kmz-msg { margin: 10px 2px 0; font-size: 12.5px; color: var(--fg-4); display: flex; align-items: center; gap: 6px; }
 .kmz-msg-error { color: var(--danger); }
@@ -278,10 +308,17 @@
 /* Em tela estreita o painel desce para baixo do mapa. */
 @media (max-width: 860px) {
   .kmz-layout { grid-template-columns: 1fr; }
+  .kmz-side { max-height: 220px; }
+}
 
 /* ---------- Editor de trechos do .kmz (aba "Tipo de obra") ---------- */
 
 .kmz-edit-file { margin-bottom: 6px; }
+/* Aqui o .kmz costuma ser um só e tirá-lo é justamente o que se vem fazer:
+   o botão de remover fica sempre visível, sem depender de hover (que não
+   existe em toque). */
+.kmz-edit-file .res-del { opacity: 1; color: var(--fg-4); }
+.kmz-edit-file .res-del:hover { color: var(--danger); }
 .kmz-edit { padding: 10px 8px 4px; }
 
 .kmz-edit-totais { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 10px; font-size: 12px; color: var(--fg-4); }
@@ -289,8 +326,14 @@
 
 .kmz-edit-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
 
-.kmz-edit-row { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 8px; }
-.kmz-edit-nome { min-width: 0; }
+.kmz-edit-row { display: grid; grid-template-columns: 1fr 160px auto auto auto; align-items: center; gap: 8px; }
+.kmz-edit-nome, .kmz-edit-grupo-inp { min-width: 0; }
+
+/* Cabeçalho de grupo no editor: nome do grupo e o subtotal dele. */
+.kmz-edit-grupo { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 0; padding: 0 2px; font-size: 11.5px; color: var(--fg-4);
+  font-variant-numeric: tabular-nums; }
+.kmz-edit-grupo:first-child { margin-top: 0; }
+.kmz-edit-grupo b { font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-2); }
 .kmz-edit-calc { font-size: 12px; color: var(--fg-4); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .kmz-edit-exec { display: flex; align-items: center; gap: 4px; }
@@ -304,7 +347,4 @@
 @media (max-width: 640px) {
   .kmz-edit-row { grid-template-columns: 1fr; }
   .kmz-edit-calc, .kmz-edit-exec, .kmz-edit-pct { justify-self: start; }
-}
-
-  .kmz-side { max-height: 220px; }
 }
