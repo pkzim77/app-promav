@@ -69,6 +69,13 @@ export const api = {
   reorderFolders: (parentId, orderedIds) => req('PUT', '/folders/reorder', { parentId, orderedIds }),
   reorderProjects: (folderId, orderedIds) => req('PUT', '/projects/reorder', { folderId, orderedIds }),
 
+  // ----- relatório semanal -----
+  // A semana vai como a sexta que a encerra; o servidor normaliza de novo, para
+  // não depender do fuso de quem clicou.
+  weeklyReportMine: (week) => req('GET', `/weekly-reports/me?week=${week}`),
+  saveWeeklyReport: (data) => req('PUT', '/weekly-reports/me', data),
+  weeklyReports: (week) => req('GET', `/weekly-reports?week=${week}`),
+
   // ----- arquivos (upload/download de documentos e imagens guardados no banco) -----
   // Envia o arquivo cru; metadados (tipo, nome, rótulo) vão na query string.
   uploadFile: async (projectId, file, kind, label = '') => {

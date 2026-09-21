@@ -9,6 +9,7 @@ import { TaskListView } from './screens/List/List.jsx'
 import { Gantt } from './screens/Gantt/Gantt.jsx'
 import { Reports } from './screens/Reports/Reports.jsx'
 import { TeamReport } from './screens/TeamReport/TeamReport.jsx'
+import { MyWeeklyReport, AdminWeeklyReports } from './screens/WeeklyReport/WeeklyReport.jsx'
 import { Login } from './screens/Login/Login.jsx'
 import { api } from './data/api.js'
 import { effectiveProjectRole, canEditProject, NOTIF_KIND_MAP, etapasDoProjeto } from './data/store.js'
@@ -21,7 +22,7 @@ import { tocarAviso, destravarSom, avisarNoNavegador, pedirPermissao, permissaoN
 // O módulo tem export nomeado, daí o mapeamento para default que o lazy exige.
 const People = React.lazy(() => import('./screens/People/People.jsx').then(m => ({ default: m.People })))
 
-const TITLES ={ hub: 'Visão geral', projects: 'Projetos', list: 'Lista', kanban: 'Kanban', gantt: 'Gantt', people: 'Profissionais', reports: 'Relatórios', team: 'Equipe' }
+const TITLES ={ hub: 'Visão geral', projects: 'Projetos', list: 'Lista', kanban: 'Kanban', gantt: 'Gantt', people: 'Profissionais', reports: 'Relatórios', team: 'Equipe', myreport: 'Meu relatório', weeklyreports: 'Relatórios individuais' }
 
 // "Meu setor" (a pessoa escolhendo o próprio setor no menu da conta) está
 // pausado: entra numa próxima leva, junto do resto da gestão de setores.
@@ -859,7 +860,10 @@ export default function App() {
   }
 
   const isAdmin = !!authUser?.isAdmin
-  const effectiveRoute = route.view === 'people' && !isAdmin ? { view: 'hub' } : route
+  // Telas de admin acessadas por quem não é admin caem na visão geral. A rota
+  // pode chegar por link antigo ou por quem perdeu o papel desde que entrou.
+  const soAdmin = route.view === 'people' || route.view === 'weeklyreports'
+  const effectiveRoute = soAdmin && !isAdmin ? { view: 'hub' } : route
   const currentProject = effectiveRoute.projectId ? projects.find(p => p.id === effectiveRoute.projectId) : null
   const normalizedSearch = projectSearch.trim().toLocaleLowerCase('pt-BR')
   const searchedProjects = normalizedSearch
@@ -907,6 +911,10 @@ export default function App() {
     screen = <Reports projects={projects} tasks={tasks} users={users} />
   } else if (effectiveRoute.view === 'team') {
     screen = <TeamReport users={users} tasks={tasks} projects={projects} sessions={sessions} now={now} isAdmin={isAdmin} onSetSector={setUserSector} />
+  } else if (effectiveRoute.view === 'myreport') {
+    screen = <MyWeeklyReport authUser={authUser} projects={projects} onFlash={flash} onFail={falhou} />
+  } else if (effectiveRoute.view === 'weeklyreports' && isAdmin) {
+    screen = <AdminWeeklyReports users={users} projects={projects} onFail={falhou} />
   }
 
   return (
