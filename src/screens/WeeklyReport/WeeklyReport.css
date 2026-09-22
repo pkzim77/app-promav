@@ -77,6 +77,11 @@
    a tela cheia de alerta para uma ação reversível num clique. */
 .rel-aba-tirar:hover { color: var(--danger); background: var(--danger-soft); }
 
+/* Com o status escolhido, o campo vira o mesmo selo que o status tem no resto
+   do app: cor cheia no texto sobre um véu de 12% dela. Só cor de texto num
+   campo branco some no meio do formulário. */
+.rel-status { font-weight: 700; }
+
 .rel-aba-topo h3 { margin: 0; font: var(--text-h4); color: var(--fg-1); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 .rel-vazio-txt { margin: 0; font-size: 13.5px; color: var(--fg-3); }

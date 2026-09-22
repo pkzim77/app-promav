@@ -287,8 +287,12 @@ function AbaDoProjeto({ projeto, status, texto, atividades, onStatus, onTexto, o
       </div>
 
       <Field label="Status do projeto">
-        <select className="control" value={status || ''}
-          style={status ? { color: PROJECT_STATUS_MAP[status]?.color, fontWeight: 700 } : null}
+        <select className="control rel-status" value={status || ''}
+          style={status ? {
+            color: PROJECT_STATUS_MAP[status]?.color,
+            background: PROJECT_STATUS_MAP[status]?.color + '1f',
+            borderColor: PROJECT_STATUS_MAP[status]?.color + '55',
+          } : null}
           onChange={e => onStatus(e.target.value)}>
           <option value="">Selecione o status</option>
           {PROJECT_STATUSES.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}

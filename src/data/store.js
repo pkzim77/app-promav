@@ -102,18 +102,34 @@ export const canonizar = (lista, valor) => lista.find(o => chaveTexto(o) === cha
 // dourado #AD8A5C puro (3,12:1) não serviria aqui, só como preenchimento.
 //
 // A lista está em ordem de criticidade e a cor sobe junto, para o selo ser lido
-// pela cor antes da palavra: neutro (cinza) → em curso (dourado, azul) →
-// pede providência (ouro, laranja) → travado (terracota) → encerrado (verde).
-// Cada tom fica a ΔE > 19 do vizinho mais próximo da lista, senão dois status
-// diferentes leriam como a mesma tarja num selo de 12px.
+// pela cor antes da palavra: um matiz por significado, e não sete variações do
+// mesmo marrom.
+//
+// A paleta anterior tinha quatro dos sete tons na família quente e falhava de
+// duas maneiras, ambas medidas:
+//
+//   • "Em andamento" e "Pendente" ficavam a ΔE 19 — a mesma tarja, de relance.
+//   • "Em andamento" e "Paralisado" ficavam a ΔE 5 para quem tem deuteranopia,
+//     ou seja, indistinguíveis.
+//
+// E os contrastes anotados eram contra BRANCO PURO, mas o selo pinta a cor como
+// texto sobre um véu de 12% dela mesma (ProjectCover: `background: cor + 1f`).
+// Contra o fundo real, "Em andamento" dava 4,28:1 — abaixo do mínimo que o
+// comentário dizia garantir. Os números abaixo são contra o véu.
+//
+// Agora: pior par ΔE 37, pior par com deuteranopia ΔE 15, mínimo 4,65:1. L*
+// entre 36 e 52 em todos — mais escuro que isso a cor deixa de ser lida como a
+// cor dela e vira "quase preto", que é o oposto de evidente.
+//
+// Cor não carrega o significado sozinha: o selo sempre traz o rótulo escrito.
 export const PROJECT_STATUSES = [
-  { id: 'planejamento', label: 'Planejamento',  color: '#5F5C56' }, // cinza profundo · 6,66:1 · nada em execução ainda
-  { id: 'andamento',    label: 'Em andamento',  color: '#8A6A3F' }, // dourado escurecido · 4,98:1 · em execução
-  { id: 'revisao',      label: 'Em revisão',    color: '#41607F' }, // azul-ardósia · 6,55:1 · em análise, sem pendência
-  { id: 'pendente',     label: 'Pendente',      color: '#7A6410' }, // ouro escuro · 5,74:1 · parado aguardando providência
-  { id: 'diligencia',   label: 'Em diligência', color: '#AE4B12' }, // laranja-tijolo · 5,50:1 · exigência do órgão, tem prazo
-  { id: 'paralisado',   label: 'Paralisado',    color: '#9A4F32' }, // terracota · 5,93:1 · execução interrompida
-  { id: 'concluido',    label: 'Concluído',     color: '#276B46' }, // verde profundo · 6,41:1 · encerrado
+  { id: 'planejamento', label: 'Planejamento',  color: '#6A6562' }, // cinza-taupe · 4,88:1 · nada em execução ainda
+  { id: 'andamento',    label: 'Em andamento',  color: '#1F6CA3' }, // azul · 4,75:1 · em execução
+  { id: 'revisao',      label: 'Em revisão',    color: '#7A44C5' }, // violeta · 5,08:1 · em análise, sem pendência
+  { id: 'pendente',     label: 'Pendente',      color: '#6D5212' }, // ouro escuro · 6,10:1 · parado aguardando providência
+  { id: 'diligencia',   label: 'Em diligência', color: '#AE4804' }, // laranja · 4,72:1 · exigência do órgão, tem prazo
+  { id: 'paralisado',   label: 'Paralisado',    color: '#C52645' }, // carmim · 4,65:1 · execução interrompida
+  { id: 'concluido',    label: 'Concluído',     color: '#177242' }, // verde · 5,01:1 · encerrado
 ]
 export const PROJECT_STATUS_MAP = Object.fromEntries(PROJECT_STATUSES.map(s => [s.id, s]))
 
