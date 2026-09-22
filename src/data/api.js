@@ -118,6 +118,10 @@ export const api = {
   pulse: () => req('GET', '/pulse'),
   // Registra que a pessoa abriu a atividade — permitido para 'Só exibição'.
   viewTask: (id) => req('POST', `/tasks/${id}/view`),
+  // Textos de item já usados, por número de etapa. Só dos projetos que a pessoa
+  // enxerga — o servidor filtra, não o cliente.
+  checklistSuggestions: () => req('GET', '/checklist-suggestions'),
+
   // Acrescenta um item ao checklist de uma atividade — exige Edição total.
   addChecklistItem: (taskId, text, assigneeId) => req('POST', `/tasks/${taskId}/checklist`, { text, assigneeId }),
   // Cria de uma vez as etapas do processo que faltam no projeto.

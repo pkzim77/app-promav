@@ -3,6 +3,7 @@ import { Icon } from '../Icon.jsx'
 import { Modal, Field, SegControl, StatusTag, PriorityTag } from '../primitives/primitives.jsx'
 import { STATUSES, PRIORITIES, CHECK_STATES, STATUS_MAP, estadoDoItem, paraAtribuir } from '../../data/store.js'
 import { dateError } from './shared/formHelpers.js'
+import { SugestaoItem } from './shared/SugestaoItem.jsx'
 
 export function TaskModal({ task, projects, users, currentUserId, defaultProjectId, defaultStatus, canEdit = true, onToggleChecklist, onToggleMembership, onSave, onClose }) {
   const editing = !!task
@@ -64,6 +65,10 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   // Quem pode receber a atividade. Um responsável ou membro já gravado entra
   // na lista mesmo sendo conta de manutenção, senão o salvamento o trocaria.
   const pessoas = paraAtribuir(users, assigneeId, memberIds, task?.assigneeId, task?.memberIds)
+
+  // Numa etapa do template ("3 · Orçamento"), o número decide as sugestões.
+  // Atividade avulsa não tem etapa: cai na lista geral.
+  const nEtapa = /^(\d+) · /.exec(task?.title || '')?.[1]
 
   const dErr = dateError(start, end)
   const titleErr = touched && !title.trim() ? 'Informe um título.' : null
@@ -194,9 +199,9 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
         </div>
         {!ro && (
           <div className="ck-add">
-            <input className="control" value={newItem} placeholder="Adicionar item…"
-              onChange={e => setNewItem(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addItem() } }} />
+            <SugestaoItem value={newItem} onChange={setNewItem} onEnter={addItem}
+              etapa={nEtapa} jaUsados={checklist.map(i => i.text)}
+              placeholder="Adicionar item…" ariaLabel="Adicionar item ao checklist" />
             <button type="button" className="btn btn-secondary btn-sm" onClick={addItem}><Icon name="plus" size={15} stroke={2.2} />Adicionar</button>
           </div>
         )}

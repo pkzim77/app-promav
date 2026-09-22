@@ -68,6 +68,26 @@
 
 .ck-add .control { flex: 1; }
 
+/* ---------- sugestão de item ---------- */
+
+/* relative para a lista ancorar no campo; flex:1 porque dentro do .ck-add quem
+   estica agora é este invólucro, não mais o <input>. */
+.sug { position: relative; flex: 1; min-width: 0; }
+
+.sug .control { width: 100%; }
+
+.sug-lista { position: absolute; z-index: 5; top: calc(100% + 4px); left: 0; right: 0; margin: 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-md); max-height: 232px; overflow-y: auto; }
+
+.sug-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; border-radius: var(--r-sm); font-size: 13.5px; color: var(--fg-1); cursor: pointer; }
+
+.sug-item.on { background: var(--bg-muted); }
+
+.sug-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Quantos projetos já usaram o texto. É o que separa o padrão da casa do
+   improviso de alguém — sem isso as oito linhas têm todas o mesmo peso. */
+.sug-n { flex-shrink: 0; font-size: 11.5px; font-weight: 600; color: var(--fg-4); }
+
 .ck-add .btn { flex-shrink: 0; }
 
 /* ---------- Member picker (task modal) ---------- */

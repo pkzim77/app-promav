@@ -2,6 +2,7 @@ import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field } from '../primitives/primitives.jsx'
 import { paraAtribuir } from '../../data/store.js'
+import { SugestaoItem } from './shared/SugestaoItem.jsx'
 
 // Trabalho novo dentro de uma etapa. Antes, "Nova atividade" criava sempre uma
 // atividade de texto livre, que não batia o padrão "N · Nome" e caía em
@@ -26,6 +27,11 @@ export function StageItemModal({ etapas = [], users = [], members = [], defaultS
     .filter(u => u.isAdmin || members.some(m => m.userId === u.id))
 
   const textErr = touched && !text.trim() ? 'Escreva o que precisa ser feito.' : null
+
+  // A etapa escolhida decide o que é sugerido, e o checklist dela sai da lista:
+  // oferecer o que já está lá é oferecer trabalho duplicado.
+  const etapaAtual = etapas.find(e => e.id === taskId)
+  const jaNaEtapa = (etapaAtual?.task?.checklist || []).map(i => i.text)
 
   const save = async () => {
     setTouched(true)
@@ -59,10 +65,10 @@ export function StageItemModal({ etapas = [], users = [], members = [], defaultS
           </Field>
 
           <Field label="O que precisa ser feito">
-            <input className="control" value={text} autoFocus
+            <SugestaoItem value={text} onChange={setText} onEnter={save} autoFocus
+              etapa={etapaAtual?.n} jaUsados={jaNaEtapa}
               placeholder="Ex.: Revisar a prancha 04 do arquitetônico"
-              onChange={e => setText(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') save() }} />
+              ariaLabel="O que precisa ser feito" />
             {textErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{textErr}</span>}
           </Field>
 

@@ -1531,6 +1531,48 @@ app.post('/api/changes/:id/ack', gate(changeProjectId, CAN.light), wrap(async (r
   res.json(await getChange(req.params.id))
 }))
 
+// ---------- sugestoes de item de checklist ----------
+
+// Os textos que a equipe ja usou, agrupados pelo NUMERO da etapa. Medido antes
+// de escrever isto: sao 157 itens para 55 textos distintos, e 102 dos 152 itens
+// do template ja existiam palavra por palavra em outro projeto. A etapa 3 tem
+// sempre os mesmos cinco (3.1 Quantitativos, 3.2 Composicoes, 3.3 Planilha, 3.4
+// BDI, 3.5 Cronograma) — redigitados a cada projeto.
+//
+// Agrupa por etapa porque '3.1 Quantitativos' so faz sentido dentro de
+// Orcamento; o que nao vem de etapa numerada cai em '*' e serve de reserva.
+//
+// So projetos que a pessoa enxerga. Sem esse filtro a caixa de sugestao viraria
+// uma janela para o texto de projetos aos quais ela nao tem acesso.
+const MAX_SUGESTOES = 40
+
+app.get('/api/checklist-suggestions', wrap(async (req, res) => {
+  const visiveis = await visibleProjectIds(req.userId)
+  const linhas = await q(
+    `SELECT COALESCE(substring(t.title from '^([0-9]+) · '), '*') AS etapa,
+            btrim(ci.text) AS texto,
+            count(DISTINCT t.project_id)::int AS projetos
+       FROM checklist_items ci
+       JOIN tasks t ON t.id = ci.task_id
+      WHERE btrim(ci.text) <> ''
+        -- Item nascido de uma mudança publicada carrega o prefixo "[Requisição]"
+        -- e é o registro de um pedido específico, de um projeto específico. Nunca
+        -- serve de sugestão para outro — só sujaria a lista com o improviso de
+        -- alguém no lugar do padrão da casa.
+        AND btrim(ci.text) NOT LIKE '[%'
+        AND ($1::text[] IS NULL OR t.project_id = ANY($1))
+      GROUP BY 1, 2
+      ORDER BY 1, 3 DESC, 2`,
+    [visiveis])
+
+  const porEtapa = {}
+  for (const l of linhas) {
+    const lista = porEtapa[l.etapa] || (porEtapa[l.etapa] = [])
+    if (lista.length < MAX_SUGESTOES) lista.push({ text: l.texto, n: l.projetos })
+  }
+  res.json(porEtapa)
+}))
+
 // ---------- relatorio semanal ----------
 
 // A semana e identificada pela SEXTA que a encerra — e quando a equipe manda.
