@@ -50,6 +50,9 @@ export default function App() {
   const [changes, setChanges] = React.useState([])
   const [route, setRoute] = React.useState({ view: 'hub' })
   const [projectSearch, setProjectSearch] = React.useState('')
+  // Pasta aberta na lista de projetos. Fica aqui, e não dentro do ProjectList,
+  // porque aquela tela desmonta ao abrir um projeto.
+  const [pastaAberta, setPastaAberta] = React.useState(null)
   const [filterProject, setFilterProject] = React.useState(null)
   const [mine, setMine] = React.useState(false)
   const [modal, setModal] = React.useState(null)
@@ -914,7 +917,11 @@ export default function App() {
       sessions={sessions} currentUserId={currentUserId} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
       canEdit={canEditCurrent} role={currentRole}
       initialTab={route.tab} focusId={route.focusId} focusNonce={route.focusNonce}
-      onBack={() => setRoute({ view: 'projects' })} onEdit={openEditProject}
+      // Voltar leva à pasta DO PROJETO, não à última que estava aberta nem à
+      // raiz: quem chegou aqui pela barra lateral ou pela busca nunca navegou
+      // por pasta nenhuma, e ainda assim é ali que ele quer continuar.
+      onBack={() => { setPastaAberta(currentProject.folderId || null); setRoute({ view: 'projects' }) }}
+      onEdit={openEditProject}
       onNewTask={openNewTask} onEditTask={openEditTask} onDeleteTask={askDeleteTask}
       onAssignChecklist={assignChecklistItem} onMoveTask={moveTask}
       onSetChecklistState={setChecklistState} onEditChecklistItem={editChecklistItem}
@@ -924,6 +931,7 @@ export default function App() {
       onNewChange={openNewChange} onEditChange={openEditChange} onAckChange={ackChange} onDecideChange={decideChange} />
   } else if (effectiveRoute.view === 'projects') {
     screen = <ProjectList projects={searchedProjects} tasks={tasks} folders={folders} authUser={authUser} canCreate={isAdmin}
+      openId={pastaAberta} onOpenFolder={setPastaAberta}
       onOpen={(id) => setRoute({ view: 'projects', projectId: id })}
       onEdit={openEditProject} onDelete={askDeleteProject} onNew={openNewProject} onMoveProject={moveProject} onMoveFolder={moveFolder} onNewSubfolder={createFolder} onDeleteFolder={askDeleteFolder} />
   } else if (effectiveRoute.view === 'list') {
