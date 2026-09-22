@@ -280,6 +280,41 @@
 
 .ds-person { display: inline-flex; align-items: center; gap: 9px; padding: 5px 14px 5px 5px; border: 1px solid var(--border); border-radius: var(--r-full); font-size: 13.5px; font-weight: 600; color: var(--fg-2); }
 
+/* ---------- ficha do responsável (Panorama) ---------- */
+
+.ds-com-ficha { position: relative; cursor: default; }
+
+.ds-com-ficha:hover, .ds-com-ficha:focus-visible { border-color: var(--border-strong); background: var(--surface); outline: none; }
+
+/* Abre para baixo, não para cima: o bloco fica na metade de cima da tela e,
+   subindo, a ficha sairia pela borda do navegador. */
+.ds-ficha { position: absolute; z-index: 30; top: calc(100% + 8px); left: 0; width: max-content; max-width: min(300px, 86vw); display: flex; flex-direction: column; gap: 7px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-md); text-align: left; font-weight: 400; opacity: 0; visibility: hidden; transform: translateY(-4px); transition: opacity var(--dur), transform var(--dur), visibility var(--dur); }
+
+.ds-com-ficha:hover .ds-ficha, .ds-com-ficha:focus-visible .ds-ficha { opacity: 1; visibility: visible; transform: none; }
+
+.ds-ficha-topo { display: flex; align-items: center; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+.ds-ficha-id { display: flex; flex-direction: column; min-width: 0; }
+
+.ds-ficha-id b { font-size: 13.5px; font-weight: 700; color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.ds-ficha-id i { font-style: normal; font-size: 11.5px; color: var(--fg-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.ds-ficha-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; font-size: 12.5px; }
+
+.ds-ficha-linha > span { color: var(--fg-3); flex-shrink: 0; }
+
+.ds-ficha-linha > b { font-weight: 600; color: var(--fg-1); text-align: right; }
+
+/* Cargo e setor em branco no cadastro. Escrito, não omitido: campo vazio some
+   da tela e a lacuna nunca é resolvida. */
+.ds-ficha-linha > b.vazio { font-weight: 500; font-style: italic; color: var(--fg-4); }
+
+/* Sem cursor não há hover: no celular a ficha abre ao tocar (o foco entra). */
+@media (hover: none) {
+  .ds-com-ficha:focus .ds-ficha { opacity: 1; visibility: visible; transform: none; }
+}
+
 @media (max-width: 720px) {
   .cover-hero { gap: 22px; }
   .cover-hero-side { padding-left: 0; border-left: 0; border-top: 1px solid var(--border); padding-top: 18px; width: 100%; align-items: flex-start; }

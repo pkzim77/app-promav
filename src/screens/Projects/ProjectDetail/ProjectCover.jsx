@@ -1,7 +1,63 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
-import { RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, dayDiff, parseDate, todayISO, formatBRL, calcularProgresso, fmtFull } from '../../../data/store.js'
+import { RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, dayDiff, parseDate, todayISO, formatBRL, calcularProgresso, fmtFull, taskMembers } from '../../../data/store.js'
 import { NotesText } from '../shared/NotesText.jsx'
+
+// Ficha que abre ao passar o mouse num responsável.
+//
+// Não é o `title` do navegador: aquele balão demora cerca de um segundo para
+// aparecer, não se estiliza e não existe no celular — e esta é a aba que se
+// projeta em reunião com o cliente.
+//
+// Cargo e setor são o que foi pedido, mas hoje quase ninguém tem os dois
+// preenchidos, então a ficha ficaria vazia. Por isso ela também traz o que o
+// app SABE: quantas atividades daquele projeto são da pessoa e quantas ela já
+// fechou. E a falta aparece escrita, em vez de um espaço em branco — é assim
+// que alguém lembra de preencher.
+function FichaResponsavel({ user, doProjeto }) {
+  const minhas = doProjeto.filter(t => taskMembers(t).includes(user.id))
+  const feitas = minhas.filter(t => t.status === 'done').length
+  const cargo = (user.jobTitle || '').trim()
+  const setor = (user.sector || '').trim()
+
+  // O leitor de tela não enxerga a ficha (ela some com visibility), então a
+  // mesma informação vai no rótulo do chip.
+  const rotulo = [user.name,
+    cargo ? `cargo ${cargo}` : 'cargo não informado',
+    setor ? `setor ${setor}` : 'setor não informado',
+    `${minhas.length} atividade${minhas.length === 1 ? '' : 's'} neste projeto`].join(', ')
+
+  const linha = (rot, valor) => (
+    <span className="ds-ficha-linha">
+      <span>{rot}</span>
+      <b className={valor ? '' : 'vazio'}>{valor || 'não informado'}</b>
+    </span>
+  )
+
+  return (
+    <span className="ds-person ds-com-ficha" tabIndex={0} aria-label={rotulo}>
+      <span className="av" style={{ width: 24, height: 24, background: user.color, fontSize: 9 }}>{user.initials}</span>
+      {user.name.split(' ')[0]}
+
+      <span className="ds-ficha" role="tooltip" aria-hidden="true">
+        <span className="ds-ficha-topo">
+          <span className="av" style={{ width: 34, height: 34, background: user.color, fontSize: 13 }}>{user.initials}</span>
+          <span className="ds-ficha-id">
+            <b>{user.name}</b>
+            <i>{user.email}</i>
+          </span>
+        </span>
+        {linha('Cargo', cargo)}
+        {linha('Setor', setor)}
+        <span className="ds-ficha-linha">
+          <span>Neste projeto</span>
+          <b>{minhas.length === 0 ? 'nenhuma atividade'
+            : `${minhas.length} atividade${minhas.length === 1 ? '' : 's'}, ${feitas} concluída${feitas === 1 ? '' : 's'}`}</b>
+        </span>
+      </span>
+    </span>
+  )
+}
 
 // Percentual em pt-BR: vírgula decimal e sem o ",0" quando é inteiro.
 const pctBR = (n) => `${Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
@@ -290,10 +346,7 @@ export function ProjectCover({ project, tasks, users }) {
             ) : (
               <div className="ds-people">
                 {responsibles.map(u => (
-                  <span className="ds-person" key={u.id} title={u.name}>
-                    <span className="av" style={{ width: 24, height: 24, background: u.color, fontSize: 9 }}>{u.initials}</span>
-                    {u.name.split(' ')[0]}
-                  </span>
+                  <FichaResponsavel key={u.id} user={u} doProjeto={list} />
                 ))}
               </div>
             )}
