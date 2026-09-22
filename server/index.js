@@ -1602,7 +1602,6 @@ const maisDias = (iso, n) => new Date(new Date(iso + 'T00:00:00Z').getTime() + n
 // ainda converte o que e colado para texto puro, mas isto aqui e a garantia.
 const TAGS_OK = ['b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li', 'br', 'p', 'div']
 const LIMITE_TEXTO = 20 * 1024
-const LIMITE_STATUS = 2 * 1024
 
 function limparHtml(bruto, limite = LIMITE_TEXTO) {
   if (typeof bruto !== 'string' || !bruto) return ''
@@ -1621,18 +1620,25 @@ function limparHtml(bruto, limite = LIMITE_TEXTO) {
 // Texto visivel, para saber se o relatorio tem conteudo de verdade.
 const semTags = (html) => String(html || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
 
+// Espelha PROJECT_STATUSES de src/data/store.js. E a lista que o servidor
+// aceita gravar: status virou escolha, nao texto livre. Os quatro relatorios
+// ja enviados tinham status escrito a mao, e os quatro diziam "Em andamento" —
+// com uma grafia diferente cada vez, o que nao da para contar nem agrupar.
+const STATUS_PROJETO = ['planejamento', 'andamento', 'revisao', 'pendente', 'diligencia', 'paralisado', 'concluido']
+
 const mapRelatorio = (r) => ({
   id: r.id,
   userId: r.user_id,
   week: r.week instanceof Date ? r.week.toISOString().slice(0, 10) : String(r.week).slice(0, 10),
   projectIds: r.project_ids || [],
   developed: r.developed || '',
+  works: r.works || {},
   statuses: r.statuses || {},
   sentAt: r.sent_at,
   updatedAt: r.updated_at,
 })
 
-const COLUNAS_REL = 'id, user_id, week, project_ids, developed, statuses, sent_at, updated_at'
+const COLUNAS_REL = 'id, user_id, week, project_ids, developed, works, statuses, sent_at, updated_at'
 
 // Duas listas, e a diferenca entre elas importa:
 //
@@ -1681,33 +1687,39 @@ app.get('/api/weekly-reports/me', wrap(async (req, res) => {
 app.put('/api/weekly-reports/me', wrap(async (req, res) => {
   const semana = sextaDe(req.body.week)
   const enviar = !!req.body.send
-  const developed = limparHtml(req.body.developed)
   const projectIds = (Array.isArray(req.body.projectIds) ? req.body.projectIds : [])
     .filter(id => typeof id === 'string').slice(0, 30)
 
-  // Status so dos projetos declarados: sem isto, desmarcar um projeto deixaria
-  // o texto dele guardado para sempre, invisivel na tela e no PDF.
+  // Texto e status so dos projetos declarados: sem isto, tirar um projeto do
+  // relatorio deixaria o texto dele guardado para sempre, invisivel na tela e
+  // no PDF, e reaparecendo se o projeto voltasse.
+  const works = {}
   const statuses = {}
-  const brutos = req.body.statuses && typeof req.body.statuses === 'object' ? req.body.statuses : {}
+  const brutoTexto = req.body.works && typeof req.body.works === 'object' ? req.body.works : {}
+  const brutoStatus = req.body.statuses && typeof req.body.statuses === 'object' ? req.body.statuses : {}
   for (const id of projectIds) {
-    const limpo = limparHtml(brutos[id], LIMITE_STATUS)
-    if (semTags(limpo)) statuses[id] = limpo
+    const limpo = limparHtml(brutoTexto[id])
+    if (semTags(limpo)) works[id] = limpo
+    if (STATUS_PROJETO.includes(brutoStatus[id])) statuses[id] = brutoStatus[id]
   }
 
-  if (enviar && !semTags(developed)) return res.status(400).json({ error: 'Escreva o que foi desenvolvido antes de enviar.' })
-  if (enviar && !projectIds.length) return res.status(400).json({ error: 'Selecione ao menos um projeto antes de enviar.' })
+  if (enviar && !projectIds.length) return res.status(400).json({ error: 'Escolha ao menos um projeto antes de enviar.' })
+  if (enviar && !Object.keys(works).length) return res.status(400).json({ error: 'Escreva o que foi feito em pelo menos um projeto.' })
 
   const [r] = await q(
-    `INSERT INTO weekly_reports (id, user_id, week, project_ids, developed, statuses, sent_at, updated_at)
-     VALUES ($1, $2, $3::date, $4::text[], $5, $6::jsonb, CASE WHEN $7 THEN now() ELSE NULL END, now())
+    // `developed` nao aparece no UPDATE de proposito: a tela nova nao tem mais
+    // esse campo, e incluir aqui apagaria em silencio o texto de um relatorio
+    // antigo na primeira vez que alguem o reabrisse.
+    `INSERT INTO weekly_reports (id, user_id, week, project_ids, works, statuses, sent_at, updated_at)
+     VALUES ($1, $2, $3::date, $4::text[], $5::jsonb, $6::jsonb, CASE WHEN $7 THEN now() ELSE NULL END, now())
      ON CONFLICT (user_id, week) DO UPDATE SET
        project_ids = EXCLUDED.project_ids,
-       developed   = EXCLUDED.developed,
+       works       = EXCLUDED.works,
        statuses    = EXCLUDED.statuses,
        sent_at     = CASE WHEN $7 THEN now() ELSE weekly_reports.sent_at END,
        updated_at  = now()
      RETURNING ${COLUNAS_REL}`,
-    [genId('wr'), req.userId, semana, projectIds, developed, JSON.stringify(statuses), enviar])
+    [genId('wr'), req.userId, semana, projectIds, JSON.stringify(works), JSON.stringify(statuses), enviar])
   res.json(mapRelatorio(r))
 }))
 
@@ -1914,6 +1926,12 @@ async function ensureSchema() {
     )
   `)
   await q('CREATE INDEX IF NOT EXISTS weekly_reports_week_idx ON weekly_reports (week)')
+
+  // O que foi feito passou a ser POR PROJETO: um texto unico para a semana
+  // obrigava a pessoa a repetir o nome do projeto dentro da frase para se fazer
+  // entender. `developed` (texto unico) fica para os relatorios ja enviados —
+  // eles continuam sendo lidos e impressos como foram escritos.
+  await q("ALTER TABLE weekly_reports ADD COLUMN IF NOT EXISTS works jsonb NOT NULL DEFAULT '{}'::jsonb")
 
   // ----- revisao e diligencia -----
   // ADD VALUE num enum do Postgres e de mao unica: valor de enum NAO pode ser

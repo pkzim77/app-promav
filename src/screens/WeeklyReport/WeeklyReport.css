@@ -35,16 +35,49 @@
 
 .rel-semana-txt { font-size: 13.5px; color: var(--fg-2); white-space: nowrap; }
 
-.rel-busca { margin-bottom: 10px; }
+/* ---------- lista suspensa de projetos ---------- */
 
-/* Com 26 projetos a lista não pode empurrar o formulário inteiro para baixo. */
-.rel-projs { display: flex; flex-wrap: wrap; gap: 8px; max-height: 188px; overflow-y: auto; padding: 2px; }
+.rel-sel { position: relative; }
 
-.rel-proj { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--fg-2); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-full); padding: 7px 14px; cursor: pointer; transition: all var(--dur); }
+.rel-sel-botao { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left; cursor: pointer; color: var(--fg-1); }
 
-.rel-proj:hover { border-color: var(--fg-4); }
+.rel-sel-botao:hover { border-color: var(--fg-4); }
 
-.rel-proj.on { background: var(--brand-soft); border-color: transparent; color: var(--brand); }
+.rel-sel-lista { position: absolute; z-index: 10; top: calc(100% + 4px); left: 0; right: 0; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-md); }
+
+.rel-sel-busca { margin-bottom: 8px; }
+
+/* Teto de altura porque a lista pode ter 26 projetos — sem isto ela passa do
+   rodapé da tela e as últimas opções ficam inalcançáveis. */
+.rel-sel-itens { display: flex; flex-direction: column; gap: 2px; max-height: 264px; overflow-y: auto; }
+
+.rel-sel-item { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: var(--r-sm); font-size: 13.5px; color: var(--fg-1); cursor: pointer; }
+
+.rel-sel-item:hover { background: var(--bg-subtle); }
+
+.rel-sel-item.on { background: var(--brand-soft); }
+
+.rel-sel-item input { width: 17px; height: 17px; flex-shrink: 0; accent-color: var(--brand); cursor: pointer; }
+
+.rel-sel-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Marca quem teve tempo cronometrado ou atividade mexida na semana: é a dica
+   de quem a pessoa provavelmente precisa relatar. */
+.rel-sel-tag { flex-shrink: 0; font-size: 11px; font-weight: 600; color: var(--accent-strong); background: var(--brand-soft-2); border-radius: var(--r-full); padding: 2px 8px; }
+
+/* A aba do projeto escolhido. Recuada e com fundo próprio para separar o que é
+   escolha do projeto do que é conteúdo dele — sem isso o select e os campos
+   ficam todos no mesmo plano e a tela volta a parecer um formulário só. */
+.rel-aba { display: flex; flex-direction: column; gap: 16px; padding: 16px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); }
+
+.rel-aba-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+/* Lixeira do painel: tira o projeto do relatório, não apaga o que foi escrito.
+   Vermelha só no hover — vermelha o tempo todo, num painel por projeto, deixaria
+   a tela cheia de alerta para uma ação reversível num clique. */
+.rel-aba-tirar:hover { color: var(--danger); background: var(--danger-soft); }
+
+.rel-aba-topo h3 { margin: 0; font: var(--text-h4); color: var(--fg-1); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 .rel-vazio-txt { margin: 0; font-size: 13.5px; color: var(--fg-3); }
 
@@ -133,6 +166,13 @@
 .rel-doc-tabela th { width: 140px; font-weight: 600; color: #55503F; }
 
 .rel-doc-h2 { margin: 18px 0 8px; font-size: 10.5pt; font-weight: 700; letter-spacing: 0.02em; }
+
+/* Um bloco por projeto: nome, status e o que foi feito. Não quebra no meio. */
+.rel-doc-proj { break-inside: avoid; margin-bottom: 14px; }
+
+.rel-doc-proj .rel-doc-h2 { margin-top: 0; padding-bottom: 4px; border-bottom: 1px solid #E4DED1; }
+
+.rel-doc-status { margin: 0 0 6px; font-size: 10pt; color: #55503F; }
 
 .rel-doc-lista { margin: 0; padding-left: 18px; list-style: none; }
 
