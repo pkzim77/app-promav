@@ -953,7 +953,11 @@ app.post('/api/tasks/:id/membership', gate(taskProjectId, CAN.light), wrap(async
 // custo é quase todo de ida e volta, então criar as 11 etapas levava segundos
 // de espera. O filtro do que já existe virou o NOT EXISTS do próprio INSERT, e
 // as 11 linhas entram de uma vez — um único INSERT já é atômico, sem transação.
-app.post('/api/projects/:id/stages', gate((req) => req.params.id, CAN.edit), wrap(async (req, res) => {
+// adminOnly, nao CAN.edit: montar o template nao e trabalhar no projeto, e
+// decidir que ele segue o processo das 11 etapas. Quem e 'full' executa as
+// etapas; quem as cria e a coordenacao. Enquanto isto era CAN.edit, qualquer
+// membro criava — e era assim que um projeto ganhava etapa repetida.
+app.post('/api/projects/:id/stages', gate((req) => req.params.id, CAN.adminOnly), wrap(async (req, res) => {
   const [p] = await q("SELECT to_char(COALESCE(start_date, now()::date), 'YYYY-MM-DD') AS inicio FROM projects WHERE id = $1", [req.params.id])
   if (!p) return res.status(404).json({ error: 'Projeto não encontrado.' })
 

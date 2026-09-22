@@ -107,7 +107,7 @@ export function ProjectDetail({ project, tasks, users, sessions, changes = [], c
           onAck={onAckChange} onDecide={onDecideChange} onOpenTask={onEditTask} />
       ) : (
         <ProjectStages key={project.id} project={project} tasks={tasks} users={users} sessions={sessions}
-          currentUserId={currentUserId} now={now} canEdit={canEdit}
+          currentUserId={currentUserId} now={now} canEdit={canEdit} isAdmin={role === 'admin'}
           onToggleChecklist={onToggleChecklist} onAssignChecklist={onAssignChecklist} onMoveTask={onMoveTask}
           onNewStageItem={onNewStageItem} onCreateStages={onCreateStages} onNewTask={onNewTask} onEditTask={onEditTask}
           onDeleteTask={onDeleteTask} onStartTimer={onStartTimer} onStopTimer={onStopTimer} />

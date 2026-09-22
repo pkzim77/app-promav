@@ -245,7 +245,7 @@ const FILTROS = [
   { id: 'todo', label: 'Pendentes' },
 ]
 
-export function ProjectStages({ project, tasks, users, sessions, currentUserId, now, canEdit = true,
+export function ProjectStages({ project, tasks, users, sessions, currentUserId, now, canEdit = true, isAdmin = false,
                                onToggleChecklist, onAssignChecklist, onMoveTask, onNewTask, onNewStageItem, onCreateStages,
                                onEditTask, onDeleteTask, onStartTimer, onStopTimer }) {
   const doProjeto = React.useMemo(() => tasks.filter(t => t.projectId === project.id), [tasks, project.id])
@@ -314,18 +314,29 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
 
   // 29 dos 36 projetos não tinham etapa nenhuma, e a equipe vinha recriando as
   // 11 à mão — foi assim que surgiram as duplicatas. O botão cria de uma vez.
+  //
+  // Só para a coordenação, porque só ela pode: a rota é adminOnly. Oferecer o
+  // botão a quem o servidor vai recusar é pior que não oferecer nada — a pessoa
+  // clica, espera, recebe um erro e continua sem saber de quem cobrar. O aviso
+  // diz quem cria, que é a informação que ela precisa.
   if (semEtapas) {
     return (
       <div className="proj-etapas">
-        <EmptyState icon="list" title="Nenhuma etapa cadastrada"
-          text={'As 11 etapas do processo — de Contratação direta até Licitação — ainda não existem neste projeto.'
-            + (avulsas.length ? ' As atividades já cadastradas estão logo abaixo.' : '')}
-          action={canEdit ? (
-            <div className="et-nova">
-              <BotaoCriarTemplate projectId={project.id} onCreateStages={onCreateStages} />
-              <button className="btn btn-ghost" onClick={() => onNewTask(project.id)}>Atividade avulsa</button>
-            </div>
-          ) : null} />
+        {isAdmin ? (
+          <EmptyState icon="list" title="Nenhuma etapa cadastrada"
+            text={'As 11 etapas do processo — de Contratação direta até Licitação — ainda não existem neste projeto.'
+              + (avulsas.length ? ' As atividades já cadastradas estão logo abaixo.' : '')}
+            action={
+              <div className="et-nova">
+                <BotaoCriarTemplate projectId={project.id} onCreateStages={onCreateStages} />
+                <button className="btn btn-ghost" onClick={() => onNewTask(project.id)}>Atividade avulsa</button>
+              </div>
+            } />
+        ) : (
+          <EmptyState icon="list" title="Nenhuma etapa criada pela coordenação"
+            text={'As 11 etapas do processo — de Contratação direta até Licitação — são cadastradas pela coordenação. Enquanto isso não acontece, esta aba fica sem o acompanhamento por etapa.'
+              + (avulsas.length ? ' As atividades já cadastradas estão logo abaixo.' : '')} />
+        )}
         {blocoAvulsas}
       </div>
     )
