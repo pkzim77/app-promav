@@ -488,12 +488,44 @@ export default function App() {
   }
   // Marca/desmarca um item de checklist (otimista). Disponível também para 'Só exibição'.
   const toggleChecklistItem = async (task, itemId) => {
-    const next = (task.checklist || []).map(i => i.id === itemId ? { ...i, done: !i.done } : i)
+    const atual = (task.checklist || []).find(i => i.id === itemId)
+    const feito = !(atual?.state ? atual.state === 'done' : atual?.done)
+    const next = (task.checklist || []).map(i => i.id === itemId
+      ? { ...i, done: feito, state: feito ? 'done' : 'todo' } : i)
     setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
     try {
-      const saved = await api.toggleChecklist(task.id, next)
+      const saved = await api.patchChecklistItem(task.id, { id: itemId, done: feito })
       setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
     } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao atualizar checklist.') }
+  }
+
+  // Move o item entre pendente / em revisão / em diligência / concluído.
+  // Liberado para 'Só exibição' pelo mesmo motivo do marcar: quem faz o
+  // serviço registra em que pé ele está. O status da ETAPA volta já
+  // recalculado pelo servidor — é ele que espelha o pior estado dos itens.
+  const setChecklistState = async (task, itemId, state) => {
+    const next = (task.checklist || []).map(i => i.id === itemId
+      ? { ...i, state, done: state === 'done' } : i)
+    setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
+    try {
+      const saved = await api.patchChecklistItem(task.id, { id: itemId, state })
+      setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
+    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao mudar o estado do item.') }
+  }
+
+  // Corrige o texto de um item no lugar. Antes era apagar e recriar, o que
+  // jogava fora o dono do item, a posição dele na lista e o que já estava
+  // marcado — um erro de digitação custava os três.
+  const editChecklistItem = async (task, itemId, text) => {
+    const limpo = String(text || '').trim()
+    const atual = (task.checklist || []).find(i => i.id === itemId)
+    if (!limpo || !atual || limpo === atual.text) return
+    const next = (task.checklist || []).map(i => i.id === itemId ? { ...i, text: limpo } : i)
+    setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
+    try {
+      const saved = await api.patchChecklistItem(task.id, { id: itemId, text: limpo })
+      setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
+    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao editar o item.') }
   }
 
   // "Nova atividade" na aba Etapas: escolhe a etapa e o trabalho entra como
@@ -531,7 +563,7 @@ export default function App() {
     const next = (task.checklist || []).map(i => i.id === itemId ? { ...i, assigneeId: userId } : i)
     setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
     try {
-      const saved = await api.toggleChecklist(task.id, next)
+      const saved = await api.patchChecklistItem(task.id, { id: itemId, assigneeId: userId })
       setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
     } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao atribuir o item.') }
   }
@@ -884,7 +916,8 @@ export default function App() {
       initialTab={route.tab} focusId={route.focusId} focusNonce={route.focusNonce}
       onBack={() => setRoute({ view: 'projects' })} onEdit={openEditProject}
       onNewTask={openNewTask} onEditTask={openEditTask} onDeleteTask={askDeleteTask}
-      onToggleChecklist={toggleChecklistItem} onAssignChecklist={assignChecklistItem} onMoveTask={moveTask}
+      onAssignChecklist={assignChecklistItem} onMoveTask={moveTask}
+      onSetChecklistState={setChecklistState} onEditChecklistItem={editChecklistItem}
       onNewStageItem={openStageItem} onCreateStages={createStages}
       onCopyResource={copyResourceLink} onDeleteResource={(resource) => askDeleteResource(currentProject, resource)}
       onAddResource={openAddResource}

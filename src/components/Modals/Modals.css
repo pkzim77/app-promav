@@ -48,6 +48,16 @@
 
 .ck-text { font-size: 13.5px; color: var(--fg-1); flex: 1; }
 
+/* O texto do item virou campo. Discreto até receber o foco: uma linha de
+   caixas com borda pareceria um formulário de cadastro, não um checklist. */
+.ck-input { flex: 1; min-width: 0; padding: 5px 8px; font-size: 13.5px; border-color: transparent; background: transparent; }
+
+.ck-edit-row:hover .ck-input { border-color: var(--border); background: var(--surface); }
+
+.ck-input:focus { border-color: var(--brand); background: var(--surface); }
+
+.ck-input.done { color: var(--fg-4); text-decoration: line-through; }
+
 .ck-text.done { color: var(--fg-4); text-decoration: line-through; }
 
 .ck-del { opacity: 0; padding: 5px; }

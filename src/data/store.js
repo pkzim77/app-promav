@@ -20,9 +20,25 @@ export const PROJECT_HEX = {
 export const STATUSES = [
   { id: 'todo',     label: 'A fazer',      color: 'var(--status-todo)',     soft: 'var(--status-todo-soft)',     text: '#5c5c78' },
   { id: 'progress', label: 'Em andamento', color: 'var(--status-progress)', soft: 'var(--status-progress-soft)', text: '#1f64cc' },
+  { id: 'review',    label: 'Em revisão',    color: 'var(--status-review)',    soft: 'var(--status-review-soft)',    text: '#6b4a73' },
+  { id: 'diligence', label: 'Em diligência', color: 'var(--status-diligence)', soft: 'var(--status-diligence-soft)', text: '#8a4a2e' },
   { id: 'done',     label: 'Concluído',    color: 'var(--status-done)',     soft: 'var(--status-done-soft)',     text: '#157a49' },
 ]
 export const STATUS_MAP = Object.fromEntries(STATUSES.map(s => [s.id, s]))
+
+// Estado de um ITEM do checklist. Os mesmos da etapa, menos 'Em andamento':
+// o item é a menor unidade de trabalho e não se divide em meio-feito — quem
+// está no meio do serviço deixa pendente. As cores vêm de STATUS_MAP, para o
+// mesmo estado nunca ter duas cores na mesma tela.
+export const CHECK_STATES = [
+  { id: 'todo',      label: 'Pendente' },
+  { id: 'review',    label: 'Em revisão' },
+  { id: 'diligence', label: 'Em diligência' },
+  { id: 'done',      label: 'Concluído' },
+]
+
+// O estado de um item aceitando o formato antigo, que só tinha `done`.
+export const estadoDoItem = (item) => item?.state || (item?.done ? 'done' : 'todo')
 
 export const PRIORITIES = [
   { id: 'low',    label: 'Baixa', color: 'var(--prio-low)',    hex: '#7B8794', soft: 'var(--prio-low-soft)',    text: '#5a6470' },
