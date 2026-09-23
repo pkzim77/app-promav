@@ -315,9 +315,9 @@ app.get('/api/health', wrap(async (_req, res) => {
 }))
 
 // Forma pública de um usuário (sem hash de senha).
-const PUBLIC_USER = 'id, name, initials, color, email, sector, job_title AS "jobTitle", is_admin AS "isAdmin", is_active AS "isActive", is_dev AS "isDev"'
+const PUBLIC_USER = 'id, name, initials, color, email, short_name AS "shortName", phone, sector, job_title AS "jobTitle", professional_register AS "professionalRegister", is_admin AS "isAdmin", is_active AS "isActive", is_outsourced AS "isOutsourced", is_dev AS "isDev"'
 // Forma reduzida usada em listas (bootstrap/equipe).
-const LIST_USER = 'id, name, initials, color, email, sector, job_title AS "jobTitle", is_admin AS "isAdmin", is_active AS "isActive", is_dev AS "isDev"'
+const LIST_USER = 'id, name, initials, color, email, short_name AS "shortName", phone, sector, job_title AS "jobTitle", professional_register AS "professionalRegister", is_admin AS "isAdmin", is_active AS "isActive", is_outsourced AS "isOutsourced", is_dev AS "isDev"'
 
 // ----- autenticação (rotas públicas) -----
 app.post('/api/auth/login', wrap(async (req, res) => {
@@ -443,7 +443,7 @@ app.get('/api/users', requireAdmin, wrap(async (_req, res) => {
 }))
 
 app.post('/api/users', requireAdmin, wrap(async (req, res) => {
-  const { name, email, sector = null, jobTitle = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, initialPassword } = req.body || {}
+  const { name, phone, shortName, email, sector = null, jobTitle = null, professionalRegister = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, isOutsourced = false, initialPassword } = req.body || {}
   const cleanName = String(name || '').trim()
   const cleanEmail = String(email || '').trim()
   if (!cleanName || !cleanEmail) return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' })
@@ -462,16 +462,16 @@ app.post('/api/users', requireAdmin, wrap(async (req, res) => {
   if (!passwordToUse || passwordToUse.length < 6) return res.status(400).json({ error: 'A senha inicial precisa ter ao menos 6 caracteres.' })
   const passwordHash = await hashPassword(passwordToUse)
   await q(`
-    INSERT INTO users (id, name, initials, color, email, sector, job_title, is_admin, is_active, password_hash, is_dev)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false)
-  `, [id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, sector || null, jobTitle || null, !!isAdmin, isActive !== false, passwordHash])
+    INSERT INTO users (id, name, initials, color, email, phone, short_name, sector, job_title, professional_register, is_admin, is_active, is_outsourced, password_hash, is_dev)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, false)
+  `, [id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, phone || null, shortName || null, sector || null, jobTitle || null, professionalRegister || null, !!isAdmin, isActive !== false, !!isOutsourced, passwordHash])
 
   const [row] = await q(`SELECT ${LIST_USER} FROM users WHERE id = $1`, [id])
   res.status(201).json(row)
 }))
 
 app.put('/api/users/:id', requireAdmin, wrap(async (req, res) => {
-  const { name, email, sector = null, jobTitle = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, initialPassword } = req.body || {}
+  const { name, phone, shortName, email, sector = null, jobTitle = null, professionalRegister = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, isOutsourced = false, initialPassword } = req.body || {}
   const cleanName = String(name || '').trim()
   const cleanEmail = String(email || '').trim()
   if (!cleanName || !cleanEmail) return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' })
@@ -524,12 +524,16 @@ app.put('/api/users/:id', requireAdmin, wrap(async (req, res) => {
         initials = $3,
         color = $4,
         email = $5,
-        sector = $6,
-        job_title = $7,
-        is_admin = $8,
-        is_active = $9${passwordHash ? ', password_hash = $10' : ''}
+        phone = $6,
+        short_name = $7,
+        sector = $8,
+        job_title = $9,
+        professional_register = $10,
+        is_admin = $11,
+        is_active = $12,
+        is_outsourced = $13${passwordHash ? ', password_hash = $14' : ''}
     WHERE id = $1
-  `, passwordHash ? [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, sector || null, jobTitle || null, !!isAdmin, isActive !== false, passwordHash] : [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, sector || null, jobTitle || null, !!isAdmin, isActive !== false])
+  `, passwordHash ? [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, phone || null, shortName || null, sector || null, jobTitle || null, professionalRegister || null, !!isAdmin, isActive !== false, !!isOutsourced, passwordHash] : [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, phone || null, shortName || null, sector || null, jobTitle || null, professionalRegister || null, !!isAdmin, isActive !== false, !!isOutsourced])
 
   const [row] = await q(`SELECT ${LIST_USER} FROM users WHERE id = $1`, [req.params.id])
   if (!row) return res.status(404).json({ error: 'Usuário não encontrado.' })
@@ -1779,9 +1783,17 @@ async function ensureSchema() {
   // Setor da pessoa (engenharia, arquitetura…). É o que faz "destinatário:
   // Engenharia" resolver para gente de verdade na hora de cobrar ciência.
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS sector text')
-  // Cargo e situação ativa/inativa da pessoa.
+  // Cargo, telefone, nome curto e situação ativa/inativa da pessoa.
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title text')
+  await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS phone text')
+  await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS short_name text')
+  // Número do registro profissional (CREA ou CAU, conforme o cargo — ver
+  // CARGO_CONSELHO em data/store.js). Só o número; a sigla não é gravada
+  // porque é sempre derivada do cargo, nunca escolhida à parte.
+  await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS professional_register text')
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true')
+  // Se a pessoa é terceirizada (Sim/Não na ficha) — não confundir com o setor.
+  await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_outsourced boolean NOT NULL DEFAULT false')
 
   // ----- permissões -----
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin boolean NOT NULL DEFAULT false')

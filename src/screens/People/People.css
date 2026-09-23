@@ -101,3 +101,22 @@
   background: var(--danger-soft);
   color: var(--danger);
 }
+
+.people-actions .btn-icon.whatsapp {
+  /* O AG Grid injeta `<a>` dentro de célula com height:100%/display:block, pra
+     virar link clicável na célula inteira. Aqui é só um ícone — sobrescreve
+     pra ficar do tamanho do pencil/trash em vez de esticar a linha toda. */
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  height: 32px !important;
+  align-self: center;
+  color: #1da851;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.people-actions .btn-icon.whatsapp:hover {
+  background: rgba(37, 211, 102, 0.14);
+  color: #128c3e;
+}

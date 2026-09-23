@@ -46,7 +46,7 @@ export function Hub({ projects, recentProjects: searchedProjects = projects, tas
   return (
     <div className="page">
       <p className="eyebrow">Bem-vindo de volta</p>
-      <h1 style={{ font: 'var(--text-h1)', margin: '0 0 22px', letterSpacing: 'var(--tracking-tight)' }}>Sua semana no Promav</h1>
+      <h1 style={{ font: 'var(--text-h1)', margin: '0 0 22px', letterSpacing: 'var(--tracking-tight)' }}>Sua semana na Promav</h1>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 28 }}>
         <StatCard num={projects.length} label="Projetos ativos" />
