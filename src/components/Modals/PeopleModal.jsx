@@ -62,7 +62,14 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
   const currentColorHex = isHex ? color : '#5A7695'
 
   const nameErr = touched && !name.trim() ? 'Informe o nome.' : null
-  const emailErr = touched && !email.trim() ? 'Informe o e-mail.' : null
+  const emailErr = touched && !email.trim() ? 'Informe o e-mail.'
+    : touched && !email.includes('@') ? 'E-mail inválido.' : null
+  const shortNameErr = touched && !shortName.trim() ? 'Informe o nome social.' : null
+  const phoneErr = touched && !phone.trim() ? 'Informe o telefone.' : null
+  const jobTitleErr = touched && !jobTitle ? 'Selecione o cargo.' : null
+  const sectorErr = touched && !sector ? 'Selecione o setor.' : null
+  const outsourcedErr = touched && !outsourced ? 'Selecione se é terceirizado.' : null
+  const isAdminErr = touched && !isAdmin ? 'Selecione se é administrador.' : null
   const passwordErr = touched && !editing && initialPassword.trim().length < 6
     ? 'A senha inicial precisa ter ao menos 6 caracteres.' : null
 
@@ -106,7 +113,8 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
 
   const save = () => {
     setTouched(true)
-    if (!name.trim() || !email.trim()) return
+    if (!name.trim() || !email.trim() || !email.includes('@')) return
+    if (!shortName.trim() || !phone.trim() || !jobTitle || !sector || !outsourced || !isAdmin) return
     if (!editing && initialPassword.trim().length < 6) return
     onSave({
       ...(user || {}),
@@ -252,10 +260,12 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
         <Field label={"Nome Social"}>
           <input className="control" value={shortName} placeholder='Ana Rodrigues'
           onChange={e => setShortName(e.target.value)} />
+          {shortNameErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{shortNameErr}</span>}
         </Field>
         <Field label="Telefone">
           <input className="control" type="tel" value={phone} placeholder="(11) 99999-9999"
             onChange={e => setPhone(formatarMascaraTelefone(e.target.value))} />
+          {phoneErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{phoneErr}</span>}
         </Field>
       </div>
 
@@ -270,6 +280,7 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
             <option value="">Selecione</option>
             {CARGOS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
+          {jobTitleErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{jobTitleErr}</span>}
         </Field>
         {conselho && (
         <Field label={`Registro (${conselho})`}>
@@ -288,12 +299,14 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
             <option value="">Selecione</option>
             {SECTORS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
+          {sectorErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{sectorErr}</span>}
         </Field>
         <Field label="Terceirizado">
           <select className="control" value={outsourced} onChange={e => setOutsourced(e.target.value)}>
             <option value="">Selecione</option>
             {YES_NO_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
+          {outsourcedErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{outsourcedErr}</span>}
         </Field>
         <Field label="Administrador">
           <select className="control" value={isAdmin} disabled={isSelf && isLastAdmin}
@@ -304,6 +317,7 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
           {isSelf && isLastAdmin && (
             <span style={{ fontSize: 12, color: 'var(--fg-4)' }}>Você não pode remover sua própria permissão de administrador.</span>
           )}
+          {isAdminErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{isAdminErr}</span>}
         </Field>
       </div>
 

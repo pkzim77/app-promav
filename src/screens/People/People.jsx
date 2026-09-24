@@ -285,6 +285,13 @@ export function People({ users = [], projects = [], tasks = [], currentUserId = 
         flex: 0.9,
       },
       {
+        field: 'professionalRegister',
+        headerName: 'Registro',
+        valueFormatter: (p) => p.value || '—',
+        minWidth: 130,
+        flex: 0.7,
+      },
+      {
         field: 'sector',
         headerName: 'Setor',
         valueFormatter: (p) => p.value || '—',
@@ -349,7 +356,6 @@ export function People({ users = [], projects = [], tasks = [], currentUserId = 
     if (event.event?.target?.closest('button')) return
     onEditPerson?.(event.data)
   }, [onEditPerson])
-
 
   return (
     <div className="page">
