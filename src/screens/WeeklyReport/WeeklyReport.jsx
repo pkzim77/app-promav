@@ -1,7 +1,7 @@
 import './WeeklyReport.css'
 import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
-import { Avatar, Field } from '../../components/primitives/primitives.jsx'
+import { Avatar, Field, SelecaoMultipla } from '../../components/primitives/primitives.jsx'
 import { EmptyState } from '../Projects/shared/EmptyState.jsx'
 import { api } from '../../data/api.js'
 import { fmtFull, parseDate, todayISO, addDays, PROJECT_STATUSES, PROJECT_STATUS_MAP } from '../../data/store.js'
@@ -209,69 +209,6 @@ function SeletorSemana({ semana, onChange, ocupado }) {
   )
 }
 
-// Lista suspensa com caixas de marcar: a pessoa escolhe de uma vez os projetos
-// da semana e todos aparecem abertos, prontos para preencher.
-//
-// Não é um <select multiple> nativo: ele exige Ctrl+clique para marcar mais de
-// um, desmarca tudo num clique errado e no celular vira uma lista rolante sem
-// caixa nenhuma. Com 26 projetos — o caso do Alvaro — nada disso se sustenta.
-function SeletorProjetos({ projetos, marcados, daSemana, onAlternar }) {
-  const [aberto, setAberto] = React.useState(false)
-  const [filtro, setFiltro] = React.useState('')
-  const caixa = React.useRef(null)
-
-  React.useEffect(() => {
-    if (!aberto) return
-    const fora = (e) => { if (!caixa.current?.contains(e.target)) setAberto(false) }
-    const tecla = (e) => { if (e.key === 'Escape') setAberto(false) }
-    document.addEventListener('mousedown', fora)
-    document.addEventListener('keydown', tecla)
-    return () => {
-      document.removeEventListener('mousedown', fora)
-      document.removeEventListener('keydown', tecla)
-    }
-  }, [aberto])
-
-  const busca = filtro.trim().toLocaleLowerCase('pt-BR')
-  // O que já está marcado nunca some do filtro: desmarcar exige enxergar.
-  const visiveis = projetos.filter(p => !busca
-    || p.name.toLocaleLowerCase('pt-BR').includes(busca) || marcados.includes(p.id))
-
-  return (
-    <div className="rel-sel" ref={caixa}>
-      <button type="button" className="control rel-sel-botao" aria-expanded={aberto} aria-haspopup="true"
-        onClick={() => setAberto(a => !a)}>
-        <span>
-          {marcados.length
-            ? `${marcados.length} projeto${marcados.length === 1 ? '' : 's'} neste relatório`
-            : 'Escolha os projetos da semana'}
-        </span>
-        <Icon name="chevronDown" size={16} />
-      </button>
-
-      {aberto && (
-        <div className="rel-sel-lista">
-          {projetos.length > 8 && (
-            <input className="control rel-sel-busca" value={filtro} autoFocus
-              placeholder="Filtrar pelo nome" aria-label="Filtrar projetos pelo nome"
-              onChange={e => setFiltro(e.target.value)} />
-          )}
-          <div className="rel-sel-itens">
-            {visiveis.map(p => (
-              <label key={p.id} className={'rel-sel-item' + (marcados.includes(p.id) ? ' on' : '')}>
-                <input type="checkbox" checked={marcados.includes(p.id)} onChange={() => onAlternar(p.id)} />
-                <span className="rel-sel-nome">{p.name}</span>
-                {daSemana.has(p.id) && <span className="rel-sel-tag">mexeu nesta semana</span>}
-              </label>
-            ))}
-            {!visiveis.length && <p className="rel-vazio-txt">Nenhum projeto com esse nome.</p>}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // Um painel por projeto marcado, todos abertos. O texto é por projeto porque um
 // campo único para a semana obrigava a pessoa a repetir o nome do projeto dentro
 // da frase para se fazer entender.
@@ -408,8 +345,18 @@ export function MyWeeklyReport({ authUser, projects, onFlash, onFail }) {
         <div className="card rel-form">
           {meusProjetos.length ? (<>
             <Field label="Projetos da semana">
-              <SeletorProjetos projetos={meusProjetos} marcados={projectIds}
-                daSemana={daSemana} onAlternar={alternar} />
+              <SelecaoMultipla
+                itens={meusProjetos.map(p => ({
+                  id: p.id,
+                  nome: p.name,
+                  marcado: projectIds.includes(p.id),
+                  // Marca quem teve tempo cronometrado ou atividade mexida na
+                  // semana: é a dica de quem provavelmente precisa ser relatado.
+                  etiqueta: daSemana.has(p.id) ? 'mexeu nesta semana' : null,
+                }))}
+                onAlternar={alternar}
+                ariaLabel="Projetos da semana"
+                rotulo={(n) => n ? `${n} projeto${n === 1 ? '' : 's'} neste relatório` : 'Escolha os projetos da semana'} />
             </Field>
 
             {marcados.map(p => (

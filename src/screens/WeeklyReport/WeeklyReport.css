@@ -35,35 +35,6 @@
 
 .rel-semana-txt { font-size: 13.5px; color: var(--fg-2); white-space: nowrap; }
 
-/* ---------- lista suspensa de projetos ---------- */
-
-.rel-sel { position: relative; }
-
-.rel-sel-botao { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left; cursor: pointer; color: var(--fg-1); }
-
-.rel-sel-botao:hover { border-color: var(--fg-4); }
-
-.rel-sel-lista { position: absolute; z-index: 10; top: calc(100% + 4px); left: 0; right: 0; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-md); }
-
-.rel-sel-busca { margin-bottom: 8px; }
-
-/* Teto de altura porque a lista pode ter 26 projetos — sem isto ela passa do
-   rodapé da tela e as últimas opções ficam inalcançáveis. */
-.rel-sel-itens { display: flex; flex-direction: column; gap: 2px; max-height: 264px; overflow-y: auto; }
-
-.rel-sel-item { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: var(--r-sm); font-size: 13.5px; color: var(--fg-1); cursor: pointer; }
-
-.rel-sel-item:hover { background: var(--bg-subtle); }
-
-.rel-sel-item.on { background: var(--brand-soft); }
-
-.rel-sel-item input { width: 17px; height: 17px; flex-shrink: 0; accent-color: var(--brand); cursor: pointer; }
-
-.rel-sel-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* Marca quem teve tempo cronometrado ou atividade mexida na semana: é a dica
-   de quem a pessoa provavelmente precisa relatar. */
-.rel-sel-tag { flex-shrink: 0; font-size: 11px; font-weight: 600; color: var(--accent-strong); background: var(--brand-soft-2); border-radius: var(--r-full); padding: 2px 8px; }
 
 /* A aba do projeto escolhido. Recuada e com fundo próprio para separar o que é
    escolha do projeto do que é conteúdo dele — sem isso o select e os campos

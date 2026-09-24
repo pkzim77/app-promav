@@ -97,6 +97,36 @@ input, textarea, select { font-family: inherit; }
 
 .proj-pill .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
+/* ---------- Seleção múltipla (lista suspensa com caixas) ---------- */
+
+.msel { position: relative; }
+
+.msel-botao { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left; cursor: pointer; color: var(--fg-1); }
+
+.msel-botao:hover { border-color: var(--fg-4); }
+
+.msel-lista { position: absolute; z-index: 10; top: calc(100% + 4px); left: 0; right: 0; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-md); }
+
+.msel-busca { margin-bottom: 8px; }
+
+/* Teto de altura porque a lista pode ser longa — sem isto ela passa do rodapé
+   da tela e as últimas opções ficam inalcançáveis. */
+.msel-itens { display: flex; flex-direction: column; gap: 2px; max-height: 264px; overflow-y: auto; }
+
+.msel-item { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: var(--r-sm); font-size: 13.5px; color: var(--fg-1); cursor: pointer; }
+
+.msel-item:hover { background: var(--bg-subtle); }
+
+.msel-item.on { background: var(--brand-soft); }
+
+.msel-item input { width: 17px; height: 17px; flex-shrink: 0; accent-color: var(--brand); cursor: pointer; }
+
+.msel-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.msel-tag { flex-shrink: 0; font-size: 11px; font-weight: 600; color: var(--accent-strong); background: var(--brand-soft-2); border-radius: var(--r-full); padding: 2px 8px; }
+
+.msel-vazio { margin: 0; padding: 8px 9px; font-size: 13px; color: var(--fg-3); }
+
 /* ---------- Cards ---------- */
 
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-card); }
