@@ -285,12 +285,16 @@ export default function App() {
       const payload = {
         name: data.name.trim(),
         email: data.email.trim(),
+        phone: data.phone?.trim() || null,
+        shortName: data.shortName?.trim() || null,
         sector: data.sector || null,
         jobTitle: data.jobTitle?.trim() || null,
+        professionalRegister: data.professionalRegister?.trim() || null,
         initials: data.initials || '',
         color: data.color || 'var(--proj-blue)',
         isAdmin: !!data.isAdmin,
         isActive: data.isActive !== false,
+        isOutsourced: !!data.isOutsourced,
         initialPassword: data.initialPassword || undefined,
       }
       const saved = data.id ? await api.updateUser(data.id, payload) : await api.createUser(payload)
@@ -972,7 +976,7 @@ export default function App() {
         <ProjectModal project={modal.project} users={users} folders={folders} defaultFolderId={modal.defaultFolderId} isAdmin={isAdmin} onSave={saveProject} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'person' && (
-        <PeopleModal user={modal.user} currentUserId={currentUserId} projects={projects} tasks={tasks} changes={changes}
+        <PeopleModal user={modal.user} currentUserId={currentUserId} users={users} projects={projects} tasks={tasks} changes={changes}
           onOpenProject={openProjectFromPerson} onSave={saveUser} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'resource' && modal.resType === 'doc' && (

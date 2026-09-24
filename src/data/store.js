@@ -17,6 +17,13 @@ export const PROJECT_HEX = {
   amber: '#C0912E', coral: '#B0603F', pink: '#B0757F', purple: '#8A6690',
 }
 
+// Paleta de cores do avatar das pessoas: mais ampla que a de projetos e sem
+// chave — o que se salva é o hex puro (ver PeopleModal), não um id de mapa.
+export const AVATAR_COLORS = [
+  ...Object.values(PROJECT_HEX),
+  '#A98B3E', // mostarda
+]
+
 export const STATUSES = [
   { id: 'todo',     label: 'A fazer',      color: 'var(--status-todo)',     soft: 'var(--status-todo-soft)',     text: '#5c5c78' },
   { id: 'progress', label: 'Em andamento', color: 'var(--status-progress)', soft: 'var(--status-progress-soft)', text: '#1f64cc' },
@@ -171,6 +178,31 @@ export function etapasDoProjeto(tasks = [], projectId) {
   }
   return [...vistas.values()].sort((a, b) => a.n - b.n)
 }
+
+//CARGOS
+export const CARGOS = [
+  {id: 'Arquitetura', label: 'Arquitetura'},
+  {id: 'Projetos Prediais', label: 'Projetos Prediais'},
+  {id: 'Orçamentista', label: 'Orçamentista'},
+  {id: 'Coordenação', label: 'Coordenação'},
+  {id: 'TI', label: 'TI'}
+]
+
+// Conselho profissional exigido por cargo (CREA = engenharia, CAU =
+// arquitetura). Cargos fora daqui (Orçamentista, Coordenação, TI) não têm
+// conselho aplicável — o campo de registro fica oculto para eles.
+export const CARGO_CONSELHO = {
+  'Arquitetura': 'CAU',
+  'Projetos Prediais': 'CREA',
+}
+
+export const YES_NO_OPTIONS = [
+  {id: 'sim', label: 'Sim'},
+  {id: 'não', label: 'Não'}
+]
+
+export const conselhoDoCargo = (cargo) => CARGO_CONSELHO[cargo] || null
+
 
 // ---------- mudanças do projeto (orientações) ----------
 // Setores da PROMAV. Cada usuário pertence a um (users.sector); é isso que faz
