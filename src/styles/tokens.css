@@ -58,6 +58,12 @@
   --status-todo:        #8C7B58;  --status-todo-soft:        #EEEAE0;
   --status-progress:    #2D7FF9;  --status-progress-soft:    #E5F0FE;
   --status-done:        #1FA463;  --status-done-soft:        #E4F6EE;
+  /* Revisão é leitura interna; diligência é pendência que veio de fora e trava
+     a entrega. Ameixa e terracota da paleta de projetos — ficam longe do azul
+     de "em andamento" e do verde de "concluído", que é o que precisa ser lido
+     de relance numa lista de etapas. */
+  --status-review:      #8A6690;  --status-review-soft:      #F2EBF3;
+  --status-diligence:   #B0603F;  --status-diligence-soft:   #F8EBE4;
 
   /* ---------- Priority ---------- */
   --prio-low:    #7A7361;  --prio-low-soft:    #EEEAE0;

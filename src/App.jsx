@@ -50,6 +50,9 @@ export default function App() {
   const [changes, setChanges] = React.useState([])
   const [route, setRoute] = React.useState({ view: 'hub' })
   const [projectSearch, setProjectSearch] = React.useState('')
+  // Pasta aberta na lista de projetos. Fica aqui, e não dentro do ProjectList,
+  // porque aquela tela desmonta ao abrir um projeto.
+  const [pastaAberta, setPastaAberta] = React.useState(null)
   const [filterProject, setFilterProject] = React.useState(null)
   const [mine, setMine] = React.useState(false)
   const [modal, setModal] = React.useState(null)
@@ -492,12 +495,44 @@ export default function App() {
   }
   // Marca/desmarca um item de checklist (otimista). Disponível também para 'Só exibição'.
   const toggleChecklistItem = async (task, itemId) => {
-    const next = (task.checklist || []).map(i => i.id === itemId ? { ...i, done: !i.done } : i)
+    const atual = (task.checklist || []).find(i => i.id === itemId)
+    const feito = !(atual?.state ? atual.state === 'done' : atual?.done)
+    const next = (task.checklist || []).map(i => i.id === itemId
+      ? { ...i, done: feito, state: feito ? 'done' : 'todo' } : i)
     setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
     try {
-      const saved = await api.toggleChecklist(task.id, next)
+      const saved = await api.patchChecklistItem(task.id, { id: itemId, done: feito })
       setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
     } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao atualizar checklist.') }
+  }
+
+  // Move o item entre pendente / em revisão / em diligência / concluído.
+  // Liberado para 'Só exibição' pelo mesmo motivo do marcar: quem faz o
+  // serviço registra em que pé ele está. O status da ETAPA volta já
+  // recalculado pelo servidor — é ele que espelha o pior estado dos itens.
+  const setChecklistState = async (task, itemId, state) => {
+    const next = (task.checklist || []).map(i => i.id === itemId
+      ? { ...i, state, done: state === 'done' } : i)
+    setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
+    try {
+      const saved = await api.patchChecklistItem(task.id, { id: itemId, state })
+      setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
+    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao mudar o estado do item.') }
+  }
+
+  // Corrige o texto de um item no lugar. Antes era apagar e recriar, o que
+  // jogava fora o dono do item, a posição dele na lista e o que já estava
+  // marcado — um erro de digitação custava os três.
+  const editChecklistItem = async (task, itemId, text) => {
+    const limpo = String(text || '').trim()
+    const atual = (task.checklist || []).find(i => i.id === itemId)
+    if (!limpo || !atual || limpo === atual.text) return
+    const next = (task.checklist || []).map(i => i.id === itemId ? { ...i, text: limpo } : i)
+    setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
+    try {
+      const saved = await api.patchChecklistItem(task.id, { id: itemId, text: limpo })
+      setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
+    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao editar o item.') }
   }
 
   // "Nova atividade" na aba Etapas: escolhe a etapa e o trabalho entra como
@@ -535,7 +570,7 @@ export default function App() {
     const next = (task.checklist || []).map(i => i.id === itemId ? { ...i, assigneeId: userId } : i)
     setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
     try {
-      const saved = await api.toggleChecklist(task.id, next)
+      const saved = await api.patchChecklistItem(task.id, { id: itemId, assigneeId: userId })
       setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
     } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao atribuir o item.') }
   }
@@ -886,15 +921,21 @@ export default function App() {
       sessions={sessions} currentUserId={currentUserId} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
       canEdit={canEditCurrent} role={currentRole}
       initialTab={route.tab} focusId={route.focusId} focusNonce={route.focusNonce}
-      onBack={() => setRoute({ view: 'projects' })} onEdit={openEditProject}
+      // Voltar leva à pasta DO PROJETO, não à última que estava aberta nem à
+      // raiz: quem chegou aqui pela barra lateral ou pela busca nunca navegou
+      // por pasta nenhuma, e ainda assim é ali que ele quer continuar.
+      onBack={() => { setPastaAberta(currentProject.folderId || null); setRoute({ view: 'projects' }) }}
+      onEdit={openEditProject}
       onNewTask={openNewTask} onEditTask={openEditTask} onDeleteTask={askDeleteTask}
-      onToggleChecklist={toggleChecklistItem} onAssignChecklist={assignChecklistItem} onMoveTask={moveTask}
+      onAssignChecklist={assignChecklistItem} onMoveTask={moveTask}
+      onSetChecklistState={setChecklistState} onEditChecklistItem={editChecklistItem}
       onNewStageItem={openStageItem} onCreateStages={createStages}
       onCopyResource={copyResourceLink} onDeleteResource={(resource) => askDeleteResource(currentProject, resource)}
       onAddResource={openAddResource}
       onNewChange={openNewChange} onEditChange={openEditChange} onAckChange={ackChange} onDecideChange={decideChange} />
   } else if (effectiveRoute.view === 'projects') {
     screen = <ProjectList projects={searchedProjects} tasks={tasks} folders={folders} authUser={authUser} canCreate={isAdmin}
+      openId={pastaAberta} onOpenFolder={setPastaAberta}
       onOpen={(id) => setRoute({ view: 'projects', projectId: id })}
       onEdit={openEditProject} onDelete={askDeleteProject} onNew={openNewProject} onMoveProject={moveProject} onMoveFolder={moveFolder} onNewSubfolder={createFolder} onDeleteFolder={askDeleteFolder} />
   } else if (effectiveRoute.view === 'list') {

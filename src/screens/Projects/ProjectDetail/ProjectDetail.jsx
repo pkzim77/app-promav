@@ -6,7 +6,7 @@ import { ProjectTechSheet } from './ProjectTechSheet.jsx'
 import { ProjectStages } from './ProjectStages.jsx'
 import { ProjectChanges } from './ProjectChanges.jsx'
 
-export function ProjectDetail({ project, tasks, users, sessions, changes = [], currentUserId, now, canEdit = true, role, initialTab, focusId, focusNonce, onToggleChecklist, onAssignChecklist, onMoveTask, onNewStageItem, onCreateStages, onStartTimer, onStopTimer, onBack, onEdit, onNewTask, onEditTask, onDeleteTask, onCopyResource, onDeleteResource, onAddResource, onNewChange, onEditChange, onAckChange, onDecideChange }) {
+export function ProjectDetail({ project, tasks, users, sessions, changes = [], currentUserId, now, canEdit = true, role, initialTab, focusId, focusNonce, onAssignChecklist, onSetChecklistState, onEditChecklistItem, onMoveTask, onNewStageItem, onCreateStages, onStartTimer, onStopTimer, onBack, onEdit, onNewTask, onEditTask, onDeleteTask, onCopyResource, onDeleteResource, onAddResource, onNewChange, onEditChange, onAckChange, onDecideChange }) {
   // O Panorama abre primeiro: é o que se mostra numa reunião com o cliente.
   // Uma notificação clicada entra com a aba já escolhida em 'initialTab'.
   const [tab, setTab] = React.useState(initialTab || 'panorama') // 'panorama' | 'etapas' | 'arquivos' | 'mudancas'
@@ -107,8 +107,9 @@ export function ProjectDetail({ project, tasks, users, sessions, changes = [], c
           onAck={onAckChange} onDecide={onDecideChange} onOpenTask={onEditTask} />
       ) : (
         <ProjectStages key={project.id} project={project} tasks={tasks} users={users} sessions={sessions}
-          currentUserId={currentUserId} now={now} canEdit={canEdit}
-          onToggleChecklist={onToggleChecklist} onAssignChecklist={onAssignChecklist} onMoveTask={onMoveTask}
+          currentUserId={currentUserId} now={now} canEdit={canEdit} isAdmin={role === 'admin'}
+          onAssignChecklist={onAssignChecklist} onMoveTask={onMoveTask}
+          onSetChecklistState={onSetChecklistState} onEditChecklistItem={onEditChecklistItem}
           onNewStageItem={onNewStageItem} onCreateStages={onCreateStages} onNewTask={onNewTask} onEditTask={onEditTask}
           onDeleteTask={onDeleteTask} onStartTimer={onStartTimer} onStopTimer={onStopTimer} />
       )}

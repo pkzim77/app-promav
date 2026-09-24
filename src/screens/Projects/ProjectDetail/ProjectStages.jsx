@@ -2,7 +2,7 @@ import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
 import { AvatarStack, SegControl, SemResponsavel } from '../../../components/primitives/primitives.jsx'
 import { TaskTimerButton } from '../../../components/TimeTracker/TimeTracker.jsx'
-import { STATUSES, calcularProgresso, checklistStats, taskMembers } from '../../../data/store.js'
+import { STATUSES, STATUS_MAP, CHECK_STATES, estadoDoItem, calcularProgresso, checklistStats, taskMembers } from '../../../data/store.js'
 import { EmptyState } from '../shared/EmptyState.jsx'
 
 // Etapas — substitui a antiga aba Atividades. As duas mostravam a MESMA tabela
@@ -17,14 +17,14 @@ import { EmptyState } from '../shared/EmptyState.jsx'
 // "2 · Projetos" → { n: 2, nome: 'Projetos' }. O separador é o ponto médio.
 const PADRAO_ETAPA = /^(\d+)\s*·\s*(.+)$/
 
-const ORDEM_STATUS = { todo: 0, progress: 1, done: 2 }
-const ROTULO_STATUS = { todo: 'PENDENTE', progress: 'EM ANDAMENTO', done: 'CONCLUÍDA' }
+const ORDEM_STATUS = { todo: 0, progress: 1, review: 2, diligence: 3, done: 4 }
+const ROTULO_STATUS = { todo: 'PENDENTE', progress: 'EM ANDAMENTO', review: 'EM REVISÃO', diligence: 'EM DILIGÊNCIA', done: 'CONCLUÍDA' }
 
 // Opções do seletor: as MESMAS de STATUSES (ids, cores) usadas no TaskModal,
 // só que com o vocabulário desta aba. Aqui o estado é de uma ETAPA, e o selo
 // no cabeçalho já diz PENDENTE/CONCLUÍDA — escrever "A fazer"/"Concluído" no
 // mesmo cartão daria dois nomes ao mesmo estado.
-const ROTULO_BOTAO = { todo: 'Pendente', progress: 'Em andamento', done: 'Concluída' }
+const ROTULO_BOTAO = { todo: 'Pendente', progress: 'Em andamento', review: 'Em revisão', diligence: 'Em diligência', done: 'Concluída' }
 const OPCOES_STATUS = STATUSES.map(s => ({ ...s, label: ROTULO_BOTAO[s.id] }))
 
 // O status NÃO vira nome de classe direto. 'progress' colidia com a .progress
@@ -98,8 +98,9 @@ function SeletorStatus({ task, onMoveTask }) {
 // costuma cuidar de uma parte, e sem isso só se sabe que "alguém do par" está
 // devendo. Com um único responsável o dono é ele, sem precisar escolher;
 // com mais de um aparece o seletor, e deixar em branco é permitido.
-function Checklist({ task, responsaveis, onToggle, onAssign }) {
+function Checklist({ task, responsaveis, canEdit, onAssign, onSetState, onEditItem }) {
   const itens = task.checklist || []
+  const [editando, setEditando] = React.useState(null)
   if (!itens.length) return null
   const unico = responsaveis.length === 1 ? responsaveis[0] : null
   return (
@@ -108,13 +109,43 @@ function Checklist({ task, responsaveis, onToggle, onAssign }) {
         // Sem dono gravado e com um só responsável, é ele por dedução — não
         // gravamos para não congelar o nome se a atividade trocar de mãos.
         const dono = responsaveis.find(u => u.id === item.assigneeId) || unico
+        const estado = estadoDoItem(item)
+        const cor = STATUS_MAP[estado] || STATUS_MAP.todo
+        const salvar = (valor) => { onEditItem(task, item.id, valor); setEditando(null) }
         return (
-          <li key={item.id} className={item.done ? 'ok' : ''}>
-            <label>
-              <input type="checkbox" checked={!!item.done}
-                onChange={() => onToggle(task, item.id)} />
-              <span>{item.text}</span>
-            </label>
+          <li key={item.id} className={estado === 'done' ? 'ok' : ''}>
+            {/* Era uma caixa de marcar, que só sabia dizer feito ou não feito.
+                Revisão e diligência não cabiam ali — e é justamente nelas que o
+                serviço passa mais tempo parado. */}
+            <select className="estado-chip" value={estado}
+              style={{ background: cor.soft, color: cor.text }}
+              aria-label={`Estado de: ${item.text}`}
+              onChange={(e) => onSetState(task, item.id, e.target.value)}>
+              {CHECK_STATES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+            {editando === item.id ? (
+              // Corrigir o texto na própria linha. Antes era apagar e refazer, e
+              // o item novo nascia sem dono, desmarcado e no fim da lista — um
+              // erro de digitação custava os três.
+              //
+              // Esc devolve o texto original ANTES de sair: o blur da saída
+              // ainda dispara, e sem isso o cancelamento gravaria assim mesmo.
+              <input className="control et-ck-editar" defaultValue={item.text} autoFocus
+                aria-label={`Texto de: ${item.text}`}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); salvar(e.target.value) }
+                  if (e.key === 'Escape') { e.preventDefault(); e.target.value = item.text; setEditando(null) }
+                }}
+                onBlur={(e) => salvar(e.target.value)} />
+            ) : (
+              <span className="et-ck-texto">{item.text}</span>
+            )}
+            {canEdit && editando !== item.id && (
+              <button type="button" className="btn-icon et-ck-lapis" onClick={() => setEditando(item.id)}
+                title="Corrigir o texto" aria-label={`Corrigir: ${item.text}`}>
+                <Icon name="pencil" size={13} />
+              </button>
+            )}
             {responsaveis.length > 1 ? (
               <select className="et-ck-dono" value={item.assigneeId || ''}
                 aria-label={`Responsável por: ${item.text}`}
@@ -140,7 +171,7 @@ function Checklist({ task, responsaveis, onToggle, onAssign }) {
 }
 
 function CorpoDaTask({ task, users, sessions, currentUserId, now, canEdit, mostrarTitulo, avulsa = false,
-                      onToggleChecklist, onAssignChecklist, onMoveTask, onEditTask, onDeleteTask, onStartTimer, onStopTimer }) {
+                      onAssignChecklist, onSetChecklistState, onEditChecklistItem, onMoveTask, onEditTask, onDeleteTask, onStartTimer, onStopTimer }) {
   const membros = taskMembers(task).map(id => users.find(u => u.id === id)).filter(Boolean)
   const semChecklist = !(task.checklist || []).length
   return (
@@ -157,7 +188,8 @@ function CorpoDaTask({ task, users, sessions, currentUserId, now, canEdit, mostr
       )}
       {semChecklist
         ? <p className="et-vazio">{avulsa ? 'Esta atividade não tem checklist.' : 'Esta etapa não tem checklist.'}</p>
-        : <Checklist task={task} responsaveis={membros} onToggle={onToggleChecklist} onAssign={onAssignChecklist} />}
+        : <Checklist task={task} responsaveis={membros} canEdit={canEdit} onAssign={onAssignChecklist}
+            onSetState={onSetChecklistState} onEditItem={onEditChecklistItem} />}
       {/* O seletor aparece exatamente onde o checklist NÃO decide o status:
           ajustarStatusPeloChecklist() (server/index.js) espelha o status a cada
           marcação e sai cedo quando não há itens. Com checklist, um seletor aqui
@@ -241,12 +273,14 @@ function BotaoCriarTemplate({ projectId, onCreateStages }) {
 const FILTROS = [
   { id: 'all', label: 'Todas' },
   { id: 'progress', label: 'Em andamento' },
+  { id: 'review', label: 'Em revisão' },
+  { id: 'diligence', label: 'Em diligência' },
   { id: 'done', label: 'Concluídas' },
   { id: 'todo', label: 'Pendentes' },
 ]
 
-export function ProjectStages({ project, tasks, users, sessions, currentUserId, now, canEdit = true,
-                               onToggleChecklist, onAssignChecklist, onMoveTask, onNewTask, onNewStageItem, onCreateStages,
+export function ProjectStages({ project, tasks, users, sessions, currentUserId, now, canEdit = true, isAdmin = false,
+                               onAssignChecklist, onSetChecklistState, onEditChecklistItem, onMoveTask, onNewTask, onNewStageItem, onCreateStages,
                                onEditTask, onDeleteTask, onStartTimer, onStopTimer }) {
   const doProjeto = React.useMemo(() => tasks.filter(t => t.projectId === project.id), [tasks, project.id])
   const { etapas, avulsas } = React.useMemo(() => agruparEtapas(doProjeto), [doProjeto])
@@ -269,8 +303,14 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
     all: etapas.length,
     done: etapas.filter(e => e.status === 'done').length,
     progress: etapas.filter(e => e.status === 'progress').length,
+    review: etapas.filter(e => e.status === 'review').length,
+    diligence: etapas.filter(e => e.status === 'diligence').length,
     todo: etapas.filter(e => e.status === 'todo').length,
   }
+  // A legenda tem três linhas porque o progresso tem três fatias. Revisão e
+  // diligência entram em "em andamento" — é onde o cálculo as põe, e separá-las
+  // aqui faria a soma das linhas não bater com o total de etapas.
+  contagem.andamento = contagem.progress + contagem.review + contagem.diligence
   const itens = checklistDaEtapa(doProjeto)
 
   // Mesmo cálculo do Panorama (src/data/progresso.js), sobre a MESMA lista de
@@ -289,7 +329,7 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
   const visiveis = filtro === 'all' ? etapas : etapas.filter(e => e.status === filtro)
 
   const semEtapas = etapas.length === 0
-  const repasse = { users, sessions, currentUserId, now, canEdit, onToggleChecklist, onAssignChecklist, onMoveTask, onEditTask, onDeleteTask, onStartTimer, onStopTimer }
+  const repasse = { users, sessions, currentUserId, now, canEdit, onAssignChecklist, onSetChecklistState, onEditChecklistItem, onMoveTask, onEditTask, onDeleteTask, onStartTimer, onStopTimer }
 
   // O que está fora do template numerado. Com etapas na tela é o apêndice da
   // lista, fechado. Sem template, é tudo o que o projeto tem — e ficava
@@ -314,18 +354,29 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
 
   // 29 dos 36 projetos não tinham etapa nenhuma, e a equipe vinha recriando as
   // 11 à mão — foi assim que surgiram as duplicatas. O botão cria de uma vez.
+  //
+  // Só para a coordenação, porque só ela pode: a rota é adminOnly. Oferecer o
+  // botão a quem o servidor vai recusar é pior que não oferecer nada — a pessoa
+  // clica, espera, recebe um erro e continua sem saber de quem cobrar. O aviso
+  // diz quem cria, que é a informação que ela precisa.
   if (semEtapas) {
     return (
       <div className="proj-etapas">
-        <EmptyState icon="list" title="Nenhuma etapa cadastrada"
-          text={'As 11 etapas do processo — de Contratação direta até Licitação — ainda não existem neste projeto.'
-            + (avulsas.length ? ' As atividades já cadastradas estão logo abaixo.' : '')}
-          action={canEdit ? (
-            <div className="et-nova">
-              <BotaoCriarTemplate projectId={project.id} onCreateStages={onCreateStages} />
-              <button className="btn btn-ghost" onClick={() => onNewTask(project.id)}>Atividade avulsa</button>
-            </div>
-          ) : null} />
+        {isAdmin ? (
+          <EmptyState icon="list" title="Nenhuma etapa cadastrada"
+            text={'As 11 etapas do processo — de Contratação direta até Licitação — ainda não existem neste projeto.'
+              + (avulsas.length ? ' As atividades já cadastradas estão logo abaixo.' : '')}
+            action={
+              <div className="et-nova">
+                <BotaoCriarTemplate projectId={project.id} onCreateStages={onCreateStages} />
+                <button className="btn btn-ghost" onClick={() => onNewTask(project.id)}>Atividade avulsa</button>
+              </div>
+            } />
+        ) : (
+          <EmptyState icon="list" title="Nenhuma etapa criada pela coordenação"
+            text={'As 11 etapas do processo — de Contratação direta até Licitação — são cadastradas pela coordenação. Enquanto isso não acontece, esta aba fica sem o acompanhamento por etapa.'
+              + (avulsas.length ? ' As atividades já cadastradas estão logo abaixo.' : '')} />
+        )}
         {blocoAvulsas}
       </div>
     )
@@ -352,7 +403,7 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
         </div>
         <div className="et-legenda">
           <span><i className="sw feito" />{contagem.done} concluídas — contam inteiras</span>
-          <span><i className="sw curso" />{contagem.progress} em andamento — contam pelo checklist marcado</span>
+          <span><i className="sw curso" />{contagem.andamento} em andamento — contam pelo checklist marcado</span>
           <span><i className="sw falta" />{contagem.todo} pendentes</span>
         </div>
       </div>

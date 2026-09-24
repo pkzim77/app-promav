@@ -1,6 +1,6 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
-import { Modal, Field } from '../primitives/primitives.jsx'
+import { Modal, Field, SelecaoMultipla } from '../primitives/primitives.jsx'
 import { PROJECT_HEX, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, PREFEITURAS, SECRETARIAS, canonizar, parseBRL } from '../../data/store.js'
 import { dateError } from './shared/formHelpers.js'
 import { MoneyInput } from './shared/MoneyInput.jsx'
@@ -15,19 +15,21 @@ import { ResourceEditor } from './ResourceModals.jsx'
 // permissão de não-admins) mas ainda podem marcar os responsáveis, porque
 // PUT /api/projects/:id aceita responsibleIds de quem tem Edição total.
 function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, onChangeResponsibles, isAdmin, error }) {
-  const [selectedUserId, setSelectedUserId] = React.useState('')
   const roleOf = (userId) => members.find(x => x.userId === userId)?.role || 'none'
   const setRole = (userId, value) => {
     const others = members.filter(x => x.userId !== userId)
     onChangeMembers(value === 'none' ? others : [...others, { userId, role: value }])
   }
-  const addMember = () => {
-    if (!selectedUserId) return
+  // Marcar põe a pessoa na equipe; desmarcar tira, junto com a
+  // responsabilidade — o mesmo efeito do X da linha. Antes era um <select> e um
+  // botão "Adicionar" por pessoa: montar uma equipe de cinco custava quinze
+  // interações para o mesmo resultado.
+  const alternarMembro = (userId) => {
+    if (roleOf(userId) !== 'none') return removeMember(userId)
     // Administrador entra como Edição total: ele tem acesso irrestrito de
     // qualquer forma, e gravar 'view' mostraria na tela um limite que não existe.
-    const u = users.find(x => x.id === selectedUserId)
-    onChangeMembers([...members, { userId: selectedUserId, role: u?.isAdmin ? 'full' : 'view' }])
-    setSelectedUserId('')
+    const u = users.find(x => x.id === userId)
+    onChangeMembers([...members, { userId, role: u?.isAdmin ? 'full' : 'view' }])
   }
   // Tirar alguém do projeto também o tira da responsabilidade: um responsável
   // sem acesso apareceria no Panorama sem conseguir abrir o projeto.
@@ -46,8 +48,9 @@ function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, on
   // A equipe de desenvolvimento (users.is_dev) não entra em projeto: mantém o
   // sistema, não toca obra. Fora ela, qualquer pessoa pode ser adicionada e
   // marcada como responsável — administradores inclusive.
-  const elegiveis = users.filter(u => !u.isDev)
-  const availableUsers = elegiveis.filter(u => roleOf(u.id) === 'none')
+  // Ordem alfabética na lista suspensa: com dez nomes em ordem de cadastro,
+  // achar alguém já é uma varredura.
+  const elegiveis = users.filter(u => !u.isDev).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
   const teamUsers = elegiveis.filter(u => roleOf(u.id) !== 'none')
   // Administrador vê todo projeto por definição, então não conta como alguém a
   // quem este cadastro deu acesso — a frase do rodapé fala dos demais.
@@ -61,13 +64,17 @@ function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, on
       </label>
       {isAdmin && (
         <div className="perm-add">
-          <select className="control" value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)}>
-            <option value="">Selecionar pessoa</option>
-            {availableUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-          <button type="button" className="btn btn-secondary btn-sm" disabled={!selectedUserId} onClick={addMember}>
-            <Icon name="plus" size={15} stroke={2.2} />Adicionar
-          </button>
+          <SelecaoMultipla
+            itens={elegiveis.map(u => ({
+              id: u.id,
+              nome: u.name,
+              marcado: roleOf(u.id) !== 'none',
+              antes: <span className="av" style={{ width: 22, height: 22, background: u.color, fontSize: 9 }}>{u.initials}</span>,
+              etiqueta: u.isAdmin ? 'admin' : null,
+            }))}
+            onAlternar={alternarMembro}
+            ariaLabel="Pessoas da equipe do projeto"
+            rotulo={(n) => n ? `${n} pessoa${n === 1 ? '' : 's'} na equipe` : 'Escolha quem participa do projeto'} />
         </div>
       )}
       <div className="perm-head">

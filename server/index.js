@@ -48,7 +48,7 @@ const TASK_SELECT = `
          to_char(t.end_date,   'YYYY-MM-DD') AS "end",
          COALESCE((
            SELECT json_agg(json_build_object('id', c.id, 'text', c.text, 'done', c.done,
-                                             'assigneeId', c.assignee_id) ORDER BY c.position)
+                                             'state', c.state, 'assigneeId', c.assignee_id) ORDER BY c.position)
            FROM checklist_items c WHERE c.task_id = t.id
          ), '[]'::json) AS checklist,
          COALESCE((
@@ -163,6 +163,11 @@ const CAN = {
   light: ['admin', 'full', 'view'], // mover no Kanban, marcar checklist, adicionar material
   adminOnly: ['admin'],             // gerenciar permissões, excluir projeto
 }
+
+// Estados de um item de checklist. Nao tem 'progress': item e a menor unidade
+// de trabalho da etapa, e nao se divide em meio-feito. 'done' continua sendo
+// espelhado na coluna `done`, que o resto do sistema le.
+const ESTADOS_ITEM = ['todo', 'review', 'diligence', 'done']
 
 // Papel efetivo de um usuário num projeto: admin global > pessoa incluída no projeto.
 // Quem NÃO foi incluído não tem papel nenhum (null) — não enxerga o projeto.
@@ -290,9 +295,12 @@ async function replaceChildren(client, taskId, checklist = [], memberIds = [], a
     // Só vale quem participa da atividade — o seletor mostra só eles, mas o
     // servidor não confia no que chega.
     const dono = podeAssumir.has(item.assigneeId) ? item.assigneeId : null
+    // Estado e `done` andam juntos. Item vindo de fora sem estado (modal antigo,
+    // mudanca que vira item) cai no equivalente do que o `done` dizia.
+    const estado = ESTADOS_ITEM.includes(item.state) ? item.state : (item.done ? 'done' : 'todo')
     await client.query(
-      'INSERT INTO checklist_items (id, task_id, text, done, position, assignee_id) VALUES ($1, $2, $3, $4, $5, $6)',
-      [item.id || genId('c'), taskId, item.text, !!item.done, i, dono]
+      'INSERT INTO checklist_items (id, task_id, text, done, position, assignee_id, state) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [item.id || genId('c'), taskId, item.text, estado === 'done', i, dono, estado]
     )
   }
   // membros = lista informada, sem o responsável (ele já é o assignee).
@@ -868,8 +876,13 @@ app.patch('/api/tasks/:id/status', gate(taskProjectId, CAN.light), wrap(async (r
   res.json(await getTask(req.params.id))
 }))
 
-// Marcar/desmarcar itens do checklist — permitido para 'Só exibição'. Só altera
-// o campo "done" de itens já existentes (não cria nem remove itens).
+// Mexer em itens de checklist que já existem (não cria nem remove).
+//
+// Marcar, mover o estado e assumir um item continuam liberados para 'Só
+// exibição': quem faz o serviço registra que fez. Mudar o TEXTO não — isso é
+// redefinir qual é o serviço, e pede Edição total. A permissão só é cobrada
+// quando o texto realmente muda, porque em alguns caminhos o cliente manda o
+// item inteiro de volta sem querer editar nada.
 app.patch('/api/tasks/:id/checklist', gate(taskProjectId, CAN.light), wrap(async (req, res) => {
   const { checklist = [] } = req.body
   // Quem pode assumir um item: só quem participa da atividade. O seletor no
@@ -879,13 +892,36 @@ app.patch('/api/tasks/:id/checklist', gate(taskProjectId, CAN.light), wrap(async
   const membros = await q('SELECT user_id FROM task_members WHERE task_id = $1', [req.params.id])
   const podeAssumir = new Set([dono.assignee_id, ...membros.map(m => m.user_id)].filter(Boolean))
 
+  // Confere a permissão de texto ANTES da transação: barrar no meio dela
+  // significaria desfazer marcações que já teriam sido aplicadas.
+  const comTexto = checklist.filter(i => i && i.id && typeof i.text === 'string' && i.text.trim())
+  if (comTexto.length) {
+    const atuais = await q('SELECT id, text FROM checklist_items WHERE task_id = $1 AND id = ANY($2::text[])',
+      [req.params.id, comTexto.map(i => i.id)])
+    const antes = new Map(atuais.map(r => [r.id, r.text]))
+    const mudou = comTexto.some(i => antes.has(i.id) && antes.get(i.id) !== i.text.trim())
+    if (mudou && !CAN.edit.includes(req.projectRole)) {
+      return res.status(403).json({ error: 'Só quem tem edição total pode mudar o texto de um item.' })
+    }
+  }
+
   await tx(async (client) => {
     for (const item of checklist) {
       if (!item || !item.id) continue
       // Cada campo só é tocado quando vem no corpo: marcar não desfaz a
       // atribuição, e atribuir não mexe no que já está marcado.
-      if ('done' in item) {
-        await client.query('UPDATE checklist_items SET done = $2 WHERE id = $1 AND task_id = $3', [item.id, !!item.done, req.params.id])
+      // Estado manda; `done` é o espelho dele. O ramo do 'done' sozinho é o
+      // caminho antigo (marcar/desmarcar), que continua valendo.
+      if ('state' in item && ESTADOS_ITEM.includes(item.state)) {
+        await client.query("UPDATE checklist_items SET state = $2, done = ($2 = 'done') WHERE id = $1 AND task_id = $3",
+          [item.id, item.state, req.params.id])
+      } else if ('done' in item) {
+        await client.query("UPDATE checklist_items SET done = $2, state = CASE WHEN $2 THEN 'done' ELSE 'todo' END WHERE id = $1 AND task_id = $3",
+          [item.id, !!item.done, req.params.id])
+      }
+      if (typeof item.text === 'string' && item.text.trim()) {
+        await client.query('UPDATE checklist_items SET text = $2 WHERE id = $1 AND task_id = $3',
+          [item.id, item.text.trim(), req.params.id])
       }
       if ('assigneeId' in item) {
         const novo = podeAssumir.has(item.assigneeId) ? item.assigneeId : null
@@ -900,9 +936,15 @@ app.patch('/api/tasks/:id/checklist', gate(taskProjectId, CAN.light), wrap(async
 
 // Quando a atividade TEM checklist, o status espelha o checklist:
 //
-//   tudo marcado      → Concluído
-//   parte marcada     → Em andamento
-//   nada marcado      → A fazer
+//   tudo concluído          → Concluído
+//   algum em diligência     → Em diligência
+//   algum em revisão        → Em revisão
+//   algum concluído         → Em andamento
+//   nenhum                  → A fazer
+//
+// Diligência vence revisão porque é o estado que custa mais caro: revisão é
+// leitura interna, diligência é pendência que veio de fora e trava a entrega.
+// Quem olha a etapa precisa ver a pior notícia, não a média.
 //
 // O cálculo do progresso (src/data/progresso.js) já contava checklist inteiro
 // marcado como concluído, mas a COLUNA status ficava para trás — o Panorama
@@ -921,11 +963,19 @@ async function ajustarStatusPeloChecklist(client, taskId) {
   const { rows: [t] } = await client.query('SELECT status FROM tasks WHERE id = $1', [taskId])
   if (!t) return
   const { rows: [c] } = await client.query(
-    'SELECT count(*)::int AS total, count(*) FILTER (WHERE done)::int AS feitos FROM checklist_items WHERE task_id = $1',
+    `SELECT count(*)::int AS total,
+            count(*) FILTER (WHERE state = 'done')::int       AS feitos,
+            count(*) FILTER (WHERE state = 'review')::int     AS revisao,
+            count(*) FILTER (WHERE state = 'diligence')::int  AS diligencia
+       FROM checklist_items WHERE task_id = $1`,
     [taskId]
   )
   if (!c.total) return                               // sem checklist: nada a inferir
-  const novo = c.feitos === c.total ? 'done' : c.feitos > 0 ? 'progress' : 'todo'
+  const novo = c.feitos === c.total ? 'done'
+    : c.diligencia ? 'diligence'
+    : c.revisao ? 'review'
+    : c.feitos ? 'progress'
+    : 'todo'
   if (novo === t.status) return
   await client.query('UPDATE tasks SET status = $2 WHERE id = $1', [taskId, novo])
 }
@@ -957,7 +1007,11 @@ app.post('/api/tasks/:id/membership', gate(taskProjectId, CAN.light), wrap(async
 // custo é quase todo de ida e volta, então criar as 11 etapas levava segundos
 // de espera. O filtro do que já existe virou o NOT EXISTS do próprio INSERT, e
 // as 11 linhas entram de uma vez — um único INSERT já é atômico, sem transação.
-app.post('/api/projects/:id/stages', gate((req) => req.params.id, CAN.edit), wrap(async (req, res) => {
+// adminOnly, nao CAN.edit: montar o template nao e trabalhar no projeto, e
+// decidir que ele segue o processo das 11 etapas. Quem e 'full' executa as
+// etapas; quem as cria e a coordenacao. Enquanto isto era CAN.edit, qualquer
+// membro criava — e era assim que um projeto ganhava etapa repetida.
+app.post('/api/projects/:id/stages', gate((req) => req.params.id, CAN.adminOnly), wrap(async (req, res) => {
   const [p] = await q("SELECT to_char(COALESCE(start_date, now()::date), 'YYYY-MM-DD') AS inicio FROM projects WHERE id = $1", [req.params.id])
   if (!p) return res.status(404).json({ error: 'Projeto não encontrado.' })
 
@@ -1481,6 +1535,48 @@ app.post('/api/changes/:id/ack', gate(changeProjectId, CAN.light), wrap(async (r
   res.json(await getChange(req.params.id))
 }))
 
+// ---------- sugestoes de item de checklist ----------
+
+// Os textos que a equipe ja usou, agrupados pelo NUMERO da etapa. Medido antes
+// de escrever isto: sao 157 itens para 55 textos distintos, e 102 dos 152 itens
+// do template ja existiam palavra por palavra em outro projeto. A etapa 3 tem
+// sempre os mesmos cinco (3.1 Quantitativos, 3.2 Composicoes, 3.3 Planilha, 3.4
+// BDI, 3.5 Cronograma) — redigitados a cada projeto.
+//
+// Agrupa por etapa porque '3.1 Quantitativos' so faz sentido dentro de
+// Orcamento; o que nao vem de etapa numerada cai em '*' e serve de reserva.
+//
+// So projetos que a pessoa enxerga. Sem esse filtro a caixa de sugestao viraria
+// uma janela para o texto de projetos aos quais ela nao tem acesso.
+const MAX_SUGESTOES = 40
+
+app.get('/api/checklist-suggestions', wrap(async (req, res) => {
+  const visiveis = await visibleProjectIds(req.userId)
+  const linhas = await q(
+    `SELECT COALESCE(substring(t.title from '^([0-9]+) · '), '*') AS etapa,
+            btrim(ci.text) AS texto,
+            count(DISTINCT t.project_id)::int AS projetos
+       FROM checklist_items ci
+       JOIN tasks t ON t.id = ci.task_id
+      WHERE btrim(ci.text) <> ''
+        -- Item nascido de uma mudança publicada carrega o prefixo "[Requisição]"
+        -- e é o registro de um pedido específico, de um projeto específico. Nunca
+        -- serve de sugestão para outro — só sujaria a lista com o improviso de
+        -- alguém no lugar do padrão da casa.
+        AND btrim(ci.text) NOT LIKE '[%'
+        AND ($1::text[] IS NULL OR t.project_id = ANY($1))
+      GROUP BY 1, 2
+      ORDER BY 1, 3 DESC, 2`,
+    [visiveis])
+
+  const porEtapa = {}
+  for (const l of linhas) {
+    const lista = porEtapa[l.etapa] || (porEtapa[l.etapa] = [])
+    if (lista.length < MAX_SUGESTOES) lista.push({ text: l.texto, n: l.projetos })
+  }
+  res.json(porEtapa)
+}))
+
 // ---------- relatorio semanal ----------
 
 // A semana e identificada pela SEXTA que a encerra — e quando a equipe manda.
@@ -1510,7 +1606,6 @@ const maisDias = (iso, n) => new Date(new Date(iso + 'T00:00:00Z').getTime() + n
 // ainda converte o que e colado para texto puro, mas isto aqui e a garantia.
 const TAGS_OK = ['b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li', 'br', 'p', 'div']
 const LIMITE_TEXTO = 20 * 1024
-const LIMITE_STATUS = 2 * 1024
 
 function limparHtml(bruto, limite = LIMITE_TEXTO) {
   if (typeof bruto !== 'string' || !bruto) return ''
@@ -1529,18 +1624,25 @@ function limparHtml(bruto, limite = LIMITE_TEXTO) {
 // Texto visivel, para saber se o relatorio tem conteudo de verdade.
 const semTags = (html) => String(html || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
 
+// Espelha PROJECT_STATUSES de src/data/store.js. E a lista que o servidor
+// aceita gravar: status virou escolha, nao texto livre. Os quatro relatorios
+// ja enviados tinham status escrito a mao, e os quatro diziam "Em andamento" —
+// com uma grafia diferente cada vez, o que nao da para contar nem agrupar.
+const STATUS_PROJETO = ['planejamento', 'andamento', 'revisao', 'pendente', 'diligencia', 'paralisado', 'concluido']
+
 const mapRelatorio = (r) => ({
   id: r.id,
   userId: r.user_id,
   week: r.week instanceof Date ? r.week.toISOString().slice(0, 10) : String(r.week).slice(0, 10),
   projectIds: r.project_ids || [],
   developed: r.developed || '',
+  works: r.works || {},
   statuses: r.statuses || {},
   sentAt: r.sent_at,
   updatedAt: r.updated_at,
 })
 
-const COLUNAS_REL = 'id, user_id, week, project_ids, developed, statuses, sent_at, updated_at'
+const COLUNAS_REL = 'id, user_id, week, project_ids, developed, works, statuses, sent_at, updated_at'
 
 // Duas listas, e a diferenca entre elas importa:
 //
@@ -1589,33 +1691,39 @@ app.get('/api/weekly-reports/me', wrap(async (req, res) => {
 app.put('/api/weekly-reports/me', wrap(async (req, res) => {
   const semana = sextaDe(req.body.week)
   const enviar = !!req.body.send
-  const developed = limparHtml(req.body.developed)
   const projectIds = (Array.isArray(req.body.projectIds) ? req.body.projectIds : [])
     .filter(id => typeof id === 'string').slice(0, 30)
 
-  // Status so dos projetos declarados: sem isto, desmarcar um projeto deixaria
-  // o texto dele guardado para sempre, invisivel na tela e no PDF.
+  // Texto e status so dos projetos declarados: sem isto, tirar um projeto do
+  // relatorio deixaria o texto dele guardado para sempre, invisivel na tela e
+  // no PDF, e reaparecendo se o projeto voltasse.
+  const works = {}
   const statuses = {}
-  const brutos = req.body.statuses && typeof req.body.statuses === 'object' ? req.body.statuses : {}
+  const brutoTexto = req.body.works && typeof req.body.works === 'object' ? req.body.works : {}
+  const brutoStatus = req.body.statuses && typeof req.body.statuses === 'object' ? req.body.statuses : {}
   for (const id of projectIds) {
-    const limpo = limparHtml(brutos[id], LIMITE_STATUS)
-    if (semTags(limpo)) statuses[id] = limpo
+    const limpo = limparHtml(brutoTexto[id])
+    if (semTags(limpo)) works[id] = limpo
+    if (STATUS_PROJETO.includes(brutoStatus[id])) statuses[id] = brutoStatus[id]
   }
 
-  if (enviar && !semTags(developed)) return res.status(400).json({ error: 'Escreva o que foi desenvolvido antes de enviar.' })
-  if (enviar && !projectIds.length) return res.status(400).json({ error: 'Selecione ao menos um projeto antes de enviar.' })
+  if (enviar && !projectIds.length) return res.status(400).json({ error: 'Escolha ao menos um projeto antes de enviar.' })
+  if (enviar && !Object.keys(works).length) return res.status(400).json({ error: 'Escreva o que foi feito em pelo menos um projeto.' })
 
   const [r] = await q(
-    `INSERT INTO weekly_reports (id, user_id, week, project_ids, developed, statuses, sent_at, updated_at)
-     VALUES ($1, $2, $3::date, $4::text[], $5, $6::jsonb, CASE WHEN $7 THEN now() ELSE NULL END, now())
+    // `developed` nao aparece no UPDATE de proposito: a tela nova nao tem mais
+    // esse campo, e incluir aqui apagaria em silencio o texto de um relatorio
+    // antigo na primeira vez que alguem o reabrisse.
+    `INSERT INTO weekly_reports (id, user_id, week, project_ids, works, statuses, sent_at, updated_at)
+     VALUES ($1, $2, $3::date, $4::text[], $5::jsonb, $6::jsonb, CASE WHEN $7 THEN now() ELSE NULL END, now())
      ON CONFLICT (user_id, week) DO UPDATE SET
        project_ids = EXCLUDED.project_ids,
-       developed   = EXCLUDED.developed,
+       works       = EXCLUDED.works,
        statuses    = EXCLUDED.statuses,
        sent_at     = CASE WHEN $7 THEN now() ELSE weekly_reports.sent_at END,
        updated_at  = now()
      RETURNING ${COLUNAS_REL}`,
-    [genId('wr'), req.userId, semana, projectIds, developed, JSON.stringify(statuses), enviar])
+    [genId('wr'), req.userId, semana, projectIds, JSON.stringify(works), JSON.stringify(statuses), enviar])
   res.json(mapRelatorio(r))
 }))
 
@@ -1830,6 +1938,26 @@ async function ensureSchema() {
     )
   `)
   await q('CREATE INDEX IF NOT EXISTS weekly_reports_week_idx ON weekly_reports (week)')
+
+  // O que foi feito passou a ser POR PROJETO: um texto unico para a semana
+  // obrigava a pessoa a repetir o nome do projeto dentro da frase para se fazer
+  // entender. `developed` (texto unico) fica para os relatorios ja enviados —
+  // eles continuam sendo lidos e impressos como foram escritos.
+  await q("ALTER TABLE weekly_reports ADD COLUMN IF NOT EXISTS works jsonb NOT NULL DEFAULT '{}'::jsonb")
+
+  // ----- revisao e diligencia -----
+  // ADD VALUE num enum do Postgres e de mao unica: valor de enum NAO pode ser
+  // removido depois. Por isso os dois entram com o nome definitivo e na ordem
+  // do fluxo — a ordem declarada aqui e a que qualquer ORDER BY status usa.
+  await q("ALTER TYPE task_status ADD VALUE IF NOT EXISTS 'review' AFTER 'progress'")
+  await q("ALTER TYPE task_status ADD VALUE IF NOT EXISTS 'diligence' AFTER 'review'")
+
+  // O item do checklist deixa de ser so marcado/desmarcado. `done` continua
+  // existindo e em dia (done = state 'done') porque quem le progresso, o
+  // indicador dos cartoes e os relatorios olham esse campo — nenhum deles
+  // precisa aprender os estados novos para continuar certo.
+  await q("ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS state text NOT NULL DEFAULT 'todo'")
+  await q("UPDATE checklist_items SET state = 'done' WHERE done AND state = 'todo'")
 
   // Equipe de desenvolvimento do app: contas que mantêm o sistema, não gente
   // que toca obra. Ficam fora da equipe dos projetos (e da responsabilidade),

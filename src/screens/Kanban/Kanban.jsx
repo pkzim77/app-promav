@@ -50,7 +50,11 @@ export function Kanban({ tasks, projects, users, authUser, filterProject, mine, 
 
   let visible = tasks
   if (filterProject) visible = visible.filter(t => t.projectId === filterProject)
-  if (mine) visible = visible.filter(t => t.assigneeId === currentUserId)
+  // "Minhas" é onde a pessoa está, não só o que está no nome dela. taskMembers
+  // devolve responsável + participantes, que é a mesma regra que o App já usa
+  // para decidir quem é avisado de uma mudança — aqui ela estava faltando, e
+  // quem entrava numa atividade de outro simplesmente não a via mais.
+  if (mine) visible = visible.filter(t => taskMembers(t).includes(currentUserId))
 
   const onDragStart = (e, id) => { setDraggingId(id); e.dataTransfer.effectAllowed = 'move' }
   const onDragEnd = () => { setDraggingId(null); setOverCol(null) }

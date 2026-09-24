@@ -35,16 +35,25 @@
 
 .rel-semana-txt { font-size: 13.5px; color: var(--fg-2); white-space: nowrap; }
 
-.rel-busca { margin-bottom: 10px; }
 
-/* Com 26 projetos a lista não pode empurrar o formulário inteiro para baixo. */
-.rel-projs { display: flex; flex-wrap: wrap; gap: 8px; max-height: 188px; overflow-y: auto; padding: 2px; }
+/* A aba do projeto escolhido. Recuada e com fundo próprio para separar o que é
+   escolha do projeto do que é conteúdo dele — sem isso o select e os campos
+   ficam todos no mesmo plano e a tela volta a parecer um formulário só. */
+.rel-aba { display: flex; flex-direction: column; gap: 16px; padding: 16px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); }
 
-.rel-proj { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--fg-2); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-full); padding: 7px 14px; cursor: pointer; transition: all var(--dur); }
+.rel-aba-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
-.rel-proj:hover { border-color: var(--fg-4); }
+/* Lixeira do painel: tira o projeto do relatório, não apaga o que foi escrito.
+   Vermelha só no hover — vermelha o tempo todo, num painel por projeto, deixaria
+   a tela cheia de alerta para uma ação reversível num clique. */
+.rel-aba-tirar:hover { color: var(--danger); background: var(--danger-soft); }
 
-.rel-proj.on { background: var(--brand-soft); border-color: transparent; color: var(--brand); }
+/* Com o status escolhido, o campo vira o mesmo selo que o status tem no resto
+   do app: cor cheia no texto sobre um véu de 12% dela. Só cor de texto num
+   campo branco some no meio do formulário. */
+.rel-status { font-weight: 700; }
+
+.rel-aba-topo h3 { margin: 0; font: var(--text-h4); color: var(--fg-1); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 .rel-vazio-txt { margin: 0; font-size: 13.5px; color: var(--fg-3); }
 
@@ -133,6 +142,13 @@
 .rel-doc-tabela th { width: 140px; font-weight: 600; color: #55503F; }
 
 .rel-doc-h2 { margin: 18px 0 8px; font-size: 10.5pt; font-weight: 700; letter-spacing: 0.02em; }
+
+/* Um bloco por projeto: nome, status e o que foi feito. Não quebra no meio. */
+.rel-doc-proj { break-inside: avoid; margin-bottom: 14px; }
+
+.rel-doc-proj .rel-doc-h2 { margin-top: 0; padding-bottom: 4px; border-bottom: 1px solid #E4DED1; }
+
+.rel-doc-status { margin: 0 0 6px; font-size: 10pt; color: #55503F; }
 
 .rel-doc-lista { margin: 0; padding-left: 18px; list-style: none; }
 

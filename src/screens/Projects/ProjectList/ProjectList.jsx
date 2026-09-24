@@ -98,8 +98,11 @@ function FolderGridCard({ folder, subCount, projCount, onEnter, onNewProject, on
   )
 }
 
-export function ProjectList({ projects, tasks, folders = [], authUser, canCreate = true, onOpen, onEdit, onDelete, onNew, onMoveProject, onMoveFolder, onNewSubfolder, onDeleteFolder }) {
-  const [openId, setOpenId] = React.useState(null) // pasta aberta (null = raiz)
+// A pasta aberta vem de fora (openId/onOpenFolder) e não de um useState daqui.
+// Como estado interno ela morria ao abrir um projeto — a tela desmonta — e
+// voltar jogava a pessoa na raiz, obrigando-a a refazer a navegação inteira
+// para chegar ao projeto vizinho.
+export function ProjectList({ projects, tasks, folders = [], authUser, canCreate = true, openId = null, onOpenFolder = () => {}, onOpen, onEdit, onDelete, onNew, onMoveProject, onMoveFolder, onNewSubfolder, onDeleteFolder }) {
   const [drag, setDrag] = React.useState(null)
   const dragRef = React.useRef(null)
   const [dropHint, setDropHint] = React.useState(null)
@@ -219,7 +222,7 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
 
       {/* Trilha de navegação: Projetos / Pasta / Subpasta */}
       <nav className="proj-crumbs">
-        <button className={'proj-crumb' + hintClass('root')} onClick={() => setOpenId(null)} disabled={!currentId}
+        <button className={'proj-crumb' + hintClass('root')} onClick={() => onOpenFolder(null)} disabled={!currentId}
           onDragOver={overRoot} onDrop={dropRoot}>
           <Icon name="folder" size={15} />Projetos
         </button>
@@ -227,7 +230,7 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
           <React.Fragment key={f.id}>
             <Icon name="chevronRight" size={14} style={{ color: 'var(--fg-4)' }} />
             <button className={'proj-crumb' + (dropHint?.key === 'f:' + f.id ? ' drop-into' : '')}
-              onClick={() => setOpenId(f.id)} disabled={f.id === currentId}
+              onClick={() => onOpenFolder(f.id)} disabled={f.id === currentId}
               onDragEnter={overFolder(f)} onDragOver={overFolder(f)} onDrop={dropFolder(f)}>
               {f.name}
             </button>
@@ -252,7 +255,7 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
                   dropHint={dropHint?.key === 'f:' + f.id ? dropHint.mode : null}
                   onDragStart={startDrag(f.id)} onDragEnd={clearDrag} onDragOver={overFolder(f)} onDrop={dropFolderTarget(f)}
                   subCount={childFolders(f.id).length} projCount={projectsIn(f.id).length}
-                  onEnter={setOpenId} />
+                  onEnter={onOpenFolder} />
               ))}
             </div>
           )}

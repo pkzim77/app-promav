@@ -235,6 +235,71 @@ export function SegControl({ options, value, onChange }) {
 // A região fica sempre no DOM, mesmo vazia. Leitor de tela só anuncia o que
 // ENTRA numa região que já existia — aparecendo junto com o texto, a mensagem
 // passaria em silêncio.
+// Lista suspensa com caixas de marcar. Nasceu no relatório semanal e o
+// cadastro de projeto passou a precisar do mesmo: escolher várias pessoas de
+// uma vez, em vez de um <select> e um botão "Adicionar" por pessoa.
+//
+// Não é <select multiple> nativo: ele exige Ctrl+clique para marcar mais de um,
+// desmarca tudo num clique errado e no celular vira uma lista rolante sem caixa
+// nenhuma.
+//
+// Cada item é { id, nome, marcado, antes?, etiqueta? } — `antes` é o que vem na
+// frente do nome (um avatar, por exemplo) e `etiqueta` é a marca pequena do
+// lado direito.
+export function SelecaoMultipla({ itens, onAlternar, rotulo, buscaAcima = 8, ariaLabel }) {
+  const [aberto, setAberto] = React.useState(false)
+  const [filtro, setFiltro] = React.useState('')
+  const caixa = React.useRef(null)
+
+  React.useEffect(() => {
+    if (!aberto) return
+    const fora = (e) => { if (!caixa.current?.contains(e.target)) setAberto(false) }
+    const tecla = (e) => { if (e.key === 'Escape') setAberto(false) }
+    document.addEventListener('mousedown', fora)
+    document.addEventListener('keydown', tecla)
+    return () => {
+      document.removeEventListener('mousedown', fora)
+      document.removeEventListener('keydown', tecla)
+    }
+  }, [aberto])
+
+  const busca = filtro.trim().toLocaleLowerCase('pt-BR')
+  // O que já está marcado nunca some do filtro: desmarcar exige enxergar.
+  const visiveis = itens.filter(i => !busca || i.marcado || i.nome.toLocaleLowerCase('pt-BR').includes(busca))
+  const marcados = itens.filter(i => i.marcado).length
+
+  return (
+    <div className="msel" ref={caixa}>
+      <button type="button" className="control msel-botao" aria-expanded={aberto} aria-haspopup="true"
+        aria-label={ariaLabel} onClick={() => setAberto(a => !a)}>
+        <span>{rotulo(marcados)}</span>
+        <Icon name="chevronDown" size={16} />
+      </button>
+
+      {aberto && (
+        <div className="msel-lista">
+          {itens.length > buscaAcima && (
+            <input className="control msel-busca" value={filtro} autoFocus
+              placeholder="Filtrar pelo nome" aria-label="Filtrar a lista pelo nome"
+              onChange={e => setFiltro(e.target.value)} />
+          )}
+          <div className="msel-itens">
+            {visiveis.map(i => (
+              <label key={i.id} className={'msel-item' + (i.marcado ? ' on' : '')}>
+                <input type="checkbox" checked={i.marcado} onChange={() => onAlternar(i.id)} />
+                {i.antes}
+                <span className="msel-nome">{i.nome}</span>
+                {i.etiqueta && <span className="msel-tag">{i.etiqueta}</span>}
+              </label>
+            ))}
+            {!visiveis.length && <p className="msel-vazio">Nada com esse nome.</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function Toast({ aviso, onClose }) {
   const erro = aviso?.tipo === 'erro'
   return (

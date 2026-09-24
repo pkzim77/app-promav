@@ -102,6 +102,11 @@ export const api = {
   deleteResource: (projectId, resourceId) => req('DELETE', `/projects/${projectId}/resources/${resourceId}`),
   // Marca/desmarca itens de checklist — permitido para 'Só exibição'.
   toggleChecklist: (taskId, checklist) => req('PATCH', `/tasks/${taskId}/checklist`, { checklist }),
+
+  // Mexe num item só, mandando apenas os campos que mudaram: o servidor toca
+  // no que vier e ignora o resto. Mandar o item inteiro faria o backend achar
+  // que o texto está sendo editado e cobrar Edição total de quem só marcou.
+  patchChecklistItem: (taskId, item) => req('PATCH', `/tasks/${taskId}/checklist`, { checklist: [item] }),
   // Entrar/sair de uma atividade (só a própria participação) — permitido para 'Só exibição'.
   toggleMembership: (taskId, join) => req('POST', `/tasks/${taskId}/membership`, { join }),
 
@@ -113,6 +118,10 @@ export const api = {
   pulse: () => req('GET', '/pulse'),
   // Registra que a pessoa abriu a atividade — permitido para 'Só exibição'.
   viewTask: (id) => req('POST', `/tasks/${id}/view`),
+  // Textos de item já usados, por número de etapa. Só dos projetos que a pessoa
+  // enxerga — o servidor filtra, não o cliente.
+  checklistSuggestions: () => req('GET', '/checklist-suggestions'),
+
   // Acrescenta um item ao checklist de uma atividade — exige Edição total.
   addChecklistItem: (taskId, text, assigneeId) => req('POST', `/tasks/${taskId}/checklist`, { text, assigneeId }),
   // Cria de uma vez as etapas do processo que faltam no projeto.

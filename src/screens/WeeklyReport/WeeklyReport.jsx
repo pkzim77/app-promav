@@ -1,10 +1,10 @@
 import './WeeklyReport.css'
 import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
-import { Avatar, Field } from '../../components/primitives/primitives.jsx'
+import { Avatar, Field, SelecaoMultipla } from '../../components/primitives/primitives.jsx'
 import { EmptyState } from '../Projects/shared/EmptyState.jsx'
 import { api } from '../../data/api.js'
-import { fmtFull, parseDate, todayISO, addDays } from '../../data/store.js'
+import { fmtFull, parseDate, todayISO, addDays, PROJECT_STATUSES, PROJECT_STATUS_MAP } from '../../data/store.js'
 
 // Relatório semanal: a tela de quem escreve ("Meu relatório") e a de quem
 // recebe ("Relatórios individuais"), mais o documento impresso que as duas
@@ -109,7 +109,12 @@ function EditorMini({ value, onChange, placeholder }) {
 // src. Se aquela limpeza mudar, esta linha passa a ser um buraco.
 export function RelatorioDoc({ report, user, projects }) {
   const nomeDe = (id) => projects.find(p => p.id === id)?.name || 'Projeto removido'
-  const nomes = report.projectIds.map(nomeDe)
+  const works = report.works || {}
+
+  // Relatório enviado antes desta tela: um texto único para a semana inteira e
+  // status escrito à mão. Continua sendo impresso como foi escrito — reimprimir
+  // um relatório já entregue com outro formato seria reescrever o passado.
+  const legado = !Object.keys(works).length && !!String(report.developed || '').replace(/<[^>]*>/g, '').trim()
 
   return (
     <article className="rel-doc">
@@ -121,31 +126,46 @@ export function RelatorioDoc({ report, user, projects }) {
       <h1 className="rel-doc-h1">RELATÓRIO SEMANAL</h1>
       <p className="rel-doc-data">{porExtenso(report.week)}</p>
 
+      {/* Só período e nome. A lista de projetos saiu daqui: os nomes voltariam
+          logo abaixo como título de cada bloco, e o leitor leria tudo duas
+          vezes antes de chegar ao conteúdo. */}
       <table className="rel-doc-tabela">
         <tbody>
           <tr><th>Período</th><td>Semana encerrada em {fmtFull(report.week)}</td></tr>
           <tr><th>Nome</th><td>{user?.name || '—'}</td></tr>
-          <tr><th>Projetos</th><td>{nomes.join(' · ') || '—'}</td></tr>
         </tbody>
       </table>
 
-      <h2 className="rel-doc-h2">PROJETOS</h2>
-      <ul className="rel-doc-lista">
-        {nomes.map((n, i) => <li key={report.projectIds[i]}>{n.toLocaleUpperCase('pt-BR')}</li>)}
-      </ul>
-
-      <h2 className="rel-doc-h2">O QUE FOI DESENVOLVIDO DURANTE A SEMANA</h2>
-      <div className="rel-doc-rico" dangerouslySetInnerHTML={{ __html: report.developed }} />
-
-      <h2 className="rel-doc-h2">STATUS</h2>
-      <ul className="rel-doc-lista">
-        {report.projectIds.map(id => (
-          <li key={id}>
-            <strong>{nomeDe(id).toLocaleUpperCase('pt-BR')}:</strong>{' '}
-            <span className="rel-doc-rico-inline" dangerouslySetInnerHTML={{ __html: report.statuses?.[id] || '—' }} />
-          </li>
-        ))}
-      </ul>
+      {legado ? (
+        <>
+          <h2 className="rel-doc-h2">O QUE FOI DESENVOLVIDO DURANTE A SEMANA</h2>
+          <div className="rel-doc-rico" dangerouslySetInnerHTML={{ __html: report.developed }} />
+          <h2 className="rel-doc-h2">STATUS</h2>
+          <ul className="rel-doc-lista">
+            {report.projectIds.map(id => (
+              <li key={id}>
+                <strong>{nomeDe(id).toLocaleUpperCase('pt-BR')}:</strong>{' '}
+                <span className="rel-doc-rico-inline" dangerouslySetInnerHTML={{ __html: report.statuses?.[id] || '—' }} />
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        report.projectIds.map(id => {
+          const st = PROJECT_STATUS_MAP[report.statuses?.[id]]
+          return (
+            <section key={id} className="rel-doc-proj">
+              <h2 className="rel-doc-h2">{nomeDe(id).toLocaleUpperCase('pt-BR')}</h2>
+              {st && (
+                <p className="rel-doc-status">
+                  Status: <strong style={{ color: st.color }}>{st.label}</strong>
+                </p>
+              )}
+              <div className="rel-doc-rico" dangerouslySetInnerHTML={{ __html: works[id] || '' }} />
+            </section>
+          )
+        })
+      )}
     </article>
   )
 }
@@ -189,16 +209,56 @@ function SeletorSemana({ semana, onChange, ocupado }) {
   )
 }
 
+// Um painel por projeto marcado, todos abertos. O texto é por projeto porque um
+// campo único para a semana obrigava a pessoa a repetir o nome do projeto dentro
+// da frase para se fazer entender.
+function AbaDoProjeto({ projeto, status, texto, atividades, onStatus, onTexto, onTirar, onUsarSugestao }) {
+  return (
+    <div className="rel-aba">
+      <div className="rel-aba-topo">
+        <h3>{projeto.name}</h3>
+        <button type="button" className="btn-icon rel-aba-tirar" onClick={onTirar}
+          title="Tirar do relatório" aria-label={`Tirar ${projeto.name} do relatório`}>
+          <Icon name="trash" size={16} />
+        </button>
+      </div>
+
+      <Field label="Status do projeto">
+        <select className="control rel-status" value={status || ''}
+          style={status ? {
+            color: PROJECT_STATUS_MAP[status]?.color,
+            background: PROJECT_STATUS_MAP[status]?.color + '1f',
+            borderColor: PROJECT_STATUS_MAP[status]?.color + '55',
+          } : null}
+          onChange={e => onStatus(e.target.value)}>
+          <option value="">Selecione o status</option>
+          {PROJECT_STATUSES.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
+      </Field>
+
+      <Field label="O que foi feito neste projeto">
+        <EditorMini value={texto || ''} onChange={onTexto}
+          placeholder="Um item por linha. Use a lista com marcadores." />
+        {!!atividades.length && (
+          <button type="button" className="btn btn-ghost btn-sm rel-sugestao" onClick={onUsarSugestao}>
+            <Icon name="sparkles" size={15} />
+            Inserir as {atividades.length} atividades que você tocou neste projeto
+          </button>
+        )}
+      </Field>
+    </div>
+  )
+}
+
 export function MyWeeklyReport({ authUser, projects, onFlash, onFail }) {
   const [semana, setSemana] = React.useState(() => sextaDe(todayISO()))
   const [carregando, setCarregando] = React.useState(true)
   const [salvando, setSalvando] = React.useState('')
   const [projectIds, setProjectIds] = React.useState([])
-  const [developed, setDeveloped] = React.useState('')
+  const [works, setWorks] = React.useState({})
   const [statuses, setStatuses] = React.useState({})
   const [sentAt, setSentAt] = React.useState(null)
   const [sugestao, setSugestao] = React.useState({ projectIds: [], disponiveis: [], atividades: [] })
-  const [filtro, setFiltro] = React.useState('')
   const [fila, imprimir] = useImpressao()
 
   React.useEffect(() => {
@@ -207,12 +267,13 @@ export function MyWeeklyReport({ authUser, projects, onFlash, onFail }) {
     api.weeklyReportMine(semana)
       .then(r => {
         if (!vivo) return
-        setSugestao(r.sugestao || { projectIds: [], disponiveis: [], atividades: [] })
-        // Sem relatório salvo, vêm marcados só os projetos em que a pessoa mexeu
-        // na semana — não todos os que ela tem. Quem está em 26 projetos não
-        // entrega um relatório que lista 26.
-        setProjectIds(r.report ? r.report.projectIds : (r.sugestao?.projectIds || []))
-        setDeveloped(r.report?.developed || '')
+        const s = r.sugestao || { projectIds: [], disponiveis: [], atividades: [] }
+        setSugestao(s)
+        // Sem relatório salvo, já vêm marcados os projetos em que a pessoa mexeu
+        // nesta semana — não todos os que ela tem. Quem está em 26 projetos não
+        // entrega um relatório que fala de 26.
+        setProjectIds(r.report ? r.report.projectIds : (s.projectIds || []))
+        setWorks(r.report?.works || {})
         setStatuses(r.report?.statuses || {})
         setSentAt(r.report?.sentAt || null)
       })
@@ -221,20 +282,35 @@ export function MyWeeklyReport({ authUser, projects, onFlash, onFail }) {
     return () => { vivo = false }
   }, [semana])
 
-  // Marcados primeiro: com 26 projetos na lista, o que a pessoa já escolheu não
-  // pode ficar escondido no meio.
-  const busca = filtro.trim().toLocaleLowerCase('pt-BR')
-  const meusProjetos = projects
-    .filter(p => projectIds.includes(p.id) || sugestao.disponiveis.includes(p.id))
-    .filter(p => !busca || p.name.toLocaleLowerCase('pt-BR').includes(busca) || projectIds.includes(p.id))
-    .sort((a, b) => (projectIds.includes(b.id) - projectIds.includes(a.id)) || a.name.localeCompare(b.name, 'pt-BR'))
+  const daSemana = React.useMemo(() => new Set(sugestao.projectIds), [sugestao])
 
-  const alternar = (id) => setProjectIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id])
+  // Os projetos da pessoa, com os que ela tocou nesta semana em cima.
+  const meusProjetos = React.useMemo(() => {
+    const ids = new Set([...sugestao.projectIds, ...sugestao.disponiveis, ...projectIds])
+    return projects.filter(p => ids.has(p.id))
+      .sort((a, b) => (daSemana.has(b.id) - daSemana.has(a.id)) || a.name.localeCompare(b.name, 'pt-BR'))
+  }, [projects, sugestao, projectIds, daSemana])
+
+  // Os painéis seguem a ordem da lista, não a ordem em que foram marcados: o
+  // relatório impresso sai sempre na mesma sequência.
+  const marcados = meusProjetos.filter(p => projectIds.includes(p.id))
+
+  // Desmarcar não apaga o que foi escrito — some da tela e do documento, e um
+  // clique errado se desfaz com outro. O que sai daqui é o que for salvo: o
+  // servidor só grava texto de projeto declarado.
+  const alternar = (id) => setProjectIds(ids =>
+    ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id])
+
+  const usarSugestao = (id) => {
+    const itens = sugestao.atividades.filter(a => a.projectId === id)
+      .map(a => `<li>${a.title.replace(/[<>&]/g, '')}</li>`).join('')
+    setWorks(w => ({ ...w, [id]: `${w[id] || ''}<ul>${itens}</ul>` }))
+  }
 
   const gravar = async (enviar) => {
     setSalvando(enviar ? 'enviar' : 'rascunho')
     try {
-      const r = await api.saveWeeklyReport({ week: semana, projectIds, developed, statuses, send: enviar })
+      const r = await api.saveWeeklyReport({ week: semana, projectIds, works, statuses, send: enviar })
       setSentAt(r.sentAt || null)
       onFlash(enviar ? 'Relatório enviado.' : 'Rascunho salvo.')
     } catch (e) {
@@ -244,19 +320,12 @@ export function MyWeeklyReport({ authUser, projects, onFlash, onFail }) {
     }
   }
 
-  // Joga as atividades da semana como marcadores no texto. Não substitui o que
-  // já está escrito: acrescenta no fim, e a pessoa apaga o que não serve.
-  const usarSugestao = () => {
-    const itens = sugestao.atividades.map(a => `<li>${a.title.replace(/[<>&]/g, '')}</li>`).join('')
-    setDeveloped(html => `${html || ''}<ul>${itens}</ul>`)
-  }
-
   if (carregando) {
     return <div className="page"><div className="rel-carregando"><span className="spin" />Carregando o relatório…</div></div>
   }
 
-  const relatorio = { week: semana, projectIds, developed, statuses }
-  const podeEnviar = temTexto(developed) && projectIds.length > 0
+  const relatorio = { week: semana, projectIds: marcados.map(p => p.id), works, statuses }
+  const podeEnviar = marcados.some(p => temTexto(works[p.id]))
 
   return (
     <>
@@ -274,46 +343,38 @@ export function MyWeeklyReport({ authUser, projects, onFlash, onFail }) {
         </div>
 
         <div className="card rel-form">
-          <Field label="Projetos da semana">
-            {meusProjetos.length ? (<>
-              {sugestao.disponiveis.length > 8 && (
-                <input className="control rel-busca" value={filtro} placeholder="Filtrar projetos pelo nome"
-                  onChange={e => setFiltro(e.target.value)} />
-              )}
-              <div className="rel-projs">
-                {meusProjetos.map(p => (
-                  <label key={p.id} className={'rel-proj' + (projectIds.includes(p.id) ? ' on' : '')}>
-                    <input type="checkbox" checked={projectIds.includes(p.id)} onChange={() => alternar(p.id)} />
-                    {p.name}
-                  </label>
-                ))}
-              </div>
-              {!projectIds.length && (
-                <p className="rel-vazio-txt">Nenhum projeto marcado. Marque os que você tocou nesta semana.</p>
-              )}
-            </>) : (
-              <p className="rel-vazio-txt">Você ainda não está em nenhum projeto — fale com a coordenação.</p>
-            )}
-          </Field>
-
-          <Field label="O que foi desenvolvido durante a semana">
-            <EditorMini value={developed} onChange={setDeveloped}
-              placeholder="Um item por linha. Use a lista com marcadores." />
-            {!!sugestao.atividades.length && (
-              <button type="button" className="btn btn-ghost btn-sm rel-sugestao" onClick={usarSugestao}>
-                <Icon name="sparkles" size={15} />
-                Inserir as {sugestao.atividades.length} atividades que você tocou nesta semana
-              </button>
-            )}
-          </Field>
-
-          {projectIds.map(id => (
-            <Field key={id} label={`Status — ${projects.find(p => p.id === id)?.name || 'projeto'}`}>
-              <EditorMini value={statuses[id] || ''}
-                onChange={(html) => setStatuses(s => ({ ...s, [id]: html }))}
-                placeholder="Ex.: em andamento; orçamento aguardando análise." />
+          {meusProjetos.length ? (<>
+            <Field label="Projetos da semana">
+              <SelecaoMultipla
+                itens={meusProjetos.map(p => ({
+                  id: p.id,
+                  nome: p.name,
+                  marcado: projectIds.includes(p.id),
+                  // Marca quem teve tempo cronometrado ou atividade mexida na
+                  // semana: é a dica de quem provavelmente precisa ser relatado.
+                  etiqueta: daSemana.has(p.id) ? 'mexeu nesta semana' : null,
+                }))}
+                onAlternar={alternar}
+                ariaLabel="Projetos da semana"
+                rotulo={(n) => n ? `${n} projeto${n === 1 ? '' : 's'} neste relatório` : 'Escolha os projetos da semana'} />
             </Field>
-          ))}
+
+            {marcados.map(p => (
+              <AbaDoProjeto key={p.id} projeto={p}
+                status={statuses[p.id]} texto={works[p.id]}
+                atividades={sugestao.atividades.filter(a => a.projectId === p.id)}
+                onStatus={(v) => setStatuses(st => ({ ...st, [p.id]: v }))}
+                onTexto={(html) => setWorks(w => ({ ...w, [p.id]: html }))}
+                onTirar={() => alternar(p.id)}
+                onUsarSugestao={() => usarSugestao(p.id)} />
+            ))}
+
+            {!marcados.length && (
+              <p className="rel-vazio-txt">Nenhum projeto escolhido. Abra a lista acima e marque em quais você trabalhou.</p>
+            )}
+          </>) : (
+            <p className="rel-vazio-txt">Você ainda não está em nenhum projeto — fale com a coordenação.</p>
+          )}
 
           <div className="rel-acoes">
             <button className="btn btn-secondary" onClick={() => gravar(false)} disabled={!!salvando}>
@@ -331,7 +392,7 @@ export function MyWeeklyReport({ authUser, projects, onFlash, onFail }) {
 
           {!podeEnviar && (
             <p className="rel-falta">
-              Para enviar, escolha ao menos um projeto e escreva o que foi desenvolvido.
+              Para enviar, conte o que foi feito em pelo menos um projeto.
             </p>
           )}
         </div>

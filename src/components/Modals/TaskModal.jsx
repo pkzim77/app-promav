@@ -1,8 +1,9 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field, SegControl, StatusTag, PriorityTag } from '../primitives/primitives.jsx'
-import { STATUSES, PRIORITIES, paraAtribuir } from '../../data/store.js'
+import { STATUSES, PRIORITIES, CHECK_STATES, STATUS_MAP, estadoDoItem, paraAtribuir } from '../../data/store.js'
 import { dateError } from './shared/formHelpers.js'
+import { SugestaoItem } from './shared/SugestaoItem.jsx'
 
 export function TaskModal({ task, projects, users, currentUserId, defaultProjectId, defaultStatus, canEdit = true, onToggleChecklist, onToggleMembership, onSave, onClose }) {
   const editing = !!task
@@ -21,20 +22,33 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   const [newItem, setNewItem] = React.useState('')
   const [touched, setTouched] = React.useState(false)
 
-  const ckDone = checklist.filter(i => i.done).length
+  const ckDone = checklist.filter(i => estadoDoItem(i) === 'done').length
   const ckPct = checklist.length ? Math.round(ckDone / checklist.length * 100) : 0
   const addItem = () => {
     const text = newItem.trim()
     if (!text) return
-    setChecklist(c => [...c, { id: 'c' + Date.now() + Math.random().toString(36).slice(2, 5), text, done: false }])
+    setChecklist(c => [...c, { id: 'c' + Date.now() + Math.random().toString(36).slice(2, 5), text, done: false, state: 'todo' }])
     setNewItem('')
   }
-  // Em modo leitura, marcar checklist persiste na hora (endpoint dedicado); em
-  // modo edição, só atualiza o estado local e é salvo no "Salvar alterações".
+  const mudarItem = (id, campos) => setChecklist(c => c.map(i => i.id === id ? { ...i, ...campos } : i))
+
+  // A caixa e o estado são a MESMA informação em dois controles: marcar leva
+  // direto para Concluído e desmarcar volta para Pendente, senão o item ficaria
+  // riscado dizendo "em revisão" — e o servidor, que deriva o status da etapa a
+  // partir do estado, discordaria do que a tela mostra.
+  //
+  // Em modo leitura, marcar persiste na hora (endpoint dedicado); em modo
+  // edição, fica local e é salvo no "Salvar alterações".
   const toggleItem = (id) => {
-    setChecklist(c => c.map(i => i.id === id ? { ...i, done: !i.done } : i))
+    const atual = checklist.find(i => i.id === id)
+    const feito = estadoDoItem(atual) !== 'done'
+    mudarItem(id, { done: feito, state: feito ? 'done' : 'todo' })
     if (ro && onToggleChecklist && task) onToggleChecklist(task, id)
   }
+
+  // Escolher "Concluído" no chip marca a caixa, pelo mesmo motivo. O chip só
+  // aparece em modo edição, então aqui não há nada a persistir na hora.
+  const mudarEstado = (id, state) => mudarItem(id, { state, done: state === 'done' })
   const removeItem = (id) => setChecklist(c => c.filter(i => i.id !== id))
 
   const toggleMember = (id) => setMemberIds(m => m.includes(id) ? m.filter(x => x !== id) : [...m, id])
@@ -51,6 +65,10 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   // Quem pode receber a atividade. Um responsável ou membro já gravado entra
   // na lista mesmo sendo conta de manutenção, senão o salvamento o trocaria.
   const pessoas = paraAtribuir(users, assigneeId, memberIds, task?.assigneeId, task?.memberIds)
+
+  // Numa etapa do template ("3 · Orçamento"), o número decide as sugestões.
+  // Atividade avulsa não tem etapa: cai na lista geral.
+  const nEtapa = /^(\d+) · /.exec(task?.title || '')?.[1]
 
   const dErr = dateError(start, end)
   const titleErr = touched && !title.trim() ? 'Informe um título.' : null
@@ -147,21 +165,43 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
           <div className="progress" style={{ marginBottom: 4 }}><div style={{ width: ckPct + '%', background: ckPct === 100 ? 'var(--success)' : 'var(--brand)' }} /></div>
         )}
         <div className="ck-edit-list">
-          {checklist.map(item => (
+          {checklist.map(item => {
+            const estado = estadoDoItem(item)
+            const feito = estado === 'done'
+            const cor = STATUS_MAP[estado] || STATUS_MAP.todo
+            return (
             <div className="ck-edit-row" key={item.id}>
-              <button type="button" className={'ck-box' + (item.done ? ' on' : '')} onClick={() => toggleItem(item.id)} aria-label="Marcar">
-                {item.done && <Icon name="check" size={12} stroke={3} />}
+              <button type="button" className={'ck-box' + (feito ? ' on' : '')} onClick={() => toggleItem(item.id)}
+                aria-pressed={feito} aria-label={feito ? `Desmarcar: ${item.text}` : `Marcar: ${item.text}`}>
+                {feito && <Icon name="check" size={12} stroke={3} />}
               </button>
-              <span className={'ck-text' + (item.done ? ' done' : '')}>{item.text}</span>
-              {!ro && <button type="button" className="btn-icon ck-del" onClick={() => removeItem(item.id)} aria-label="Remover"><Icon name="x" size={14} /></button>}
+              {/* Editável no lugar. Antes o texto era só leitura aqui e a única
+                  saída era remover e recriar — o item voltava sem dono, sem
+                  estado e no fim da lista. */}
+              {ro ? (
+                <span className={'ck-text' + (feito ? ' done' : '')}>{item.text}</span>
+              ) : (
+                <input className={'control ck-input' + (feito ? ' done' : '')} value={item.text}
+                  aria-label={`Texto do item: ${item.text}`}
+                  onChange={e => mudarItem(item.id, { text: e.target.value })} />
+              )}
+              {!ro && (
+                <select className="estado-chip" value={estado} style={{ background: cor.soft, color: cor.text }}
+                  aria-label={`Estado de: ${item.text}`}
+                  onChange={e => mudarEstado(item.id, e.target.value)}>
+                  {CHECK_STATES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                </select>
+              )}
+              {!ro && <button type="button" className="btn-icon ck-del" onClick={() => removeItem(item.id)} aria-label={`Remover: ${item.text}`}><Icon name="x" size={14} /></button>}
             </div>
-          ))}
+            )
+          })}
         </div>
         {!ro && (
           <div className="ck-add">
-            <input className="control" value={newItem} placeholder="Adicionar item…"
-              onChange={e => setNewItem(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addItem() } }} />
+            <SugestaoItem value={newItem} onChange={setNewItem} onEnter={addItem}
+              etapa={nEtapa} jaUsados={checklist.map(i => i.text)}
+              placeholder="Adicionar item…" ariaLabel="Adicionar item ao checklist" />
             <button type="button" className="btn btn-secondary btn-sm" onClick={addItem}><Icon name="plus" size={15} stroke={2.2} />Adicionar</button>
           </div>
         )}
