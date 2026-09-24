@@ -194,11 +194,7 @@
 
 .perm-head-role { flex: 0 0 168px; }
 
-.perm-add { display: flex; gap: 8px; margin-bottom: 12px; }
-
-.perm-add .control { flex: 1; min-width: 0; }
-
-.perm-add .btn { flex-shrink: 0; }
+.perm-add { margin-bottom: 12px; }
 
 /* Caixa de marcação "é responsável pelo projeto" */
 .resp-check { flex: 0 0 20px; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid var(--border-strong, var(--border)); border-radius: var(--r-sm); color: #fff; background: transparent; transition: background var(--dur), border-color var(--dur); }
