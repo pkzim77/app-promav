@@ -50,6 +50,9 @@ export default function App() {
   const [changes, setChanges] = React.useState([])
   const [route, setRoute] = React.useState({ view: 'hub' })
   const [projectSearch, setProjectSearch] = React.useState('')
+  // Em que pé está o relatório desta semana: 'nenhum', 'rascunho' ou 'enviado'.
+  // Vem do bootstrap, então acompanha sozinho quando a pessoa salva ou envia.
+  const [relatorioSemana, setRelatorioSemana] = React.useState('enviado')
   // Pasta aberta na lista de projetos. Fica aqui, e não dentro do ProjectList,
   // porque aquela tela desmonta ao abrir um projeto.
   const [pastaAberta, setPastaAberta] = React.useState(null)
@@ -96,6 +99,7 @@ export default function App() {
       const data = await api.bootstrap()
       setUsers(data.users); setProjects(data.projects); setTasks(data.tasks); setSessions(data.sessions); setFolders(data.folders || [])
       setChanges(data.changes || [])
+      setRelatorioSemana(data.relatorioSemana || 'nenhum')
       setDataReady(true)
     } catch (err) { setLoadError(err.message) }
   }, [])
@@ -915,7 +919,9 @@ export default function App() {
 
   let screen
   if (effectiveRoute.view === 'hub') {
-    screen = <Hub projects={projects} recentProjects={searchedProjects} tasks={tasks} onNavigate={navigate} sessions={sessions} currentUserId={currentUserId} now={now} />
+    screen = <Hub projects={projects} recentProjects={searchedProjects} tasks={tasks} changes={changes}
+      onNavigate={navigate} sessions={sessions} currentUserId={currentUserId} authUser={authUser}
+      relatorioSemana={relatorioSemana} now={now} />
   } else if (effectiveRoute.view === 'projects' && currentProject) {
     screen = <ProjectDetail project={currentProject} tasks={tasks} users={users} changes={changes}
       sessions={sessions} currentUserId={currentUserId} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}

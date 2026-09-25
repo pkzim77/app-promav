@@ -371,7 +371,12 @@ const PULSE_SQL = `
          (SELECT count(*) FROM users)            AS usuarios_n,
          (SELECT count(*) FROM checklist_items)  AS checklist_n,
          (SELECT count(*) FROM task_members)     AS membros_tarefa_n,
-         (SELECT count(*) FROM project_members)  AS membros_projeto_n
+         (SELECT count(*) FROM project_members)  AS membros_projeto_n,
+         -- Sem isto o aviso de relatorio no Hub envelhecia: o bootstrap so e
+         -- refeito quando o pulso muda, e salvar um relatorio nao mexia em
+         -- nenhuma das contagens acima. O updated_at cobre rascunho e envio.
+         (SELECT count(*) FROM weekly_reports)   AS relatorios_n,
+         (SELECT max(updated_at) FROM weekly_reports)                                       AS relatorios_t
 `
 
 app.get('/api/pulse', wrap(async (_req, res) => {
@@ -425,14 +430,19 @@ const montarBootstrapSql = () => (sqlBootstrap ??= `
     (SELECT COALESCE(json_agg(t), '[]'::json) FROM (${TASK_SELECT} WHERE $1::text[] IS NULL OR t.project_id = ANY($1) ORDER BY t.id) t)       AS tasks,
     (SELECT COALESCE(json_agg(s), '[]'::json) FROM (${SESSION_SELECT} WHERE $1::text[] IS NULL OR task_id IN (SELECT id FROM tasks WHERE project_id = ANY($1)) ORDER BY start_at) s) AS sessions,
     (SELECT COALESCE(json_agg(f), '[]'::json) FROM (${FOLDER_SELECT} ORDER BY position, name) f)                                    AS folders,
-    (SELECT COALESCE(json_agg(c), '[]'::json) FROM (${CHANGE_SELECT} WHERE $1::text[] IS NULL OR c.project_id = ANY($1) ORDER BY c.published_at DESC) c) AS changes
+    (SELECT COALESCE(json_agg(c), '[]'::json) FROM (${CHANGE_SELECT} WHERE $1::text[] IS NULL OR c.project_id = ANY($1) ORDER BY c.published_at DESC) c) AS changes,
+    -- Em que pe esta o relatorio DESTA pessoa NESTA semana. Vem aqui porque o
+    -- bootstrap ja acontece: o Hub perguntando por conta propria custava uma
+    -- ida extra a cada visita e, com cache, mostrava o aviso depois de enviado.
+    COALESCE((SELECT CASE WHEN sent_at IS NULL THEN 'rascunho' ELSE 'enviado' END
+                FROM weekly_reports WHERE user_id = $2 AND week = $3::date), 'nenhum') AS "relatorioSemana"
 `)
 
 app.get('/api/bootstrap', wrap(async (req, res) => {
   const ids = await visibleProjectIds(req.userId)   // null = admin (sem filtro)
   const all = ids === null
 
-  const [linha] = await q(montarBootstrapSql(), [ids])
+  const [linha] = await q(montarBootstrapSql(), [ids, req.userId, sextaDe()])
   const tasks = (linha.tasks || []).map(mapTask)
   const sessions = (linha.sessions || []).map(mapSession)
   const changes = (linha.changes || []).map(mapChange)
@@ -442,6 +452,7 @@ app.get('/api/bootstrap', wrap(async (req, res) => {
   res.json({
     users: linha.users || [], projects, tasks, sessions, changes,
     folders: all ? folders : foldersWithProjects(folders, projects),
+    relatorioSemana: linha.relatorioSemana,
   })
 }))
 

@@ -1,23 +1,90 @@
 /* Estilos do componente hub (usados só aqui). Compartilhados ficam em src/styles/kit.css */
 
+.hub-titulo { font: var(--text-h1); margin: 0 0 22px; letter-spacing: var(--tracking-tight); color: var(--fg-1); }
+
+.hub-sec { font: var(--text-h3); margin: 0; color: var(--fg-1); }
+
+/* Os grids eram fixos em 4 e 2 colunas, e a tela não tinha uma media query
+   sequer: num celular de 360px os quatro cartões de número ficavam com 80px
+   cada. auto-fit resolve sem ponto de quebra escrito à mão. */
+.hub-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin-bottom: 24px; }
+
 .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 18px 20px; box-shadow: var(--shadow-card); }
 
 .stat-num { font-family: var(--font-sans); font-size: 32px; font-weight: 700; color: var(--fg-1); letter-spacing: -0.02em; line-height: 1; }
 
 .stat-label { font-size: 13px; color: var(--fg-3); margin-top: 7px; }
 
-/* ---------- Hub nav cards ---------- */
+/* ---------- O que precisa de você ---------- */
 
-.hubcards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.pend { padding: 20px 22px; margin-bottom: 24px; display: flex; flex-direction: column; gap: 18px;
+  /* Faixa da cor de atenção: o bloco só existe quando há pendência, e precisa
+     se distinguir dos cartões de número logo acima. */
+  border-left: 3px solid var(--warning); }
 
-.hubcard { text-align: left; padding: 22px; border-radius: var(--r-lg); border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-card); transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.pend-titulo { display: flex; align-items: center; gap: 8px; font: var(--text-h4); margin: 0; color: var(--fg-1); }
 
-.hubcard:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+.pend-titulo svg { color: var(--warning); }
 
-.hubcard .ic { width: 44px; height: 44px; border-radius: var(--r-md); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+.pend-bloco { display: flex; flex-direction: column; gap: 7px; }
 
-.hubcard h3 { font: var(--text-h4); margin: 0 0 4px; color: var(--fg-1); }
+.pend-cab { font-size: 13.5px; color: var(--fg-2); }
 
-.hubcard p { font-size: 13px; color: var(--fg-3); margin: 0; line-height: 1.5; }
+.pend-cab b { color: var(--fg-1); }
+
+.pend-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+
+.pend-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 10px; border-radius: var(--r-sm); font-size: 13.5px; color: var(--fg-1); }
+
+.pend-item:hover { background: var(--bg-subtle); }
+
+.pend-item-tit { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; }
+
+.pend-item-proj { font-size: 12.5px; color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+
+.pend-atraso { flex-shrink: 0; margin-left: auto; font-size: 12px; font-weight: 700; color: var(--danger); background: var(--danger-soft); border-radius: var(--r-full); padding: 2px 9px; }
+
+.pend-item-solo { justify-content: space-between; background: var(--bg-subtle); }
+
+.pend-item-solo:hover { background: var(--bg-muted); }
+
+/* ---------- Atalhos ---------- */
+
+.hubnavs { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 28px; }
+
+.hubnav { display: inline-flex; align-items: center; gap: 9px; padding: 10px 16px; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-xs); font-size: 14px; font-weight: 600; color: var(--fg-1); transition: border-color var(--dur), box-shadow var(--dur), transform var(--dur-fast) var(--ease); }
+
+.hubnav svg { color: var(--accent-strong); }
+
+.hubnav:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+
+/* ---------- Meus projetos ---------- */
+
+.hub-projs { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; }
+
+.hub-proj { padding: 18px; text-align: left; transition: border-color var(--dur), box-shadow var(--dur); }
+
+.hub-proj:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+
+.hub-proj-topo { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
+
+.hub-proj-cor { width: 30px; height: 30px; border-radius: var(--r-sm); flex-shrink: 0; }
+
+.hub-proj-id { flex: 1; min-width: 0; }
+
+.hub-proj-nome { font-weight: 600; font-size: 15px; color: var(--fg-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.hub-proj-sub { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--fg-3); }
+
+.hub-proj-minhas { font-weight: 600; color: var(--accent-strong); white-space: nowrap; }
+
+.hub-proj-pct { margin-left: auto; font-family: var(--font-mono); font-weight: 600; font-size: 14px; color: var(--fg-2); }
+
+.hub-vazio { padding: 28px 24px; font-size: 14px; color: var(--fg-3); text-align: center; }
 
 .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--brand); margin: 0 0 8px; }
+
+@media (max-width: 620px) {
+  .pend-item { flex-wrap: wrap; gap: 4px 10px; }
+  .pend-item-proj { flex-basis: 100%; }
+}
