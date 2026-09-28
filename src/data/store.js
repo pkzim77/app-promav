@@ -212,11 +212,17 @@ export function etapasDoProjeto(tasks = [], projectId) {
 }
 
 //CARGOS
+// Sementes para a sugestão do campo de cargo, que é texto livre. Orçamentista,
+// Coordenação e Direção eram SETORES até esta versão — e era justamente isso
+// que impedia o CREA de aparecer para eles: nenhum é uma área, os três são
+// cargos dentro de Engenharia.
 export const CARGOS = [
   {id: 'Arquitetura', label: 'Arquitetura'},
   {id: 'Projetos Prediais', label: 'Projetos Prediais'},
   {id: 'Orçamentista', label: 'Orçamentista'},
   {id: 'Coordenação', label: 'Coordenação'},
+  {id: 'Direção', label: 'Direção'},
+  {id: 'Estagiário', label: 'Estagiário'},
   {id: 'TI', label: 'TI'}
 ]
 
@@ -255,15 +261,18 @@ export const conselhoDe = (setor, cargo) => conselhoDoSetor(setor) || conselhoDo
 
 
 // ---------- mudanças do projeto (orientações) ----------
-// Setores da PROMAV. Cada usuário pertence a um (users.sector); é isso que faz
-// "destinatário: Engenharia" resolver para pessoas de verdade.
+// Setores da PROMAV: as três ÁREAS que existem na empresa. Cada usuário
+// pertence a uma (users.sector); é isso que faz "destinatário: Engenharia"
+// resolver para pessoas de verdade, e é daqui que sai o conselho.
+//
+// A lista tinha seis e quatro deles eram cargo, não área — Orçamento,
+// Coordenação, Direção e Estágio. Com isso o orçamentista, que é engenheiro,
+// ficava num "setor" sem conselho e nunca via o campo de CREA. Quem diferencia
+// as pessoas dentro da área é o CARGO.
 export const SECTORS = [
   { id: 'Engenharia',  label: 'Engenharia' },
   { id: 'Arquitetura', label: 'Arquitetura' },
-  { id: 'Orcamento',   label: 'Orçamento' },
-  { id: 'Coordenacão', label: 'Coordenação' },
-  { id: 'Direcão',     label: 'Direção' },
-  { id: 'Estágio',     label: 'Estágio' },
+  { id: 'TI',          label: 'TI' },
 ]
 export const SECTOR_MAP = Object.fromEntries(SECTORS.map(s => [s.id, s]))
 export const sectorLabel = (id) => SECTOR_MAP[id]?.label || null

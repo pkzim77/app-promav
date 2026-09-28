@@ -2004,6 +2004,41 @@ async function ensureSchema() {
   // repetido compara lower(email), e dois '' colidiriam entre si.
   await q('ALTER TABLE users ALTER COLUMN email DROP NOT NULL')
   await q('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL')
+
+  // ----- setor passa a ser so a AREA -----
+  // Orcamento, Coordenacao e Direcao eram setores e sao cargos: quem estava
+  // neles ficava sem conselho e nunca via o campo de CREA, embora seja
+  // engenheiro. Estagio tambem nao e area — o estagiario fica na area em que
+  // trabalha, e "Estagiario" vira o cargo dele.
+  //
+  // Sem esta migracao, quem tiver um valor antigo fica com setor invalido: o
+  // campo aparece vazio no cadastro e o conselho some — reproduzindo a falha
+  // que a mudanca veio corrigir.
+  const setoresAntigos = await q(`
+    UPDATE users SET sector = CASE
+      WHEN sector IN ('Orcamento', 'Coordenacão', 'Direcão') THEN 'Engenharia'
+      WHEN sector = 'Estágio' AND job_title ILIKE '%arquitet%' THEN 'Arquitetura'
+      WHEN sector = 'Estágio' AND job_title ILIKE '%TI%' THEN 'TI'
+      WHEN sector = 'Estágio' THEN 'Engenharia'
+      ELSE sector END
+    WHERE sector IN ('Orcamento', 'Coordenacão', 'Direcão', 'Estágio')
+    RETURNING id`)
+  if (setoresAntigos.length) {
+    console.log(`[promav] setor migrado para area em ${setoresAntigos.length} cadastro(s)`)
+  }
+
+  // As mudancas enderecadas a um setor antigo deixariam de encontrar alguem.
+  await q(`
+    UPDATE changes c SET target_sectors = novo.lista
+      FROM (
+        SELECT ch.id, jsonb_agg(DISTINCT CASE
+                 WHEN s IN ('Orcamento', 'Coordenacão', 'Direcão') THEN 'Engenharia'
+                 WHEN s = 'Estágio' THEN 'TI'
+                 ELSE s END) AS lista
+          FROM changes ch, jsonb_array_elements_text(COALESCE(ch.target_sectors, '[]'::jsonb)) s
+         GROUP BY ch.id
+      ) novo
+     WHERE c.id = novo.id AND c.target_sectors IS DISTINCT FROM novo.lista`)
   await q("UPDATE checklist_items SET state = 'done' WHERE done AND state = 'todo'")
 
   // Equipe de desenvolvimento do app: contas que mantêm o sistema, não gente
