@@ -331,10 +331,16 @@ const LIST_USER = 'id, name, initials, color, email, short_name AS "shortName", 
 app.post('/api/auth/login', wrap(async (req, res) => {
   const { email, password } = req.body
   if (!email || !password) return res.status(400).json({ error: 'Informe email e senha.' })
-  const [row] = await q('SELECT id, name, initials, color, email, is_admin AS "isAdmin", is_active AS "isActive", password_hash FROM users WHERE lower(email) = lower($1)', [email])
-  // Mesma mensagem genérica para senha errada, e-mail inexistente ou conta
-  // inativa — nenhuma delas pode revelar se a conta existe ou está desligada.
-  if (!row || row.isActive === false || !(await verifyPassword(password, row.password_hash))) {
+  const [row] = await q('SELECT id, name, initials, color, email, is_admin AS "isAdmin", is_active AS "isActive", is_outsourced AS "isOutsourced", password_hash FROM users WHERE lower(email) = lower($1)', [email])
+  // Terceirizado não acessa, e a regra é dita AQUI em vez de depender de ele
+  // não ter senha. Ausência de senha é uma ausência: bastaria uma importação
+  // ou um formulário mal preenchido gravar um hash para o acesso reabrir em
+  // silêncio. Com a checagem explícita, o que vale é o vínculo.
+  //
+  // Mesma mensagem genérica para senha errada, e-mail inexistente, conta
+  // inativa ou terceirizado — nenhuma pode revelar se a conta existe.
+  if (!row || row.isActive === false || row.isOutsourced
+      || !row.password_hash || !(await verifyPassword(password, row.password_hash))) {
     return res.status(401).json({ error: 'Email ou senha incorretos.' })
   }
   const { password_hash, ...user } = row
@@ -465,11 +471,17 @@ app.post('/api/users', requireAdmin, wrap(async (req, res) => {
   const { name, phone, shortName, email, sector = null, jobTitle = null, professionalRegister = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, isOutsourced = false, initialPassword } = req.body || {}
   const cleanName = String(name || '').trim()
   const cleanEmail = String(email || '').trim()
-  if (!cleanName || !cleanEmail) return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' })
+  const terceirizado = !!isOutsourced
+  if (!cleanName) return res.status(400).json({ error: 'O nome é obrigatório.' })
+  // E-mail é credencial para quem entra no sistema; para terceirizado é só
+  // contato, e contato pode não existir.
+  if (!terceirizado && !cleanEmail) return res.status(400).json({ error: 'O e-mail é obrigatório.' })
 
   // Verifica se e-mail já existe (case-insensitive, como no login)
-  const [existing] = await q('SELECT id FROM users WHERE lower(email) = lower($1)', [cleanEmail])
-  if (existing) return res.status(409).json({ error: `O e-mail "${cleanEmail}" já está em uso.` })
+  if (cleanEmail) {
+    const [existing] = await q('SELECT id FROM users WHERE lower(email) = lower($1)', [cleanEmail])
+    if (existing) return res.status(409).json({ error: `O e-mail "${cleanEmail}" já está em uso.` })
+  }
 
   const id = genId('u')
   const finalInitials = String(initials || '').trim() || (() => {
@@ -478,12 +490,15 @@ app.post('/api/users', requireAdmin, wrap(async (req, res) => {
   })().toUpperCase()
 
   const passwordToUse = typeof initialPassword === 'string' ? initialPassword.trim() : ''
-  if (!passwordToUse || passwordToUse.length < 6) return res.status(400).json({ error: 'A senha inicial precisa ter ao menos 6 caracteres.' })
-  const passwordHash = await hashPassword(passwordToUse)
+  // Terceirizado nasce sem senha nenhuma — nem uma inutilizável.
+  if (!terceirizado && (!passwordToUse || passwordToUse.length < 6)) {
+    return res.status(400).json({ error: 'A senha inicial precisa ter ao menos 6 caracteres.' })
+  }
+  const passwordHash = terceirizado ? null : await hashPassword(passwordToUse)
   await q(`
     INSERT INTO users (id, name, initials, color, email, phone, short_name, sector, job_title, professional_register, is_admin, is_active, is_outsourced, password_hash, is_dev)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, false)
-  `, [id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, phone || null, shortName || null, sector || null, jobTitle || null, professionalRegister || null, !!isAdmin, isActive !== false, !!isOutsourced, passwordHash])
+  `, [id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail || null, phone || null, shortName || null, sector || null, jobTitle || null, professionalRegister || null, !!isAdmin, isActive !== false, terceirizado, passwordHash])
 
   const [row] = await q(`SELECT ${LIST_USER} FROM users WHERE id = $1`, [id])
   res.status(201).json(row)
@@ -493,7 +508,9 @@ app.put('/api/users/:id', requireAdmin, wrap(async (req, res) => {
   const { name, phone, shortName, email, sector = null, jobTitle = null, professionalRegister = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, isOutsourced = false, initialPassword } = req.body || {}
   const cleanName = String(name || '').trim()
   const cleanEmail = String(email || '').trim()
-  if (!cleanName || !cleanEmail) return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' })
+  const terceirizado = !!isOutsourced
+  if (!cleanName) return res.status(400).json({ error: 'O nome é obrigatório.' })
+  if (!terceirizado && !cleanEmail) return res.status(400).json({ error: 'O e-mail é obrigatório.' })
 
   const [target] = await q('SELECT is_admin AS "isAdmin", is_active AS "isActive" FROM users WHERE id = $1', [req.params.id])
   if (!target) return res.status(404).json({ error: 'Usuário não encontrado.' })
@@ -525,8 +542,10 @@ app.put('/api/users/:id', requireAdmin, wrap(async (req, res) => {
   }
 
   // Verifica se e-mail já existe em outro usuário (case-insensitive, como no login)
-  const [existing] = await q('SELECT id FROM users WHERE lower(email) = lower($1) AND id != $2', [cleanEmail, req.params.id])
-  if (existing) return res.status(409).json({ error: `O e-mail "${cleanEmail}" já está em uso.` })
+  if (cleanEmail) {
+    const [existing] = await q('SELECT id FROM users WHERE lower(email) = lower($1) AND id != $2', [cleanEmail, req.params.id])
+    if (existing) return res.status(409).json({ error: `O e-mail "${cleanEmail}" já está em uso.` })
+  }
 
   const finalInitials = String(initials || '').trim() || (() => {
     const parts = cleanName.split(/\s+/).filter(Boolean)
@@ -537,6 +556,9 @@ app.put('/api/users/:id', requireAdmin, wrap(async (req, res) => {
     return res.status(400).json({ error: 'A senha inicial precisa ter ao menos 6 caracteres.' })
   }
   const passwordHash = typeof initialPassword === 'string' && initialPassword.trim() ? await hashPassword(initialPassword.trim()) : null
+  // Passar alguém para terceirizado apaga a senha que ele tinha. Sem isto o
+  // hash antigo ficaria guardado, esperando o dia em que a marca fosse
+  // removida por engano.
   await q(`
     UPDATE users
     SET name = $2,
@@ -550,9 +572,11 @@ app.put('/api/users/:id', requireAdmin, wrap(async (req, res) => {
         professional_register = $10,
         is_admin = $11,
         is_active = $12,
-        is_outsourced = $13${passwordHash ? ', password_hash = $14' : ''}
+        is_outsourced = $13${terceirizado ? ', password_hash = NULL' : passwordHash ? ', password_hash = $14' : ''}
     WHERE id = $1
-  `, passwordHash ? [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, phone || null, shortName || null, sector || null, jobTitle || null, professionalRegister || null, !!isAdmin, isActive !== false, !!isOutsourced, passwordHash] : [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, phone || null, shortName || null, sector || null, jobTitle || null, professionalRegister || null, !!isAdmin, isActive !== false, !!isOutsourced])
+  `, passwordHash && !terceirizado
+    ? [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail || null, phone || null, shortName || null, sector || null, jobTitle || null, professionalRegister || null, !!isAdmin, isActive !== false, terceirizado, passwordHash]
+    : [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail || null, phone || null, shortName || null, sector || null, jobTitle || null, professionalRegister || null, !!isAdmin, isActive !== false, terceirizado])
 
   const [row] = await q(`SELECT ${LIST_USER} FROM users WHERE id = $1`, [req.params.id])
   if (!row) return res.status(404).json({ error: 'Usuário não encontrado.' })
@@ -1232,6 +1256,9 @@ async function abrirCiencia(client, changeId, projectId, autorId, targetSectors 
        FROM project_members pm
        JOIN users u ON u.id = pm.user_id
       WHERE pm.project_id = $1 AND pm.user_id <> $2
+        -- Terceirizado não entra no sistema, então não tem como dar ciência:
+        -- cobrá-lo deixaria uma pendência que ninguém pode encerrar.
+        AND NOT u.is_outsourced
         AND (u.sector = ANY($3::text[]) OR pm.user_id = ANY($4::text[]))`,
       [projectId, autorId, targetSectors, targetUserIds]
   )
@@ -1744,7 +1771,8 @@ app.get('/api/weekly-reports', requireAdmin, wrap(async (req, res) => {
   const semana = sextaDe(req.query.week)
   const [enviados, pessoas] = await Promise.all([
     q(`SELECT ${COLUNAS_REL} FROM weekly_reports WHERE week = $1::date AND sent_at IS NOT NULL ORDER BY sent_at`, [semana]),
-    q('SELECT id FROM users WHERE is_active AND NOT is_dev ORDER BY id'),
+    // Terceirizado não acessa o sistema, então não tem como enviar relatório.
+    q('SELECT id FROM users WHERE is_active AND NOT is_dev AND NOT is_outsourced ORDER BY id'),
   ])
   const entregou = new Set(enviados.map(r => r.user_id))
   res.json({
@@ -1968,6 +1996,14 @@ async function ensureSchema() {
   // indicador dos cartoes e os relatorios olham esse campo — nenhum deles
   // precisa aprender os estados novos para continuar certo.
   await q("ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS state text NOT NULL DEFAULT 'todo'")
+
+  // ----- terceirizado -----
+  // Quem e terceirizado nao entra no sistema: nao tem senha, e o e-mail, quando
+  // existe, e contato e nao credencial. Por isso as duas colunas deixam de ser
+  // obrigatorias. Guardamos NULL e nunca string vazia: a checagem de e-mail
+  // repetido compara lower(email), e dois '' colidiriam entre si.
+  await q('ALTER TABLE users ALTER COLUMN email DROP NOT NULL')
+  await q('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL')
   await q("UPDATE checklist_items SET state = 'done' WHERE done AND state = 'todo'")
 
   // Equipe de desenvolvimento do app: contas que mantêm o sistema, não gente
