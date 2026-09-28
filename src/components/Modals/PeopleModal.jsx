@@ -80,7 +80,6 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
   const emailErr = touched && !outsourced && !email.trim() ? 'Informe o e-mail.'
     : touched && email.trim() && !email.includes('@') ? 'E-mail inválido.' : null
   const shortNameErr = touched && !shortName.trim() ? 'Informe o nome social.' : null
-  const phoneErr = touched && !phone.trim() ? 'Informe o telefone.' : null
   const jobTitleErr = touched && !jobTitle ? 'Selecione o cargo.' : null
   const sectorErr = touched && !sector ? 'Selecione o setor.' : null
   // Terceirizado não entra no sistema, então não tem senha para definir.
@@ -131,7 +130,9 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
     if (!name.trim()) return
     if (!outsourced && (!email.trim() || !email.includes('@'))) return
     if (email.trim() && !email.includes('@')) return
-    if (!shortName.trim() || !phone.trim() || !jobTitle || !sector) return
+    // Telefone não entra: é contato, não identidade. Exigir travava o cadastro
+    // de quem ainda não tinha o número à mão, e ele pode ser preenchido depois.
+    if (!shortName.trim() || !jobTitle || !sector) return
     if (pedeSenha && initialPassword.trim().length < 6) return
     onSave({
       ...(user || {}),
@@ -279,10 +280,9 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
           onChange={e => setShortName(e.target.value)} />
           {shortNameErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{shortNameErr}</span>}
         </Field>
-        <Field label="Telefone">
+        <Field label="Telefone (opcional)">
           <input className="control" type="tel" value={phone} placeholder="(11) 99999-9999"
             onChange={e => setPhone(formatarMascaraTelefone(e.target.value))} />
-          {phoneErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{phoneErr}</span>}
         </Field>
       </div>
 
