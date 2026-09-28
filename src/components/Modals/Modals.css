@@ -64,6 +64,17 @@
 
 .ck-edit-row:hover .ck-del { opacity: 1; }
 
+/* As caixas ocupam a altura de um .control para a linha bater com o campo ao
+   lado (Setor). Sem isso a coluna da direita subia e as duas ficavam tortas. */
+.marcas { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; min-height: 38px; }
+
+/* Marcação simples dentro de um campo (terceirizado, administrador). */
+.marca { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--fg-1); cursor: pointer; padding: 3px 0; }
+
+.marca input { width: 17px; height: 17px; flex-shrink: 0; accent-color: var(--brand); cursor: pointer; }
+
+.marca-nota { font-size: 12px; color: var(--fg-4); line-height: 1.45; }
+
 .ck-add { display: flex; gap: 8px; margin-top: 8px; }
 
 .ck-add .control { flex: 1; }

@@ -220,9 +220,20 @@ export const CARGOS = [
   {id: 'TI', label: 'TI'}
 ]
 
-// Conselho profissional exigido por cargo (CREA = engenharia, CAU =
-// arquitetura). Cargos fora daqui (Orçamentista, Coordenação, TI) não têm
-// conselho aplicável — o campo de registro fica oculto para eles.
+// Conselho profissional: CREA para engenharia, CAU para arquitetura.
+//
+// Vem do SETOR, e só cai no cargo quando o setor não disser nada (Estágio,
+// Coordenação, em branco). Antes vinha só do cargo, e os dois se contradiziam
+// no cadastro real: havia gente no setor Engenharia com cargo Arquitetura,
+// recebendo CAU quando o conselho dela é CREA. O setor é o que define a área
+// de atuação; o cargo, o que a pessoa faz dentro dela.
+export const SETOR_CONSELHO = {
+  'Engenharia': 'CREA',
+  'Arquitetura': 'CAU',
+}
+
+// O cargo virou texto livre, então a comparação ignora caixa e acento:
+// "arquitetura" e "Arquitetura" são o mesmo cargo para quem digitou com pressa.
 export const CARGO_CONSELHO = {
   'Arquitetura': 'CAU',
   'Projetos Prediais': 'CREA',
@@ -233,7 +244,14 @@ export const YES_NO_OPTIONS = [
   {id: 'não', label: 'Não'}
 ]
 
-export const conselhoDoCargo = (cargo) => CARGO_CONSELHO[cargo] || null
+const CARGO_CONSELHO_POR_CHAVE = Object.fromEntries(
+  Object.entries(CARGO_CONSELHO).map(([cargo, conselho]) => [chaveTexto(cargo), conselho]))
+
+export const conselhoDoSetor = (setor) => SETOR_CONSELHO[setor] || null
+export const conselhoDoCargo = (cargo) => CARGO_CONSELHO_POR_CHAVE[chaveTexto(cargo)] || null
+
+// A regra completa: setor manda, cargo é reserva.
+export const conselhoDe = (setor, cargo) => conselhoDoSetor(setor) || conselhoDoCargo(cargo)
 
 
 // ---------- mudanças do projeto (orientações) ----------
