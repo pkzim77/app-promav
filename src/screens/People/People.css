@@ -120,3 +120,6 @@
   background: rgba(37, 211, 102, 0.14);
   color: #128c3e;
 }
+
+/* Vínculo terceirizado: âmbar, o mesmo tom que o selo usa na ficha. */
+.people-badge.terc { background: var(--warning-soft); color: #8a5a08; }

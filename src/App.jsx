@@ -1,7 +1,7 @@
 import React from 'react'
 import { Sidebar, TopBar } from './components/Chrome/Chrome.jsx'
 import { Toast } from './components/primitives/primitives.jsx'
-import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal, PeopleModal, StageItemModal } from './components/Modals/Modals.jsx'
+import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal, PeopleModal, PersonCard, StageItemModal } from './components/Modals/Modals.jsx'
 import { Hub } from './screens/Hub/Hub.jsx'
 import { ProjectList, ProjectDetail } from './screens/Projects/Projects.jsx'
 import { Kanban } from './screens/Kanban/Kanban.jsx'
@@ -263,8 +263,12 @@ export default function App() {
 
   // ----- projects -----
   const openNewProject = (folderId) => setModal({ type: 'project', defaultFolderId: typeof folderId === 'string' ? folderId : null })
-  const openNewPerson = () => setModal({ type: 'person' })
-  const openEditPerson = (user) => setModal({ type: 'person', user })
+  // Ver e editar são coisas diferentes: clicar numa pessoa abre a ficha, e
+  // editar é um botão dentro dela. Antes o clique caía direto no formulário,
+  // e quem só queria um telefone corria o risco de salvar sem querer.
+  const openNewPerson = () => setModal({ type: 'personEdit' })
+  const openPerson = (user) => setModal({ type: 'person', user })
+  const openEditPerson = (user) => setModal({ type: 'personEdit', user })
   const openProjectFromPerson = (projectId) => { setModal(null); setRoute({ view: 'projects', projectId }) }
   const openEditProject = (project) => setModal({ type: 'project', project })
   const renameProject = async (project) => {
@@ -957,7 +961,7 @@ export default function App() {
     screen = <Gantt tasks={tasks} projects={projects} filterProject={filterProject} onFilterProject={setFilterProject} />
   } else if (effectiveRoute.view === 'people' && isAdmin) {
     screen = <People users={users} projects={projects} tasks={tasks} currentUserId={currentUserId}
-      onNewPerson={openNewPerson} onEditPerson={openEditPerson} onDeletePerson={askDeletePerson} />
+      onNewPerson={openNewPerson} onOpenPerson={openPerson} onEditPerson={openEditPerson} onDeletePerson={askDeletePerson} />
   } else if (effectiveRoute.view === 'reports') {
     screen = <Reports projects={projects} tasks={tasks} users={users} />
   } else if (effectiveRoute.view === 'team') {
@@ -1023,6 +1027,10 @@ export default function App() {
         <ProjectModal project={modal.project} users={users} folders={folders} defaultFolderId={modal.defaultFolderId} isAdmin={isAdmin} onSave={saveProject} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'person' && (
+        <PersonCard user={modal.user} projects={projects} tasks={tasks}
+          onEdit={openEditPerson} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'personEdit' && (
         <PeopleModal user={modal.user} currentUserId={currentUserId} users={users} projects={projects} tasks={tasks} changes={changes}
           onOpenProject={openProjectFromPerson} onSave={saveUser} onClose={() => setModal(null)} />
       )}

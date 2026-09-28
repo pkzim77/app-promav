@@ -68,6 +68,82 @@
    lado (Setor). Sem isso a coluna da direita subia e as duas ficavam tortas. */
 .marcas { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; min-height: 38px; }
 
+/* ---------- ficha do profissional (carteirinha) ---------- */
+
+.modal-ficha { max-width: 560px; }
+
+/* Cartão de identificação: fundo de tinta, rótulos em bege da marca e cada
+   valor numa caixa clara — o mesmo desenho do crachá impresso, onde a caixa é
+   a linha que se preenche. */
+.cart { background: var(--brand-ink); border-radius: var(--r-lg); padding: 18px 20px 16px; color: #fff; box-shadow: var(--shadow-md); }
+
+.cart-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 14px; border-bottom: 2px solid var(--accent-strong); }
+
+.cart-marca { display: flex; flex-direction: column; gap: 1px; }
+
+.cart-logo { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+
+.cart-logo b { color: #fff; }
+
+.cart-logo em { color: var(--accent); font-style: normal; }
+
+.cart-eng { font-size: 9.5px; font-weight: 600; letter-spacing: 0.18em; color: var(--accent); }
+
+.cart-org { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,.62); }
+
+.cart-org em { font-style: normal; font-size: 12.5px; letter-spacing: 0; text-transform: none; color: #fff; }
+
+/* Enquanto não há foto, os campos ocupam a largura inteira. A moldura de
+   retrato (3x4, à esquerda) volta quando a foto existir. */
+.cart-corpo { display: flex; gap: 16px; padding-top: 16px; }
+
+.cart-campos { flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; align-content: start; }
+
+.cart-campo { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+.cart-campo.largo { grid-column: 1 / -1; }
+
+.cart-rotulo { font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+
+.cart-caixa { background: #fff; color: #16150F; border-radius: var(--r-sm); padding: 6px 10px; font-size: 13px; font-weight: 600; min-height: 30px; display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Campo sem valor fica visivelmente vazio, como a linha em branco do crachá:
+   some do olho como dado, mas continua aparecendo como lacuna. */
+.cart-caixa.vazia { color: var(--fg-4); font-weight: 500; font-style: italic; background: rgba(255,255,255,.82); }
+
+.cart-rodape { margin: 14px 0 0; font-size: 11.5px; color: rgba(255,255,255,.62); }
+
+.cart-rodape strong { color: #fff; }
+
+/* ---------- o que é do sistema, fora da carteirinha ---------- */
+
+.pc-sistema { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding-top: 16px; }
+
+.pc-selos { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.pc-selo { font-size: 11.5px; font-weight: 600; border-radius: var(--r-full); padding: 3px 10px; background: var(--bg-muted); color: var(--fg-2); }
+
+.pc-selo.admin { background: var(--info-soft); color: #1f64cc; }
+
+.pc-selo.terc { background: var(--warning-soft); color: #8a5a08; }
+
+.pc-selo.ativo { background: var(--success-soft); color: #157a49; }
+
+.pc-selo.inativo { background: var(--danger-soft); color: #b0343a; }
+
+.pc-alocacao { margin: 0; font-size: 13px; color: var(--fg-2); }
+
+.pc-alocacao strong { color: var(--fg-1); }
+
+.pc-sep { color: var(--fg-4); margin: 0 5px; }
+
+.pc-nota { display: flex; align-items: center; gap: 8px; margin: 14px 0 0; padding: 10px 12px; border-radius: var(--r-sm); background: var(--bg-subtle); font-size: 12.5px; color: var(--fg-3); }
+
+@media (max-width: 520px) {
+  .cart-campos { grid-template-columns: 1fr; }
+  .cart-org { display: none; }
+}
+
 /* Marcação simples dentro de um campo (terceirizado, administrador). */
 .marca { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--fg-1); cursor: pointer; padding: 3px 0; }
 

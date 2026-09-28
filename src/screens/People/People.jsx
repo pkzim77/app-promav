@@ -119,11 +119,14 @@ function AdminCell({ value }) {
   )
 }
 
-function terceirizadoCell({value}){
+// Vínculo é o laço de trabalho — interno ou terceirizado. Antes esta coluna
+// se chamava "Terceirizado" e respondia Sim/Não; "Vínculo" estava em cima do
+// número de projetos, que é alocação, não vínculo.
+function VinculoCell({ value }) {
   return value ? (
-  <span className="people-badge admin">Sim</span>
+    <span className="people-badge terc">Terceirizado</span>
   ) : (
-    <span className="people-badge neutral">Não</span>
+    <span className="people-badge neutral">Interno</span>
   )
 }
 
@@ -166,7 +169,7 @@ function ActionsCell({ data, context }) {
   )
 }
 
-export function People({ users = [], projects = [], tasks = [], currentUserId = null, onNewPerson, onEditPerson, onDeletePerson }) {
+export function People({ users = [], projects = [], tasks = [], currentUserId = null, onNewPerson, onOpenPerson, onEditPerson, onDeletePerson }) {
   const gridRef = React.useRef(null)
   const gridWrapRef = React.useRef(null)
   // A coluna "Profissional" mostra o Avatar (cor/iniciais), mas o campo dela é
@@ -246,7 +249,7 @@ export function People({ users = [], projects = [], tasks = [], currentUserId = 
       },
       {
         field: 'projectCount',
-        headerName: 'Vínculo',
+        headerName: 'Alocação',
         cellRenderer: LinkCell,
         filter: false,
         floatingFilter: false,
@@ -254,19 +257,17 @@ export function People({ users = [], projects = [], tasks = [], currentUserId = 
         flex: 0.9,
       },
       {
-        field: 'email',
-        headerName: 'E-mail',
-        valueFormatter: (p) => p.value || '—',
-        flex: 1.2,
-        minWidth: 240,
+        field: 'isOutsourced',
+        headerName: 'Vínculo',
+        cellDataType: 'text',
+        cellRenderer: VinculoCell,
+        filterValueGetter: (p) => (p.data.isOutsourced ? 'Terceirizado' : 'Interno'),
+        minWidth: 130,
+        maxWidth: 150,
       },
-      {
-        field: 'phone',
-        headerName: 'Telefone',
-        valueFormatter: (p) => p.value || '—',
-        flex: 0.7,
-        minWidth: 150,
-      },
+      // E-mail, telefone, registro e administrador saíram daqui para a ficha:
+      // eram dez colunas numa tabela que já precisava de um truque de rolagem
+      // horizontal para caber na tela.
       {
         field: 'jobTitle',
         headerName: 'Cargo',
@@ -275,37 +276,11 @@ export function People({ users = [], projects = [], tasks = [], currentUserId = 
         flex: 0.9,
       },
       {
-        field: 'isOutsourced',
-        headerName: 'Terceirizado',
-        cellDataType: 'text',
-        cellRenderer: terceirizadoCell,
-        filterValueGetter: (p) => (p.data.isOutsourced ? 'Sim' : 'Não'),
-        valueFormatter: (p) => p.value || '—',
-        minWidth: 140,
-        flex: 0.9,
-      },
-      {
-        field: 'professionalRegister',
-        headerName: 'Registro',
-        valueFormatter: (p) => p.value || '—',
-        minWidth: 130,
-        flex: 0.7,
-      },
-      {
         field: 'sector',
         headerName: 'Setor',
         valueFormatter: (p) => p.value || '—',
         minWidth: 130,
         flex: 0.7,
-      },
-      {
-        field: 'isAdmin',
-        headerName: 'Admin',
-        cellDataType: 'text',
-        cellRenderer: AdminCell,
-        filterValueGetter: (p) => (p.data.isAdmin ? 'Admin' : 'Não'),
-        minWidth: 100,
-        maxWidth: 110,
       },
       {
         field: 'isActive',
@@ -354,8 +329,8 @@ export function People({ users = [], projects = [], tasks = [], currentUserId = 
     // neles não deve também contar como "clique na linha" — senão excluir
     // abriria a edição por baixo do modal de confirmação.
     if (event.event?.target?.closest('button')) return
-    onEditPerson?.(event.data)
-  }, [onEditPerson])
+    onOpenPerson?.(event.data)
+  }, [onOpenPerson])
 
   return (
     <div className="page">
