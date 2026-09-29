@@ -71,17 +71,31 @@ export const RESOURCE_ORIGIN_MAP = Object.fromEntries(RESOURCE_ORIGINS.map(o => 
 // modal reaproveita o valor antigo como opção do seletor (ver canonizar()).
 export const PREFEITURAS = ['UMARI', 'MOMBAÇA']
 
+// Órgãos da prefeitura, com o nome INTEIRO como eles se chamam — inclusive os
+// que não são secretaria (Controladoria, Procuradoria). A lista anterior usava
+// nomes curtos e a tela completava com "Secretaria de " na frente, o que agora
+// produziria "Secretaria de Controladoria Geral do Município".
+//
+// O que já está gravado num projeto continua aparecendo no seletor mesmo fora
+// desta lista (opcoesCom, no ProjectModal), então trocar a lista não apaga o
+// valor de projeto nenhum.
 export const SECRETARIAS = [
-  'Obras e Infraestrutura',
-  'Planejamento Urbano',
-  'Meio Ambiente',
-  'Habitação',
-  'Mobilidade Urbana e Transportes',
-  'Serviços Públicos',
-  'Educação',
-  'Saúde',
-  'Esporte, Lazer e Cultura',
-  'Administração',
+  'Controladoria Geral do Município',
+  'Procuradoria Geral do Município',
+  'Sec. de Orçamento e Finanças',
+  'Sec. de Saúde',
+  'Sec. Municipal da Cultura e Turismo',
+  'Sec. Municipal da Mulher',
+  'Sec. Municipal de Administração',
+  'Sec. Municipal de Agricultura e Pecuária',
+  'Sec. Municipal de Desenvolvimento Social',
+  'Sec. Municipal de Desenvolvimento Econômico, Tecnologia e Inovações',
+  'Sec. Municipal de Educação',
+  'Sec. Municipal de Esporte e Juventude',
+  'Sec. Municipal de Governo',
+  'Sec. Municipal de Meio Ambiente e Sustentabilidade',
+  'Sec. Municipal de Obras e Infraestrutura',
+  'Sec. Municipal de Segurança e Ordem Púbica',
 ]
 
 // Contas de manutenção do sistema (users.is_dev) e profissionais inativos

@@ -327,7 +327,9 @@ export function ProjectCover({ project, tasks, users }) {
           <div>
             <label>Prefeitura</label>
             <div className="fact-value">{dash(project.prefeitura)}</div>
-            {project.secretaria && <div className="fact-sub">Secretaria de {project.secretaria}</div>}
+            {/* Sem "Secretaria de " na frente: a lista passou a guardar o nome
+                inteiro do órgão, e nem todos são secretaria. */}
+            {project.secretaria && <div className="fact-sub">{project.secretaria}</div>}
           </div>
         </div>
         <div className="card fact">
