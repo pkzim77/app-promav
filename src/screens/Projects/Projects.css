@@ -306,7 +306,7 @@
 
 .ds-ficha-linha > b { font-weight: 600; color: var(--fg-1); text-align: right; }
 
-/* Cargo e setor em branco no cadastro. Escrito, não omitido: campo vazio some
+/* Formação e setor em branco no cadastro. Escrito, não omitido: campo vazio some
    da tela e a lacuna nunca é resolvida. */
 .ds-ficha-linha > b.vazio { font-weight: 500; font-style: italic; color: var(--fg-4); }
 

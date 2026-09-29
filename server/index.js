@@ -323,9 +323,9 @@ app.get('/api/health', wrap(async (_req, res) => {
 }))
 
 // Forma pública de um usuário (sem hash de senha).
-const PUBLIC_USER = 'id, name, initials, color, email, short_name AS "shortName", phone, sector, job_title AS "jobTitle", professional_register AS "professionalRegister", is_admin AS "isAdmin", is_active AS "isActive", is_outsourced AS "isOutsourced", is_dev AS "isDev"'
+const PUBLIC_USER = 'id, name, initials, color, email, short_name AS "shortName", phone, sector, formation, professional_register AS "professionalRegister", is_admin AS "isAdmin", is_active AS "isActive", is_outsourced AS "isOutsourced", is_dev AS "isDev"'
 // Forma reduzida usada em listas (bootstrap/equipe).
-const LIST_USER = 'id, name, initials, color, email, short_name AS "shortName", phone, sector, job_title AS "jobTitle", professional_register AS "professionalRegister", is_admin AS "isAdmin", is_active AS "isActive", is_outsourced AS "isOutsourced", is_dev AS "isDev"'
+const LIST_USER = 'id, name, initials, color, email, short_name AS "shortName", phone, sector, formation, professional_register AS "professionalRegister", is_admin AS "isAdmin", is_active AS "isActive", is_outsourced AS "isOutsourced", is_dev AS "isDev"'
 
 // ----- autenticação (rotas públicas) -----
 app.post('/api/auth/login', wrap(async (req, res) => {
@@ -334,7 +334,7 @@ app.post('/api/auth/login', wrap(async (req, res) => {
   const [row] = await q('SELECT id, name, initials, color, email, is_admin AS "isAdmin", is_active AS "isActive", password_hash FROM users WHERE lower(email) = lower($1)', [email])
   // Mesma mensagem genérica para senha errada, e-mail inexistente ou conta
   // inativa — nenhuma delas pode revelar se a conta existe ou está desligada.
-  if (!row || row.isActive === false || !(await verifyPassword(password, row.password_hash))) {
+  if (!row || row.isActive === false || !row.password_hash || !(await verifyPassword(password, row.password_hash))) {
     return res.status(401).json({ error: 'Email ou senha incorretos.' })
   }
   const { password_hash, ...user } = row
@@ -396,7 +396,7 @@ app.post('/api/auth/change-password', wrap(async (req, res) => {
   const { currentPassword, newPassword } = req.body
   if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'A nova senha precisa ter ao menos 6 caracteres.' })
   const [row] = await q('SELECT password_hash FROM users WHERE id = $1', [req.userId])
-  if (!row || !(await verifyPassword(currentPassword || '', row.password_hash))) {
+  if (!row || !row.password_hash || !(await verifyPassword(currentPassword || '', row.password_hash))) {
     return res.status(401).json({ error: 'Senha atual incorreta.' })
   }
   await q('UPDATE users SET password_hash = $2 WHERE id = $1', [req.userId, await hashPassword(newPassword)])
@@ -451,7 +451,7 @@ app.get('/api/users', requireAdmin, wrap(async (_req, res) => {
 }))
 
 app.post('/api/users', requireAdmin, wrap(async (req, res) => {
-  const { name, phone, shortName, email, sector = null, jobTitle = null, professionalRegister = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, isOutsourced = false, initialPassword } = req.body || {}
+  const { name, phone, shortName, email, sector = null, formation = null, professionalRegister = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, isOutsourced = false, initialPassword } = req.body || {}
   const cleanName = String(name || '').trim()
   const cleanEmail = String(email || '').trim()
   if (!cleanName || !cleanEmail) return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' })
@@ -467,19 +467,20 @@ app.post('/api/users', requireAdmin, wrap(async (req, res) => {
   })().toUpperCase()
 
   const passwordToUse = typeof initialPassword === 'string' ? initialPassword.trim() : ''
-  if (!passwordToUse || passwordToUse.length < 6) return res.status(400).json({ error: 'A senha inicial precisa ter ao menos 6 caracteres.' })
-  const passwordHash = await hashPassword(passwordToUse)
+  // Terceirizado entra só para controle: sem senha, não acessa o sistema.
+  if (!isOutsourced && passwordToUse.length < 6) return res.status(400).json({ error: 'A senha inicial precisa ter ao menos 6 caracteres.' })
+  const passwordHash = isOutsourced ? null : await hashPassword(passwordToUse)
   await q(`
-    INSERT INTO users (id, name, initials, color, email, phone, short_name, sector, job_title, professional_register, is_admin, is_active, is_outsourced, password_hash, is_dev)
+    INSERT INTO users (id, name, initials, color, email, phone, short_name, sector, formation, professional_register, is_admin, is_active, is_outsourced, password_hash, is_dev)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, false)
-  `, [id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, phone || null, shortName || null, sector || null, jobTitle || null, professionalRegister || null, !!isAdmin, isActive !== false, !!isOutsourced, passwordHash])
+  `, [id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, phone || null, shortName || null, sector || null, normFormacao(formation), normRegistro(formation, professionalRegister), !!isAdmin, isActive !== false, !!isOutsourced, passwordHash])
 
   const [row] = await q(`SELECT ${LIST_USER} FROM users WHERE id = $1`, [id])
   res.status(201).json(row)
 }))
 
 app.put('/api/users/:id', requireAdmin, wrap(async (req, res) => {
-  const { name, phone, shortName, email, sector = null, jobTitle = null, professionalRegister = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, isOutsourced = false, initialPassword } = req.body || {}
+  const { name, phone, shortName, email, sector = null, formation = null, professionalRegister = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, isOutsourced = false, initialPassword } = req.body || {}
   const cleanName = String(name || '').trim()
   const cleanEmail = String(email || '').trim()
   if (!cleanName || !cleanEmail) return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' })
@@ -535,13 +536,13 @@ app.put('/api/users/:id', requireAdmin, wrap(async (req, res) => {
         phone = $6,
         short_name = $7,
         sector = $8,
-        job_title = $9,
+        formation = $9,
         professional_register = $10,
         is_admin = $11,
         is_active = $12,
         is_outsourced = $13${passwordHash ? ', password_hash = $14' : ''}
     WHERE id = $1
-  `, passwordHash ? [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, phone || null, shortName || null, sector || null, jobTitle || null, professionalRegister || null, !!isAdmin, isActive !== false, !!isOutsourced, passwordHash] : [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, phone || null, shortName || null, sector || null, jobTitle || null, professionalRegister || null, !!isAdmin, isActive !== false, !!isOutsourced])
+  `, passwordHash ? [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, phone || null, shortName || null, sector || null, normFormacao(formation), normRegistro(formation, professionalRegister), !!isAdmin, isActive !== false, !!isOutsourced, passwordHash] : [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, phone || null, shortName || null, sector || null, normFormacao(formation), normRegistro(formation, professionalRegister), !!isAdmin, isActive !== false, !!isOutsourced])
 
   const [row] = await q(`SELECT ${LIST_USER} FROM users WHERE id = $1`, [req.params.id])
   if (!row) return res.status(404).json({ error: 'Usuário não encontrado.' })
@@ -1131,10 +1132,14 @@ app.post('/api/sessions/stop', wrap(async (req, res) => {
 // "eu não fui avisado" sem impedir o trabalho de andar.
 // ============================================================
 
-const SETORES = ['engenharia', 'arquitetura', 'orcamento', 'coordenacao', 'direcao', 'estagio']
+const SETORES = ['orcamento', 'arquitetura', 'projetos-prediais', 'projetos-eletricos', 'coordenacao', 'tecnologia-informacao']
+const FORMACOES = ['sistemas-informacao', 'arquitetura', 'engenharia-civil', 'engenharia-eletrica']
 const CHANGE_KINDS = ['requisicao', 'sugestao']
 const URGENCIES = ['low', 'medium', 'high']
 const normSetor = (v) => (SETORES.includes(v) ? v : null)
+const normFormacao = (v) => (FORMACOES.includes(v) ? v : null)
+// Sistemas de Informação não tem conselho: o registro só vale nas demais.
+const normRegistro = (formacao, v) => (normFormacao(formacao) && formacao !== 'sistemas-informacao' && v ? v : null)
 const normKind = (v) => (CHANGE_KINDS.includes(v) ? v : 'requisicao')
 const normUrgency = (v) => (URGENCIES.includes(v) ? v : 'medium')
 
@@ -1516,7 +1521,7 @@ app.put('/api/users/:id/sector', requireAdmin, wrap(async (req, res) => {
   res.json({ id: req.params.id, sector: setor })
 }))
 
-// A própria pessoa define seu setor — é o vínculo da conta com o cargo que
+// A própria pessoa define seu setor — é o vínculo da conta com o setor que
 // exerce. Sem isso, endereçar uma mudança a um setor não encontra ninguém.
 app.post('/api/auth/sector', wrap(async (req, res) => {
   const setor = normSetor(req.body.sector)
@@ -1891,17 +1896,27 @@ async function ensureSchema() {
   // Setor da pessoa (engenharia, arquitetura…). É o que faz "destinatário:
   // Engenharia" resolver para gente de verdade na hora de cobrar ciência.
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS sector text')
-  // Cargo, telefone, nome curto e situação ativa/inativa da pessoa.
+  // Formação (substitui o antigo cargo), telefone, nome curto e situação ativa/inativa da pessoa.
+  await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS formation text')
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title text')
+  // Cargo virou formação. O que já dá para traduzir com segurança é traduzido;
+  // o resto (Projetos Prediais, Coordenação, TI…) fica em branco para o admin
+  // preencher — engenharia civil e elétrica não dá para adivinhar. A coluna
+  // job_title antiga é mantida, sem uso, para não perder dado.
+  await q("UPDATE users SET formation = 'arquitetura' WHERE formation IS NULL AND job_title = 'Arquitetura'")
+  // Setores foram reduzidos a três; só 'Orçamento' tem equivalente direto.
+  await q("UPDATE users SET sector = 'orcamento' WHERE sector IN ('Orcamento', 'orcamento')")
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS phone text')
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS short_name text')
-  // Número do registro profissional (CREA ou CAU, conforme o cargo — ver
-  // CARGO_CONSELHO em data/store.js). Só o número; a sigla não é gravada
-  // porque é sempre derivada do cargo, nunca escolhida à parte.
+  // Número do registro profissional (CREA ou CAU, conforme a formação — ver
+  // FORMACAO_CONSELHO em data/store.js). Só o número; a sigla não é gravada
+  // porque é sempre derivada da formação, nunca escolhida à parte.
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS professional_register text')
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true')
   // Se a pessoa é terceirizada (Sim/Não na ficha) — não confundir com o setor.
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_outsourced boolean NOT NULL DEFAULT false')
+  // Terceirizado não tem login, então a conta pode ficar sem senha.
+  await q('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL')
 
   // ----- permissões -----
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin boolean NOT NULL DEFAULT false')
