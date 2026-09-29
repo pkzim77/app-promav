@@ -98,7 +98,7 @@ function SeletorStatus({ task, onMoveTask }) {
 // costuma cuidar de uma parte, e sem isso só se sabe que "alguém do par" está
 // devendo. Com um único responsável o dono é ele, sem precisar escolher;
 // com mais de um aparece o seletor, e deixar em branco é permitido.
-function Checklist({ task, responsaveis, canEdit, onAssign, onSetState, onEditItem }) {
+function Checklist({ task, responsaveis, canEdit, onAssign, onSetState, onEditItem, onExcluirItem }) {
   const itens = task.checklist || []
   const [editando, setEditando] = React.useState(null)
   if (!itens.length) return null
@@ -140,12 +140,17 @@ function Checklist({ task, responsaveis, canEdit, onAssign, onSetState, onEditIt
             ) : (
               <span className="et-ck-texto">{item.text}</span>
             )}
-            {canEdit && editando !== item.id && (
+            {canEdit && editando !== item.id && (<>
               <button type="button" className="btn-icon et-ck-lapis" onClick={() => setEditando(item.id)}
                 title="Corrigir o texto" aria-label={`Corrigir: ${item.text}`}>
                 <Icon name="pencil" size={13} />
               </button>
-            )}
+              {/* Excluir a atividade sem abrir o modal da etapa. */}
+              <button type="button" className="btn-icon et-ck-lixo" onClick={() => onExcluirItem(task, item)}
+                title="Excluir a atividade" aria-label={`Excluir: ${item.text}`}>
+                <Icon name="trash" size={13} />
+              </button>
+            </>)}
             {responsaveis.length > 1 ? (
               <select className="et-ck-dono" value={item.assigneeId || ''}
                 aria-label={`Responsável por: ${item.text}`}
@@ -171,7 +176,7 @@ function Checklist({ task, responsaveis, canEdit, onAssign, onSetState, onEditIt
 }
 
 function CorpoDaTask({ task, users, sessions, currentUserId, now, canEdit, mostrarTitulo, avulsa = false,
-                      onAssignChecklist, onSetChecklistState, onEditChecklistItem, onMoveTask, onEditTask, onDeleteTask, onStartTimer, onStopTimer }) {
+                      onAssignChecklist, onSetChecklistState, onEditChecklistItem, onExcluirChecklistItem, onMoveTask, onEditTask, onDeleteTask, onStartTimer, onStopTimer }) {
   const membros = taskMembers(task).map(id => users.find(u => u.id === id)).filter(Boolean)
   const semChecklist = !(task.checklist || []).length
   return (
@@ -189,7 +194,8 @@ function CorpoDaTask({ task, users, sessions, currentUserId, now, canEdit, mostr
       {semChecklist
         ? <p className="et-vazio">{avulsa ? 'Esta atividade não tem checklist.' : 'Esta etapa não tem checklist.'}</p>
         : <Checklist task={task} responsaveis={membros} canEdit={canEdit} onAssign={onAssignChecklist}
-            onSetState={onSetChecklistState} onEditItem={onEditChecklistItem} />}
+            onSetState={onSetChecklistState} onEditItem={onEditChecklistItem}
+            onExcluirItem={onExcluirChecklistItem} />}
       {/* O seletor aparece exatamente onde o checklist NÃO decide o status:
           ajustarStatusPeloChecklist() (server/index.js) espelha o status a cada
           marcação e sai cedo quando não há itens. Com checklist, um seletor aqui
@@ -217,21 +223,39 @@ function CorpoDaTask({ task, users, sessions, currentUserId, now, canEdit, mostr
   )
 }
 
-function Etapa({ etapa, aberta, onToggleAberta, ...resto }) {
+// O cabeçalho deixou de ser um botão só: a caixa de seleção e a lixeira são
+// controles próprios, e botão dentro de botão não é HTML válido — o navegador
+// desmancha a marcação e o clique passa a cair em qualquer um dos dois.
+function Etapa({ etapa, aberta, onToggleAberta, selecionando, selecionada, onSelecionar, onExcluirEtapa, canEdit, ...resto }) {
   const duplicada = etapa.tasks.length > 1
   const primeira = etapa.tasks[0]
   return (
-    <li id={'task-' + primeira.id} className={'et-item ' + CLASSE_STATUS[etapa.status]}>
-      <button type="button" className="et-cab" aria-expanded={aberta} onClick={onToggleAberta}>
-        <span className="et-num">{etapa.n}</span>
-        <span className="et-linha">
-          <Icon name="chevronRight" size={14} className="et-seta" />
-          <span className="et-nome">{etapa.nome}</span>
-          <SeloEtapa status={etapa.status} />
-          {etapa.total > 0 && <span className="et-conta">{etapa.feitos}/{etapa.total}</span>}
-          {duplicada && <span className="et-dup">{etapa.tasks.length}× duplicada</span>}
-        </span>
-      </button>
+    <li id={'task-' + primeira.id} className={'et-item ' + CLASSE_STATUS[etapa.status] + (selecionada ? ' et-marcada' : '')}>
+      <div className="et-cab-linha">
+        {selecionando && (
+          <label className="et-marca" onClick={e => e.stopPropagation()}>
+            <input type="checkbox" checked={selecionada}
+              aria-label={`Selecionar a etapa ${etapa.n} · ${etapa.nome}`}
+              onChange={() => onSelecionar(etapa)} />
+          </label>
+        )}
+        <button type="button" className="et-cab" aria-expanded={aberta} onClick={onToggleAberta}>
+          <span className="et-num">{etapa.n}</span>
+          <span className="et-linha">
+            <Icon name="chevronRight" size={14} className="et-seta" />
+            <span className="et-nome">{etapa.nome}</span>
+            <SeloEtapa status={etapa.status} />
+            {etapa.total > 0 && <span className="et-conta">{etapa.feitos}/{etapa.total}</span>}
+            {duplicada && <span className="et-dup">{etapa.tasks.length}× duplicada</span>}
+          </span>
+        </button>
+        {canEdit && !selecionando && (
+          <button type="button" className="btn-icon et-lixo" onClick={() => onExcluirEtapa(etapa)}
+            title="Excluir a etapa" aria-label={`Excluir a etapa ${etapa.n} · ${etapa.nome}`}>
+            <Icon name="trash" size={16} />
+          </button>
+        )}
+      </div>
       {aberta && (
         <div className="et-corpo">
           {duplicada && (
@@ -280,12 +304,18 @@ const FILTROS = [
 ]
 
 export function ProjectStages({ project, tasks, users, sessions, currentUserId, now, canEdit = true, isAdmin = false,
-                               onAssignChecklist, onSetChecklistState, onEditChecklistItem, onMoveTask, onNewTask, onNewStageItem, onCreateStages,
-                               onEditTask, onDeleteTask, onStartTimer, onStopTimer }) {
+                               onAssignChecklist, onSetChecklistState, onEditChecklistItem, onExcluirChecklistItem,
+                               onMoveTask, onNewTask, onNewStageItem, onCreateStages,
+                               onEditTask, onDeleteTask, onDeleteStages, onStartTimer, onStopTimer }) {
   const doProjeto = React.useMemo(() => tasks.filter(t => t.projectId === project.id), [tasks, project.id])
   const { etapas, avulsas } = React.useMemo(() => agruparEtapas(doProjeto), [doProjeto])
 
   const [filtro, setFiltro] = React.useState('all')
+  // Seleção em massa: a lista só ganha caixas quando o modo está ligado. Caixas
+  // permanentes numa lista de onze etapas competem com o clique que abre cada
+  // uma, que é o gesto de sempre.
+  const [selecionando, setSelecionando] = React.useState(false)
+  const [selecionadas, setSelecionadas] = React.useState([])
   // Abre sozinhas as etapas em andamento: é onde o trabalho está agora.
   // Reaproveita o `etapas` do useMemo acima — o inicializador do useState
   // refazia o agrupamento inteiro por conta própria, calculando duas vezes a
@@ -328,8 +358,22 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
     (a, d) => a + (d.fatia === 'emAndamento' ? d.peso - d.executado : 0), 0)
   const visiveis = filtro === 'all' ? etapas : etapas.filter(e => e.status === filtro)
 
+  // Uma etapa duplicada são várias linhas de tarefa com o mesmo número; excluir
+  // a etapa leva todas, senão a duplicata sobreviveria à exclusão.
+  const idsDaEtapa = (e) => e.tasks.map(t => t.id)
+  const marcada = (e) => selecionadas.includes(e.n)
+  const alternarSelecao = (e) => setSelecionadas(sel =>
+    sel.includes(e.n) ? sel.filter(n => n !== e.n) : [...sel, e.n])
+
+  const sairDaSelecao = () => { setSelecionando(false); setSelecionadas([]) }
+  const escolhidas = visiveis.filter(marcada)
+  const excluirSelecionadas = () => {
+    if (!escolhidas.length) return
+    onDeleteStages(escolhidas, sairDaSelecao)
+  }
+
   const semEtapas = etapas.length === 0
-  const repasse = { users, sessions, currentUserId, now, canEdit, onAssignChecklist, onSetChecklistState, onEditChecklistItem, onMoveTask, onEditTask, onDeleteTask, onStartTimer, onStopTimer }
+  const repasse = { users, sessions, currentUserId, now, canEdit, onAssignChecklist, onSetChecklistState, onEditChecklistItem, onExcluirChecklistItem, onMoveTask, onEditTask, onDeleteTask, onStartTimer, onStopTimer }
 
   // O que está fora do template numerado. Com etapas na tela é o apêndice da
   // lista, fechado. Sem template, é tudo o que o projeto tem — e ficava
@@ -408,6 +452,23 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
         </div>
       </div>
 
+      {selecionando && (
+        <div className="et-selecao">
+          <span>
+            {escolhidas.length
+              ? <><strong>{escolhidas.length}</strong> etapa{escolhidas.length === 1 ? '' : 's'} selecionada{escolhidas.length === 1 ? '' : 's'}</>
+              : 'Marque as etapas que devem ser excluídas.'}
+          </span>
+          <div className="et-selecao-acoes">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={sairDaSelecao}>Cancelar</button>
+            <button type="button" className="btn btn-danger btn-sm" onClick={excluirSelecionadas}
+              disabled={!escolhidas.length}>
+              <Icon name="trash" size={15} />Excluir selecionadas
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="et-barra-acoes">
         {FILTROS.map(f => (
           <button key={f.id} type="button"
@@ -417,6 +478,11 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
             {f.label} ({contagem[f.id]})
           </button>
         ))}
+        {canEdit && !selecionando && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelecionando(true)}>
+            <Icon name="check" size={16} stroke={2.2} />Selecionar etapas
+          </button>
+        )}
         {canEdit && (
           <div className="et-nova">
             {/* "Nova atividade" agora pergunta a ETAPA e o trabalho entra como
@@ -438,7 +504,10 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
       ) : (
         <ol className="et-lista">
           {visiveis.map(e => (
-            <Etapa key={e.n} etapa={e} aberta={abertas.has(e.n)} onToggleAberta={() => alternar(e.n)} {...repasse} />
+            <Etapa key={e.n} etapa={e} aberta={abertas.has(e.n)} onToggleAberta={() => alternar(e.n)}
+              selecionando={selecionando} selecionada={marcada(e)} onSelecionar={alternarSelecao}
+              onExcluirEtapa={onDeleteStages ? (etapa) => onDeleteStages([etapa]) : undefined}
+              {...repasse} />
           ))}
         </ol>
       )}

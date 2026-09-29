@@ -1088,9 +1088,22 @@ app.post('/api/projects/:id/stages', gate((req) => req.params.id, CAN.adminOnly)
 // Acrescentar um item ao checklist de uma atividade. Exige Edição total: o
 // item é trabalho novo, diferente de MARCAR um item existente (que 'Só
 // exibição' pode fazer, pela rota PATCH).
+// Acrescenta uma OU VARIAS atividades a etapa. O corpo aceita `text` (uma so,
+// como antes) ou `items` — cada um com texto e dono proprio.
+//
+// Em lote de proposito: a tela passou a deixar escrever varias linhas de uma
+// vez, e uma requisicao por linha repetiria o problema que o "criar template"
+// ja teve — com o Postgres do outro lado da rede, o custo e quase todo de ida
+// e volta.
 app.post('/api/tasks/:id/checklist', gate(taskProjectId, CAN.edit), wrap(async (req, res) => {
-  const text = String(req.body.text || '').trim()
-  if (!text) return res.status(400).json({ error: 'Escreva o que precisa ser feito.' })
+  const entrada = Array.isArray(req.body.items) && req.body.items.length
+    ? req.body.items
+    : [{ text: req.body.text, assigneeId: req.body.assigneeId }]
+  const itens = entrada
+    .map(i => ({ text: String(i?.text || '').trim(), assigneeId: i?.assigneeId || null }))
+    .filter(i => i.text)
+    .slice(0, 50)
+  if (!itens.length) return res.status(400).json({ error: 'Escreva o que precisa ser feito.' })
 
   const [t] = await q('SELECT assignee_id, project_id FROM tasks WHERE id = $1', [req.params.id])
   if (!t) return res.status(404).json({ error: 'Atividade não encontrada.' })
@@ -1104,17 +1117,27 @@ app.post('/api/tasks/:id/checklist', gate(taskProjectId, CAN.edit), wrap(async (
     `SELECT user_id FROM project_members WHERE project_id = $1
      UNION SELECT id FROM users WHERE is_admin`, [t.project_id])
   const podeAssumir = new Set([t.assignee_id, ...daEquipe.map(m => m.user_id)].filter(Boolean))
-  const dono = podeAssumir.has(req.body.assigneeId) ? req.body.assigneeId : null
+  // Dono inválido vira "sem dono" em vez de derrubar a linha inteira: numa
+  // lista de cinco atividades, perder tudo por causa de um seletor errado
+  // custaria mais que a atividade nascer sem responsável.
+  const comDono = itens.map(i => ({ ...i, assigneeId: podeAssumir.has(i.assigneeId) ? i.assigneeId : null }))
 
   await tx(async (client) => {
-    if (dono && dono !== t.assignee_id) {
-      await client.query('INSERT INTO task_members (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.params.id, dono])
+    const donos = [...new Set(comDono.map(i => i.assigneeId).filter(d => d && d !== t.assignee_id))]
+    for (const d of donos) {
+      await client.query('INSERT INTO task_members (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.params.id, d])
     }
     const { rows: [pos] } = await client.query(
       'SELECT COALESCE(max(position), -1) + 1 AS n FROM checklist_items WHERE task_id = $1', [req.params.id])
+    // As N linhas entram num INSERT só, pelo mesmo motivo do "criar template":
+    // o custo é da ida e volta, não do trabalho de cada uma.
     await client.query(
-      'INSERT INTO checklist_items (id, task_id, text, done, position, assignee_id) VALUES ($1, $2, $3, false, $4, $5)',
-      [genId('c'), req.params.id, text, pos.n, dono])
+      `INSERT INTO checklist_items (id, task_id, text, done, position, assignee_id, state)
+       SELECT e.id, $1, e.text, false, $2::int + (e.ord::int), e.dono, 'todo'
+         FROM unnest($3::text[], $4::text[], $5::text[], $6::int[]) AS e(id, text, dono, ord)`,
+      [req.params.id, pos.n,
+       comDono.map(() => genId('c')), comDono.map(i => i.text),
+       comDono.map(i => i.assigneeId), comDono.map((_, k) => k)])
     await client.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [req.params.id])
     // Item novo numa etapa concluída a devolve para "em andamento".
     await ajustarStatusPeloChecklist(client, req.params.id)
@@ -1134,6 +1157,47 @@ app.post('/api/tasks/:id/view', gate(taskProjectId, CAN.light), wrap(async (req,
   )
   if (!rows.length) return res.status(404).json({ error: 'Atividade não encontrada.' })
   res.json(await getTask(req.params.id))
+}))
+
+// Excluir UMA atividade da etapa, sem abrir o modal e sem reescrever o
+// checklist inteiro. Antes a unica saida era o PUT da etapa, que apaga e
+// reinsere todos os itens — muito peso para remover uma linha.
+app.delete('/api/tasks/:id/checklist/:itemId', gate(taskProjectId, CAN.edit), wrap(async (req, res) => {
+  await tx(async (client) => {
+    await client.query('DELETE FROM checklist_items WHERE id = $1 AND task_id = $2', [req.params.itemId, req.params.id])
+    await client.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [req.params.id])
+    // O status da etapa espelha o checklist: tirar a ultima atividade pendente
+    // pode fechar a etapa, e tirar a ultima de todas devolve o controle manual.
+    await ajustarStatusPeloChecklist(client, req.params.id)
+  })
+  res.json(await getTask(req.params.id))
+}))
+
+// Excluir VARIAS etapas de uma vez. A tela tem selecao em massa, e uma
+// requisicao por etapa custaria uma ida e volta cada — onze etapas, onze
+// esperas. Aqui vai tudo num DELETE so.
+//
+// O gate() padrao nao serve: ele resolve UM projeto a partir da rota. Como os
+// ids podem estar em projetos diferentes, a permissao e conferida por projeto
+// antes de apagar qualquer coisa — e uma etapa sem permissao derruba a
+// operacao inteira, em vez de apagar metade.
+app.post('/api/tasks/bulk-delete', wrap(async (req, res) => {
+  const ids = (Array.isArray(req.body.ids) ? req.body.ids : []).filter(i => typeof i === 'string').slice(0, 100)
+  if (!ids.length) return res.status(400).json({ error: 'Nenhuma etapa selecionada.' })
+
+  const alvos = await q('SELECT id, project_id FROM tasks WHERE id = ANY($1::text[])', [ids])
+  if (!alvos.length) return res.status(404).json({ error: 'Nenhuma etapa encontrada.' })
+
+  const projetos = [...new Set(alvos.map(t => t.project_id))]
+  for (const pid of projetos) {
+    const papel = await effectiveRole(req.userId, pid)
+    if (!CAN.edit.includes(papel)) {
+      return res.status(403).json({ error: 'Você não tem permissão para excluir etapas deste projeto.' })
+    }
+  }
+
+  const apagadas = await q('DELETE FROM tasks WHERE id = ANY($1::text[]) RETURNING id', [alvos.map(t => t.id)])
+  res.json({ excluidas: apagadas.map(r => r.id) })
 }))
 
 app.delete('/api/tasks/:id', gate(taskProjectId, CAN.edit), wrap(async (req, res) => {

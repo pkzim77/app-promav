@@ -177,6 +177,30 @@
 
 .ck-add .btn { flex-shrink: 0; }
 
+/* ---------- várias atividades de uma vez (modal "Novas atividades") ---------- */
+
+.ev-lista { display: flex; flex-direction: column; gap: 8px; }
+
+/* O texto manda na largura; o responsável tem largura fixa porque um nome longo
+   não pode empurrar o campo que a pessoa está digitando. */
+.ev-linha { display: flex; align-items: center; gap: 8px; }
+
+.ev-dono { flex-shrink: 0; width: 172px; }
+
+.ev-tirar { flex-shrink: 0; color: var(--fg-4); }
+
+.ev-tirar:hover:not(:disabled) { color: var(--danger); background: var(--danger-soft); }
+
+.ev-mais { margin-top: 9px; }
+
+/* Em tela estreita a linha vira duas: o texto inteiro em cima, o responsável e a
+   lixeira embaixo — com 172px de seletor ao lado sobrariam ~90px para digitar. */
+@media (max-width: 560px) {
+  .ev-linha { flex-wrap: wrap; }
+  .ev-linha .sug { flex-basis: 100%; }
+  .ev-dono { flex: 1; width: auto; }
+}
+
 /* ---------- Member picker (task modal) ---------- */
 
 .member-picker { display: flex; flex-wrap: wrap; gap: 8px; }
