@@ -88,10 +88,11 @@ const PROJECT_SELECT = `
          secretaria,
          origem_recurso AS "origemRecurso",
          -- As colunas guardam os nomes antigos; a API expõe os atuais.
-         -- valor_convenio   → valor estimado (primeira estimativa)
-         -- valor_disponivel → valor orçado   (orçamento fechado)
-         valor_convenio::float8   AS "valorEstimado",
-         valor_disponivel::float8 AS "valorOrcado",
+         valor_estimado::float8   AS "valorEstimado",
+         valor_orcado::float8     AS "valorOrcado",
+         eh_convenio              AS "ehConvenio",
+         convenio_numero          AS "convenioNumero",
+         convenio_valor::float8   AS "convenioValor",
          status,
          responsible_ids AS "responsibleIds",
          default_role AS "defaultRole",
@@ -141,6 +142,13 @@ const PROJ_STATUSES = ['planejamento', 'andamento', 'revisao', 'pendente', 'dili
 const normOrigem = (v) => (ORIGENS_RECURSO.includes(v) ? v : 'federal')
 const normProjStatus = (v) => (PROJ_STATUSES.includes(v) ? v : 'planejamento')
 // Valor do convênio: número >= 0 ou null (não informado).
+// Número do convênio: texto curto e livre, porque o formato varia (030979/2026,
+// CONV.002202.2026, MAPP 6112). Some junto quando a caixa é desmarcada.
+const normConvenioNumero = (v, eh) => {
+  const t = String(v || '').trim()
+  return t ? t.slice(0, 60) : null
+}
+
 const normValor = (v) => {
   if (v === null || v === undefined || v === '') return null
   const n = Number(v)
@@ -624,6 +632,7 @@ app.post('/api/projects', requireAdmin, wrap(async (req, res) => {
   const {
     name, desc = '', color = 'indigo', folderId = null, start, end, notes = '', resources = [], defaultRole = 'full', members = [],
     prefeitura = '', secretaria = '', origemRecurso, valorEstimado, valorOrcado, status, responsibleIds = [],
+    ehConvenio = false, convenioNumero = null, convenioValor = null,
   } = req.body
   try {
   const id = genId('p')
@@ -636,12 +645,14 @@ app.post('/api/projects', requireAdmin, wrap(async (req, res) => {
     const clean = normalizeResources(resources)
     await client.query(
       `INSERT INTO projects (id, name, description, color, folder_id, position, start_date, end_date, notes, resources,
-                            prefeitura, secretaria, origem_recurso, valor_convenio, valor_disponivel, status, responsible_ids, default_role)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+                            prefeitura, secretaria, origem_recurso, valor_estimado, valor_orcado, status, responsible_ids, default_role,
+                            eh_convenio, convenio_numero, convenio_valor)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
       [id, name, desc, color, folderId || null, position, start, end, notes, JSON.stringify(clean),
        String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso),
        normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status),
-       JSON.stringify(normResponsibles(responsibleIds)), normDefaultRole(defaultRole)]
+       JSON.stringify(normResponsibles(responsibleIds)), normDefaultRole(defaultRole),
+       !!ehConvenio, normConvenioNumero(convenioNumero), ehConvenio ? normValor(convenioValor) : null]
     )
     await replaceMembers(client, id, members)
   })
@@ -681,17 +692,23 @@ app.put('/api/projects/:id', gate((req) => req.params.id, CAN.edit), wrap(async 
   const {
     name, desc = '', color, folderId = null, start, end, notes = '', resources = [], defaultRole, members,
     prefeitura = '', secretaria = '', origemRecurso, valorEstimado, valorOrcado, status, responsibleIds = [],
+    ehConvenio = false, convenioNumero = null, convenioValor = null,
   } = req.body
   const clean = normalizeResources(resources)
   const isAdmin = req.projectRole === 'admin'
   const ok = await tx(async (client) => {
     const r = await client.query(
       `UPDATE projects SET name = $2, description = $3, color = $4, folder_id = $5, start_date = $6, end_date = $7, notes = $8, resources = $9,
-                           prefeitura = $10, secretaria = $11, origem_recurso = $12, valor_convenio = $13, valor_disponivel = $14, status = $15, responsible_ids = $16,
+                           prefeitura = $10, secretaria = $11, origem_recurso = $12, valor_estimado = $13, valor_orcado = $14, status = $15, responsible_ids = $16,
+                           eh_convenio = $17, convenio_numero = $18, convenio_valor = $19,
                            updated_at = now()
        WHERE id = $1 RETURNING id`,
       [req.params.id, name, desc, color, folderId || null, start, end, notes, JSON.stringify(clean),
-       String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso), normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status), JSON.stringify(normResponsibles(responsibleIds))]
+       String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso), normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status), JSON.stringify(normResponsibles(responsibleIds)),
+       // Desmarcar "é convênio" leva junto o número e o valor. Sem isso eles
+       // ficariam guardados, invisíveis na tela, e voltariam se alguém
+       // remarcasse a caixa meses depois.
+       !!ehConvenio, normConvenioNumero(convenioNumero), ehConvenio ? normValor(convenioValor) : null]
     )
     if (!r.rows.length) return false
     await pruneOrphanFiles(client, req.params.id, clean) // remove arquivos não referenciados
@@ -1831,9 +1848,44 @@ async function ensureSchema() {
   // Origem do recurso: federal | estadual | municipal | emenda | outro.
   await q("ALTER TABLE projects ADD COLUMN IF NOT EXISTS origem_recurso text NOT NULL DEFAULT 'federal'")
   // Valor ESTIMADO do projeto, em reais (coluna com o nome antigo). NULL = não informado.
-  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS valor_convenio numeric(14,2)')
+  // Os nomes originais mentiam sobre o conteudo: `valor_convenio` guardava o
+  // valor ESTIMADO e `valor_disponivel`, o ORCADO. Com a entrada do convenio de
+  // verdade isso virou armadilha — havia `valor_convenio` e `convenio_valor`
+  // lado a lado, significando coisas diferentes, e escrever na errada
+  // sobrescreveria o valor estimado de todo projeto em silencio.
+  //
+  // O rename vem ANTES do ADD COLUMN abaixo de proposito: invertido, o ADD
+  // recriaria a coluna velha vazia logo depois de ela ser renomeada.
+  await q(`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_name = 'projects' AND column_name = 'valor_convenio')
+         AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_name = 'projects' AND column_name = 'valor_estimado')
+      THEN ALTER TABLE projects RENAME COLUMN valor_convenio TO valor_estimado;
+      END IF;
+      IF EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_name = 'projects' AND column_name = 'valor_disponivel')
+         AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_name = 'projects' AND column_name = 'valor_orcado')
+      THEN ALTER TABLE projects RENAME COLUMN valor_disponivel TO valor_orcado;
+      END IF;
+    END $$`)
+
+  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS valor_estimado numeric(14,2)')
   // Valor ORÇADO do projeto, em reais (coluna com o nome antigo). NULL = não informado.
-  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS valor_disponivel numeric(14,2)')
+  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS valor_orcado numeric(14,2)')
+
+  // ----- convenio -----
+  // O numero do convenio nao tinha onde morar, e por isso 10 projetos o
+  // carregam dentro do NOME ("..._CONV. 030979/2026", "..._MAPP 6112") — o que
+  // alonga o nome, impede filtrar por ele e convida ao erro de digitacao.
+  //
+  // `convenio_valor` e o valor do convenio, e nada mais: o antigo homonimo
+  // `valor_convenio`, que na verdade guardava o estimado, foi renomeado acima.
+  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS eh_convenio boolean NOT NULL DEFAULT false')
+  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS convenio_numero text')
+  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS convenio_valor numeric(14,2)')
   // Status do projeto: mesma lista de PROJ_STATUSES, em ordem de criticidade
   // (planejamento | andamento | revisao | pendente | diligencia | paralisado | concluido).
   // A coluna é text livre, então status novos não pedem migração: basta entrar

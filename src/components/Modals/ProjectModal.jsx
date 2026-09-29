@@ -159,6 +159,9 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const moneyText = (v) => (v != null ? Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '')
   const [estimadoText, setEstimadoText] = React.useState(moneyText(project?.valorEstimado))
   const [orcadoText, setOrcadoText] = React.useState(moneyText(project?.valorOrcado))
+  const [ehConvenio, setEhConvenio] = React.useState(!!project?.ehConvenio)
+  const [convenioNumero, setConvenioNumero] = React.useState(project?.convenioNumero || '')
+  const [convenioValorText, setConvenioValorText] = React.useState(moneyText(project?.convenioValor))
   const [projStatus, setProjStatus] = React.useState(project?.status || 'planejamento')
   const [touched, setTouched] = React.useState(false)
 
@@ -178,6 +181,8 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
       ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start, end, notes: notes.trim(), resources, members,
       prefeitura: prefeitura.trim(), secretaria: secretaria.trim(), responsibleIds,
       origemRecurso, valorEstimado: parseBRL(estimadoText), valorOrcado: parseBRL(orcadoText), status: projStatus,
+      ehConvenio, convenioNumero: ehConvenio ? convenioNumero.trim() : null,
+      convenioValor: ehConvenio ? parseBRL(convenioValorText) : null,
     })
   }
 
@@ -215,17 +220,8 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
         onChangeMembers={setMembers} onChangeResponsibles={setResponsibleIds}
         isAdmin={isAdmin} error={respErr} />
 
-      <div className="field-row">
-        <Field label="Valor estimado">
-          <MoneyInput value={estimadoText?? ''} onChange={setEstimadoText} placeholder="0,00" />
-          {estimadoErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{estimadoErr}</span>}
-        </Field>
-        <Field label="Valor orçado">
-          <MoneyInput value={orcadoText?? ''} onChange={setOrcadoText} placeholder="0,00" />
-          {orcadoErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{orcadoErr}</span>}
-        </Field>
-      </div>
-
+      {/* A origem vem ANTES dos valores: é ela que diz de onde vem o dinheiro,
+          e o convênio — quando existe — é o que dá nome e tamanho a ele. */}
       <div className="field-row">
         <Field label="Origem do recurso">
           <select className="control" value={origemRecurso?? ''} onChange={e => setOrigemRecurso(e.target.value)}>
@@ -236,6 +232,45 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
           <select className="control" value={projStatus?? ''} onChange={e => setProjStatus(e.target.value)}>
             {PROJECT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
+        </Field>
+      </div>
+
+      <Field label="Convênio">
+        <label className="marca">
+          <input type="checkbox" checked={ehConvenio} onChange={e => setEhConvenio(e.target.checked)} />
+          O recurso vem de um convênio
+        </label>
+        {/* Os campos só existem quando a caixa está marcada. Deixá-los visíveis
+            e vazios em todo projeto era mais um par de caixas a ignorar. */}
+        {!ehConvenio && (
+          <span className="marca-nota">
+            Hoje o número do convênio é escrito dentro do nome do projeto, o que
+            alonga o nome e impede filtrar por ele.
+          </span>
+        )}
+      </Field>
+
+      {ehConvenio && (
+        <div className="field-row">
+          <Field label="Número do convênio">
+            <input className="control" value={convenioNumero}
+              placeholder="Ex.: 030979/2026 ou MAPP 6112"
+              onChange={e => setConvenioNumero(e.target.value)} />
+          </Field>
+          <Field label="Valor do convênio">
+            <MoneyInput value={convenioValorText?? ''} onChange={setConvenioValorText} placeholder="0,00" />
+          </Field>
+        </div>
+      )}
+
+      <div className="field-row">
+        <Field label="Valor estimado">
+          <MoneyInput value={estimadoText?? ''} onChange={setEstimadoText} placeholder="0,00" />
+          {estimadoErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{estimadoErr}</span>}
+        </Field>
+        <Field label="Valor orçado">
+          <MoneyInput value={orcadoText?? ''} onChange={setOrcadoText} placeholder="0,00" />
+          {orcadoErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{orcadoErr}</span>}
         </Field>
       </div>
 

@@ -312,6 +312,18 @@ export function ProjectCover({ project, tasks, users }) {
             <strong>{formatBRL(project.valorOrcado)}</strong>
             {origem && <span className="cover-money-sub">{origem.label}</span>}
           </div>
+          {/* O convênio é o dinheiro que de fato entra, então fica ao lado dos
+              outros dois e não escondido na ficha lá embaixo. O número vem como
+              legenda: é o que se cita em ofício e protocolo. */}
+          {project.ehConvenio && (
+            <div className="cover-money alt">
+              <span className="cover-eyebrow">Valor do convênio</span>
+              <strong>{formatBRL(project.convenioValor)}</strong>
+              <span className="cover-money-sub">
+                {project.convenioNumero ? `Convênio ${project.convenioNumero}` : 'Convênio sem número informado'}
+              </span>
+            </div>
+          )}
           <span className="proj-status-badge lg" style={{ color: st.color, background: st.color + '1f' }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: st.color }} />{st.label}
           </span>
@@ -334,9 +346,11 @@ export function ProjectCover({ project, tasks, users }) {
         </div>
         <div className="card fact">
           <span className="fact-ic"><Icon name="banknote" size={18} /></span>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <label>Origem do recurso</label>
             <div className="fact-value">{origem ? origem.label : '—'}</div>
+            {/* O convênio subiu para o topo do Panorama, junto dos outros valores;
+                repeti-lo aqui seria a mesma informação duas vezes na mesma tela. */}
           </div>
         </div>
         <div className="card fact">
