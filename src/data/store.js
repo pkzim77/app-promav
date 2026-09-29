@@ -211,21 +211,23 @@ export function etapasDoProjeto(tasks = [], projectId) {
   return [...vistas.values()].sort((a, b) => a.n - b.n)
 }
 
-//CARGOS
-export const CARGOS = [
-  {id: 'Arquitetura', label: 'Arquitetura'},
-  {id: 'Projetos Prediais', label: 'Projetos Prediais'},
-  {id: 'Orçamentista', label: 'Orçamentista'},
-  {id: 'Coordenação', label: 'Coordenação'},
-  {id: 'TI', label: 'TI'}
+// Formação profissional da pessoa (users.formation).
+export const FORMACOES = [
+  { id: 'sistemas-informacao', label: 'Sistemas de Informação' },
+  { id: 'arquitetura',         label: 'Arquitetura' },
+  { id: 'engenharia-civil',    label: 'Engenharia Civil' },
+  { id: 'engenharia-eletrica', label: 'Engenharia Elétrica' },
 ]
+export const FORMACAO_MAP = Object.fromEntries(FORMACOES.map(f => [f.id, f]))
+export const formacaoLabel = (id) => FORMACAO_MAP[id]?.label || null
 
-// Conselho profissional exigido por cargo (CREA = engenharia, CAU =
-// arquitetura). Cargos fora daqui (Orçamentista, Coordenação, TI) não têm
-// conselho aplicável — o campo de registro fica oculto para eles.
-export const CARGO_CONSELHO = {
-  'Arquitetura': 'CAU',
-  'Projetos Prediais': 'CREA',
+// Conselho profissional exigido por formação (CAU = arquitetura, CREA =
+// engenharia). Formações fora daqui (Sistemas de Informação) não têm conselho
+// aplicável — o campo de registro fica oculto para elas.
+export const FORMACAO_CONSELHO = {
+  'arquitetura': 'CAU',
+  'engenharia-civil': 'CREA',
+  'engenharia-eletrica': 'CREA',
 }
 
 export const YES_NO_OPTIONS = [
@@ -233,19 +235,19 @@ export const YES_NO_OPTIONS = [
   {id: 'não', label: 'Não'}
 ]
 
-export const conselhoDoCargo = (cargo) => CARGO_CONSELHO[cargo] || null
+export const conselhoDaFormacao = (formacao) => FORMACAO_CONSELHO[formacao] || null
 
 
 // ---------- mudanças do projeto (orientações) ----------
 // Setores da PROMAV. Cada usuário pertence a um (users.sector); é isso que faz
 // "destinatário: Engenharia" resolver para pessoas de verdade.
 export const SECTORS = [
-  { id: 'Engenharia',  label: 'Engenharia' },
-  { id: 'Arquitetura', label: 'Arquitetura' },
-  { id: 'Orcamento',   label: 'Orçamento' },
-  { id: 'Coordenacão', label: 'Coordenação' },
-  { id: 'Direcão',     label: 'Direção' },
-  { id: 'Estágio',     label: 'Estágio' },
+  { id: 'orcamento',          label: 'Orçamento' },
+  { id: 'arquitetura',        label: 'Arquitetura' },
+  { id: 'projetos-prediais',  label: 'Projetos Prediais' },
+  { id: 'projetos-eletricos', label: 'Projetos Elétricos' },
+  { id: 'coordenacao',        label: 'Coordenação' },
+  { id: 'tecnologia-informacao', label: 'TI' },
 ]
 export const SECTOR_MAP = Object.fromEntries(SECTORS.map(s => [s.id, s]))
 export const sectorLabel = (id) => SECTOR_MAP[id]?.label || null

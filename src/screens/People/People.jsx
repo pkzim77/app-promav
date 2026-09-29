@@ -4,7 +4,7 @@ import { AgGridReact } from 'ag-grid-react'
 import { ModuleRegistry, ClientSideRowModelModule, TextFilterModule, RenderApiModule, ValidationModule, themeQuartz } from 'ag-grid-community'
 import { Avatar } from '../../components/primitives/primitives.jsx'
 import { Icon } from '../../components/Icon.jsx'
-import { taskMembers } from '../../data/store.js'
+import { taskMembers, formacaoLabel, sectorLabel } from '../../data/store.js'
 
 // Só os módulos que esta tela usa. AllCommunityModule agrega 44 — trazia
 // paginação, exportação CSV, todos os editores de célula, os filtros de data
@@ -268,18 +268,25 @@ export function People({ users = [], projects = [], tasks = [], currentUserId = 
         minWidth: 150,
       },
       {
-        field: 'jobTitle',
-        headerName: 'Cargo',
-        valueFormatter: (p) => p.value || '—',
-        minWidth: 140,
-        flex: 0.9,
+        field: 'sector',
+        headerName: 'Setor',
+        valueFormatter: (p) => sectorLabel(p.value) || '—',
+        minWidth: 145,
+        flex: 1.2,
+      },
+      {
+        field: 'formation',
+        headerName: 'Formação',
+        valueFormatter: (p) => formacaoLabel(p.value) || '—',
+        minWidth: 190,
+        flex: 1.2,
       },
       {
         field: 'isOutsourced',
         headerName: 'Terceirizado',
         cellDataType: 'text',
         cellRenderer: terceirizadoCell,
-        filterValueGetter: (p) => (p.data.isOutsourced ? 'Sim' : 'Não'),
+        filterValueGetter: (p) => (p.data.isOutsourced ? 'Sim' : 'Não'),  
         valueFormatter: (p) => p.value || '—',
         minWidth: 140,
         flex: 0.9,
@@ -287,13 +294,6 @@ export function People({ users = [], projects = [], tasks = [], currentUserId = 
       {
         field: 'professionalRegister',
         headerName: 'Registro',
-        valueFormatter: (p) => p.value || '—',
-        minWidth: 130,
-        flex: 0.7,
-      },
-      {
-        field: 'sector',
-        headerName: 'Setor',
         valueFormatter: (p) => p.value || '—',
         minWidth: 130,
         flex: 0.7,

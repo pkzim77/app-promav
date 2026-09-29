@@ -1,7 +1,7 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field } from '../primitives/primitives.jsx'
-import { CARGOS, YES_NO_OPTIONS, SECTORS, ROLE_LABEL, effectiveProjectRole, AVATAR_COLORS, conselhoDoCargo } from '../../data/store.js'
+import { FORMACOES, YES_NO_OPTIONS, SECTORS, ROLE_LABEL, effectiveProjectRole, AVATAR_COLORS, conselhoDaFormacao } from '../../data/store.js'
 // Cadastro/edição de um profissional, com as abas de dados e de acesso.
 //
 // Este componente veio de 9724d68 (tela de Profissionais). O refactor d14c415
@@ -24,7 +24,7 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
   const [email, setEmail] = React.useState(user?.email || '')
   const [sector, setSector] = React.useState(user?.sector || '')
   const [outsourced, setOutsourced] = React.useState(editing ? (user.isOutsourced ? 'sim' : 'não') : '')
-  const [jobTitle, setJobTitle] = React.useState(user?.jobTitle || '')
+  const [formation, setFormation] = React.useState(user?.formation || '')
   const [professionalRegister, setProfessionalRegister] = React.useState(user?.professionalRegister || '')
   const [initials, setInitials] = React.useState(user?.initials || '')
   const [color, setColor] = React.useState(user?.color || 'var(--proj-blue)')
@@ -52,8 +52,8 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
   // Usa as iniciais manuais se existirem, senão as automáticas.
   const displayInitials = initials || autoInitials
 
-  // CREA ou CAU, conforme o cargo — ou null se o cargo não exige conselho.
-  const conselho = conselhoDoCargo(jobTitle)
+  // CREA ou CAU, conforme a formação — ou null se a formação não exige conselho.
+  const conselho = conselhoDaFormacao(formation)
 
   // Cores disponíveis para o avatar — o valor salvo é sempre o hex puro, seja
   // de um swatch fixo ou escolhido livremente no seletor de cor personalizado.
@@ -66,11 +66,11 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
     : touched && !email.includes('@') ? 'E-mail inválido.' : null
   const shortNameErr = touched && !shortName.trim() ? 'Informe o nome social.' : null
   const phoneErr = touched && !phone.trim() ? 'Informe o telefone.' : null
-  const jobTitleErr = touched && !jobTitle ? 'Selecione o cargo.' : null
+  const formationErr = touched && !formation ? 'Selecione a formação.' : null
   const sectorErr = touched && !sector ? 'Selecione o setor.' : null
   const outsourcedErr = touched && !outsourced ? 'Selecione se é terceirizado.' : null
   const isAdminErr = touched && !isAdmin ? 'Selecione se é administrador.' : null
-  const passwordErr = touched && !editing && initialPassword.trim().length < 6
+  const passwordErr = touched && !editing && outsourced !== 'sim' && initialPassword.trim().length < 6
     ? 'A senha inicial precisa ter ao menos 6 caracteres.' : null
 
   // Projetos em que a pessoa participa e o papel em cada um — só leitura; a
@@ -114,8 +114,8 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
   const save = () => {
     setTouched(true)
     if (!name.trim() || !email.trim() || !email.includes('@')) return
-    if (!shortName.trim() || !phone.trim() || !jobTitle || !sector || !outsourced || !isAdmin) return
-    if (!editing && initialPassword.trim().length < 6) return
+    if (!shortName.trim() || !phone.trim() || !formation || !sector || !outsourced || !isAdmin) return
+    if (!editing && outsourced !== 'sim' && initialPassword.trim().length < 6) return
     onSave({
       ...(user || {}),
       name: name.trim(),
@@ -123,14 +123,14 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
       phone: phone.trim() || null,
       shortName: shortName.trim() || null,
       sector: sector || null,
-      jobTitle: jobTitle.trim() || null,
+      formation: formation || null,
       professionalRegister: conselho ? (professionalRegister.trim() || null) : null,
       initials: displayInitials || 'P',
       color: color || 'var(--proj-blue)',
       isAdmin: isAdmin === 'sim',
       isOutsourced: outsourced === 'sim',
       isActive,
-      initialPassword: initialPassword || undefined,
+      initialPassword: outsourced === 'sim' ? undefined : (initialPassword || undefined),
     })
   }
 
@@ -267,20 +267,27 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
             onChange={e => setPhone(formatarMascaraTelefone(e.target.value))} />
           {phoneErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{phoneErr}</span>}
         </Field>
-      </div>
-
-      <div className="field-row">
         <Field label="E-mail">
           <input className="control" type="email" value={email} placeholder="ana@promav.com.br"
             onChange={e => setEmail(e.target.value)} />
           {emailErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{emailErr}</span>}
         </Field>
-        <Field label="Cargo">
-          <select className="control" value={jobTitle} onChange={e => setJobTitle(e.target.value)}>
+      </div>
+
+      <div className="field-row">
+        <Field label="Setor">
+          <select className="control" value={sector} onChange={e => setSector(e.target.value)}>
             <option value="">Selecione</option>
-            {CARGOS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+            {SECTORS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
-          {jobTitleErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{jobTitleErr}</span>}
+          {sectorErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{sectorErr}</span>}
+        </Field>
+        <Field label="Formação">
+          <select className="control" value={formation} onChange={e => setFormation(e.target.value)}>
+            <option value="">Selecione</option>
+            {FORMACOES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+          {formationErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{formationErr}</span>}
         </Field>
         {conselho && (
         <Field label={`Registro (${conselho})`}>
@@ -294,13 +301,6 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
       
 
       <div className="field-row">
-        <Field label="Setor">
-          <select className="control" value={sector} onChange={e => setSector(e.target.value)}>
-            <option value="">Selecione</option>
-            {SECTORS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
-          {sectorErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{sectorErr}</span>}
-        </Field>
         <Field label="Terceirizado">
           <select className="control" value={outsourced} onChange={e => setOutsourced(e.target.value)}>
             <option value="">Selecione</option>
@@ -321,7 +321,7 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
         </Field>
       </div>
 
-      {!editing && (
+      {!editing && outsourced !== 'sim' && (
         <Field label="Senha inicial">
           <div className="password-field">
             <input className="control" type={revealPassword ? 'text' : 'password'} value={initialPassword}

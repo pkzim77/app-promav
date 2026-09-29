@@ -291,7 +291,7 @@ export default function App() {
         phone: data.phone?.trim() || null,
         shortName: data.shortName?.trim() || null,
         sector: data.sector || null,
-        jobTitle: data.jobTitle?.trim() || null,
+        formation: data.formation || null,
         professionalRegister: data.professionalRegister?.trim() || null,
         initials: data.initials || '',
         color: data.color || 'var(--proj-blue)',

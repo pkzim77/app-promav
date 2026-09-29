@@ -1,6 +1,6 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
-import { RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, dayDiff, parseDate, todayISO, formatBRL, calcularProgresso, fmtFull, taskMembers } from '../../../data/store.js'
+import { formacaoLabel, sectorLabel, RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, dayDiff, parseDate, todayISO, formatBRL, calcularProgresso, fmtFull, taskMembers } from '../../../data/store.js'
 import { NotesText } from '../shared/NotesText.jsx'
 
 // Ficha que abre ao passar o mouse num responsável.
@@ -9,7 +9,7 @@ import { NotesText } from '../shared/NotesText.jsx'
 // aparecer, não se estiliza e não existe no celular — e esta é a aba que se
 // projeta em reunião com o cliente.
 //
-// Cargo e setor são o que foi pedido, mas hoje quase ninguém tem os dois
+// Formação e setor são o que foi pedido, mas hoje quase ninguém tem os dois
 // preenchidos, então a ficha ficaria vazia. Por isso ela também traz o que o
 // app SABE: quantas atividades daquele projeto são da pessoa e quantas ela já
 // fechou. E a falta aparece escrita, em vez de um espaço em branco — é assim
@@ -17,13 +17,13 @@ import { NotesText } from '../shared/NotesText.jsx'
 function FichaResponsavel({ user, doProjeto }) {
   const minhas = doProjeto.filter(t => taskMembers(t).includes(user.id))
   const feitas = minhas.filter(t => t.status === 'done').length
-  const cargo = (user.jobTitle || '').trim()
-  const setor = (user.sector || '').trim()
+  const formacao = formacaoLabel(user.formation)
+  const setor = sectorLabel(user.sector)
 
   // O leitor de tela não enxerga a ficha (ela some com visibility), então a
   // mesma informação vai no rótulo do chip.
   const rotulo = [user.name,
-    cargo ? `cargo ${cargo}` : 'cargo não informado',
+    formacao ? `formação ${formacao}` : 'formação não informada',
     setor ? `setor ${setor}` : 'setor não informado',
     `${minhas.length} atividade${minhas.length === 1 ? '' : 's'} neste projeto`].join(', ')
 
@@ -47,7 +47,7 @@ function FichaResponsavel({ user, doProjeto }) {
             <i>{user.email}</i>
           </span>
         </span>
-        {linha('Cargo', cargo)}
+        {linha('Formação', formacao)}
         {linha('Setor', setor)}
         <span className="ds-ficha-linha">
           <span>Neste projeto</span>
