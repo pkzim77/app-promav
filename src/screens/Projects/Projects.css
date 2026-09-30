@@ -306,7 +306,7 @@
 
 .ds-ficha-linha > b { font-weight: 600; color: var(--fg-1); text-align: right; }
 
-/* Formação e setor em branco no cadastro. Escrito, não omitido: campo vazio some
+/* Cargo e setor em branco no cadastro. Escrito, não omitido: campo vazio some
    da tela e a lacuna nunca é resolvida. */
 .ds-ficha-linha > b.vazio { font-weight: 500; font-style: italic; color: var(--fg-4); }
 
@@ -536,6 +536,41 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
    a altura em alguns navegadores (o box anônimo interno do botão). Com flex o
    comportamento é o mesmo visualmente e não depende disso.
    O min-height garante a altura mesmo se o contêiner interno for ignorado. */
+/* O cabeçalho virou linha com três controles: caixa de seleção, o botão que
+   abre a etapa e a lixeira. Só o do meio estica. */
+.et-cab-linha { display: flex; align-items: center; }
+
+.et-marca { display: flex; align-items: center; padding: 0 0 0 14px; cursor: pointer; }
+
+.et-marca input { width: 17px; height: 17px; accent-color: var(--brand); cursor: pointer; }
+
+.et-item.et-marcada { background: var(--brand-soft); }
+
+/* A lixeira só aparece na linha sob o cursor: uma coluna delas sempre visível
+   convida ao clique errado num gesto que apaga etapa e atividades juntas. */
+.et-lixo { flex-shrink: 0; margin-right: 10px; opacity: 0; transition: opacity var(--dur); }
+
+.et-item:hover .et-lixo, .et-lixo:focus-visible { opacity: 1; }
+
+.et-lixo:hover { color: var(--danger); background: var(--danger-soft); }
+
+@media (hover: none) { .et-lixo { opacity: 1; } }
+
+/* Barra da seleção em massa. */
+.et-selecao { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px 16px; margin-bottom: 14px; border-radius: var(--r-md); background: var(--brand-soft); font-size: 13.5px; color: var(--fg-2); }
+
+.et-selecao strong { color: var(--fg-1); }
+
+.et-selecao-acoes { display: flex; gap: 8px; }
+
+.et-ck-lixo { flex-shrink: 0; padding: 5px; opacity: 0; transition: opacity var(--dur); }
+
+.et-ck li:hover .et-ck-lixo, .et-ck-lixo:focus-visible { opacity: 1; }
+
+.et-ck-lixo:hover { color: var(--danger); background: var(--danger-soft); }
+
+@media (hover: none) { .et-ck-lixo { opacity: 1; } }
+
 .et-cab { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 60px; padding: 13px 18px 13px 14px; background: none; text-align: left; font-family: inherit; }
 
 .et-cab > .et-num { flex-shrink: 0; }

@@ -1,7 +1,7 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field } from '../primitives/primitives.jsx'
-import { FORMACOES, YES_NO_OPTIONS, SECTORS, ROLE_LABEL, effectiveProjectRole, AVATAR_COLORS, conselhoDaFormacao } from '../../data/store.js'
+import { CARGOS, FORMACOES, SECTORS, ROLE_LABEL, effectiveProjectRole, AVATAR_COLORS, conselhoDe } from '../../data/store.js'
 // Cadastro/edição de um profissional, com as abas de dados e de acesso.
 //
 // Este componente veio de 9724d68 (tela de Profissionais). O refactor d14c415
@@ -23,13 +23,16 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
   const [phone, setPhone] = React.useState(user?.phone || '')
   const [email, setEmail] = React.useState(user?.email || '')
   const [sector, setSector] = React.useState(user?.sector || '')
-  const [outsourced, setOutsourced] = React.useState(editing ? (user.isOutsourced ? 'sim' : 'não') : '')
+  const [outsourced, setOutsourced] = React.useState(!!user?.isOutsourced)
+  const [jobTitle, setJobTitle] = React.useState(user?.jobTitle || '')
   const [formation, setFormation] = React.useState(user?.formation || '')
   const [professionalRegister, setProfessionalRegister] = React.useState(user?.professionalRegister || '')
   const [initials, setInitials] = React.useState(user?.initials || '')
   const [color, setColor] = React.useState(user?.color || 'var(--proj-blue)')
-  // Ao criar, começa sem opção marcada ("Selecione"); ao editar, reflete o que já está salvo.
-  const [isAdmin, setIsAdmin] = React.useState(editing ? (user.isAdmin ? 'sim' : 'não') : '')
+  // Caixa de marcar: o padrão de quem entra é "não é terceirizado, não é
+  // administrador". Um seletor de três estados obrigava a responder duas
+  // perguntas cuja resposta é quase sempre a mesma.
+  const [isAdmin, setIsAdmin] = React.useState(!!user?.isAdmin)
   const [isActive, setIsActive] = React.useState(user?.isActive !== false)
   const [initialPassword, setInitialPassword] = React.useState('')
   const [revealPassword, setRevealPassword] = React.useState(false)
@@ -52,8 +55,21 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
   // Usa as iniciais manuais se existirem, senão as automáticas.
   const displayInitials = initials || autoInitials
 
-  // CREA ou CAU, conforme a formação — ou null se a formação não exige conselho.
-  const conselho = conselhoDaFormacao(formation)
+  // CAU ou CREA: a formação manda, o setor responde por quem ainda não tem
+  // formação preenchida, e o cargo é o último recurso. Ver conselhoDe.
+  const conselho = conselhoDe({ formation, sector, jobTitle })
+
+  // Cargo é texto livre, mas com as opções que a casa já usa à mão: a lista
+  // fechada não dava conta dos cargos reais, e texto livre puro faria cada
+  // pessoa escrever "Orçamentista", "orçamentista" e "Orcamentista".
+  const cargoListId = React.useId()
+  const cargosUsados = React.useMemo(() => {
+    const vistos = new Set()
+    return [...CARGOS.map(c => c.label), ...users.map(u => u.jobTitle)]
+      .map(c => String(c || '').trim()).filter(Boolean)
+      .filter(c => { const k = c.toLocaleLowerCase('pt-BR'); if (vistos.has(k)) return false; vistos.add(k); return true })
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  }, [users])
 
   // Cores disponíveis para o avatar — o valor salvo é sempre o hex puro, seja
   // de um swatch fixo ou escolhido livremente no seletor de cor personalizado.
@@ -62,15 +78,15 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
   const currentColorHex = isHex ? color : '#5A7695'
 
   const nameErr = touched && !name.trim() ? 'Informe o nome.' : null
-  const emailErr = touched && !email.trim() ? 'Informe o e-mail.'
-    : touched && !email.includes('@') ? 'E-mail inválido.' : null
+  // Para terceirizado o e-mail é contato, não credencial: pode não existir.
+  const emailErr = touched && !outsourced && !email.trim() ? 'Informe o e-mail.'
+    : touched && email.trim() && !email.includes('@') ? 'E-mail inválido.' : null
   const shortNameErr = touched && !shortName.trim() ? 'Informe o nome social.' : null
-  const phoneErr = touched && !phone.trim() ? 'Informe o telefone.' : null
-  const formationErr = touched && !formation ? 'Selecione a formação.' : null
+  const jobTitleErr = touched && !jobTitle ? 'Selecione o cargo.' : null
   const sectorErr = touched && !sector ? 'Selecione o setor.' : null
-  const outsourcedErr = touched && !outsourced ? 'Selecione se é terceirizado.' : null
-  const isAdminErr = touched && !isAdmin ? 'Selecione se é administrador.' : null
-  const passwordErr = touched && !editing && outsourced !== 'sim' && initialPassword.trim().length < 6
+  // Terceirizado não entra no sistema, então não tem senha para definir.
+  const pedeSenha = !editing && !outsourced
+  const passwordErr = touched && pedeSenha && initialPassword.trim().length < 6
     ? 'A senha inicial precisa ter ao menos 6 caracteres.' : null
 
   // Projetos em que a pessoa participa e o papel em cada um — só leitura; a
@@ -113,9 +129,13 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
 
   const save = () => {
     setTouched(true)
-    if (!name.trim() || !email.trim() || !email.includes('@')) return
-    if (!shortName.trim() || !phone.trim() || !formation || !sector || !outsourced || !isAdmin) return
-    if (!editing && outsourced !== 'sim' && initialPassword.trim().length < 6) return
+    if (!name.trim()) return
+    if (!outsourced && (!email.trim() || !email.includes('@'))) return
+    if (email.trim() && !email.includes('@')) return
+    // Telefone não entra: é contato, não identidade. Exigir travava o cadastro
+    // de quem ainda não tinha o número à mão, e ele pode ser preenchido depois.
+    if (!shortName.trim() || !jobTitle || !sector) return
+    if (pedeSenha && initialPassword.trim().length < 6) return
     onSave({
       ...(user || {}),
       name: name.trim(),
@@ -123,14 +143,15 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
       phone: phone.trim() || null,
       shortName: shortName.trim() || null,
       sector: sector || null,
+      jobTitle: jobTitle.trim() || null,
       formation: formation || null,
       professionalRegister: conselho ? (professionalRegister.trim() || null) : null,
       initials: displayInitials || 'P',
       color: color || 'var(--proj-blue)',
-      isAdmin: isAdmin === 'sim',
-      isOutsourced: outsourced === 'sim',
+      isAdmin,
+      isOutsourced: outsourced,
       isActive,
-      initialPassword: outsourced === 'sim' ? undefined : (initialPassword || undefined),
+      initialPassword: pedeSenha ? (initialPassword || undefined) : undefined,
     })
   }
 
@@ -262,15 +283,26 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
           onChange={e => setShortName(e.target.value)} />
           {shortNameErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{shortNameErr}</span>}
         </Field>
-        <Field label="Telefone">
+        <Field label="Telefone (opcional)">
           <input className="control" type="tel" value={phone} placeholder="(11) 99999-9999"
             onChange={e => setPhone(formatarMascaraTelefone(e.target.value))} />
-          {phoneErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{phoneErr}</span>}
         </Field>
-        <Field label="E-mail">
+      </div>
+
+      <div className="field-row">
+        <Field label={outsourced ? 'E-mail (contato, opcional)' : 'E-mail'}>
           <input className="control" type="email" value={email} placeholder="ana@promav.com.br"
             onChange={e => setEmail(e.target.value)} />
           {emailErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{emailErr}</span>}
+        </Field>
+        <Field label="Cargo">
+          <input className="control" value={jobTitle} list={cargoListId}
+            placeholder="Ex.: Projetos Prediais"
+            onChange={e => setJobTitle(e.target.value)} />
+          <datalist id={cargoListId}>
+            {cargosUsados.map(c => <option key={c} value={c} />)}
+          </datalist>
+          {jobTitleErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{jobTitleErr}</span>}
         </Field>
       </div>
 
@@ -282,12 +314,16 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
           </select>
           {sectorErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{sectorErr}</span>}
         </Field>
-        <Field label="Formação">
+        {/* Opcional de propósito: são quatro diplomas e o cadastro tem gente
+            que não cabe em nenhum. Quando está em branco, o conselho vem do
+            setor — é assim que o CREA continua aparecendo para quem já está
+            cadastrado sem formação. */}
+        <Field label="Formação (opcional)">
           <select className="control" value={formation} onChange={e => setFormation(e.target.value)}>
             <option value="">Selecione</option>
-            {FORMACOES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+            {FORMACOES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
           </select>
-          {formationErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{formationErr}</span>}
+          <span className="marca-nota">É o diploma, não o que a pessoa faz: é daqui que sai CAU ou CREA.</span>
         </Field>
         {conselho && (
         <Field label={`Registro (${conselho})`}>
@@ -301,27 +337,30 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
       
 
       <div className="field-row">
-        <Field label="Terceirizado">
-          <select className="control" value={outsourced} onChange={e => setOutsourced(e.target.value)}>
-            <option value="">Selecione</option>
-            {YES_NO_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
-          {outsourcedErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{outsourcedErr}</span>}
-        </Field>
-        <Field label="Administrador">
-          <select className="control" value={isAdmin} disabled={isSelf && isLastAdmin}
-            onChange={e => setIsAdmin(e.target.value)}>
-            <option value="">Selecione</option>
-            {YES_NO_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
-          {isSelf && isLastAdmin && (
-            <span style={{ fontSize: 12, color: 'var(--fg-4)' }}>Você não pode remover sua própria permissão de administrador.</span>
+        <Field label="Vínculo e acesso">
+          {/* Lado a lado, e com a altura de um campo: empilhadas, as duas caixas
+              faziam esta coluna crescer o dobro da vizinha e a linha saía torta. */}
+          <div className="marcas">
+            <label className="marca">
+              <input type="checkbox" checked={outsourced} onChange={e => setOutsourced(e.target.checked)} />
+              Terceirizado
+            </label>
+            <label className="marca">
+              <input type="checkbox" checked={isAdmin} disabled={isSelf && isLastAdmin}
+                onChange={e => setIsAdmin(e.target.checked)} />
+              Administrador
+            </label>
+          </div>
+          {outsourced && (
+            <span className="marca-nota">Não acessa o sistema: entra sem senha e o e-mail vira contato.</span>
           )}
-          {isAdminErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{isAdminErr}</span>}
+          {isSelf && isLastAdmin && (
+            <span className="marca-nota">Você não pode remover sua própria permissão de administrador.</span>
+          )}
         </Field>
       </div>
 
-      {!editing && outsourced !== 'sim' && (
+      {pedeSenha && (
         <Field label="Senha inicial">
           <div className="password-field">
             <input className="control" type={revealPassword ? 'text' : 'password'} value={initialPassword}

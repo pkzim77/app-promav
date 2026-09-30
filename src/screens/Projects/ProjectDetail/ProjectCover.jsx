@@ -1,6 +1,6 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
-import { formacaoLabel, sectorLabel, RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, dayDiff, parseDate, todayISO, formatBRL, calcularProgresso, fmtFull, taskMembers } from '../../../data/store.js'
+import { sectorLabel, RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, dayDiff, parseDate, todayISO, formatBRL, calcularProgresso, fmtFull, taskMembers } from '../../../data/store.js'
 import { NotesText } from '../shared/NotesText.jsx'
 
 // Ficha que abre ao passar o mouse num responsável.
@@ -9,7 +9,7 @@ import { NotesText } from '../shared/NotesText.jsx'
 // aparecer, não se estiliza e não existe no celular — e esta é a aba que se
 // projeta em reunião com o cliente.
 //
-// Formação e setor são o que foi pedido, mas hoje quase ninguém tem os dois
+// Cargo e setor são o que foi pedido, mas hoje quase ninguém tem os dois
 // preenchidos, então a ficha ficaria vazia. Por isso ela também traz o que o
 // app SABE: quantas atividades daquele projeto são da pessoa e quantas ela já
 // fechou. E a falta aparece escrita, em vez de um espaço em branco — é assim
@@ -17,13 +17,13 @@ import { NotesText } from '../shared/NotesText.jsx'
 function FichaResponsavel({ user, doProjeto }) {
   const minhas = doProjeto.filter(t => taskMembers(t).includes(user.id))
   const feitas = minhas.filter(t => t.status === 'done').length
-  const formacao = formacaoLabel(user.formation)
+  const cargo = (user.jobTitle || '').trim()
   const setor = sectorLabel(user.sector)
 
   // O leitor de tela não enxerga a ficha (ela some com visibility), então a
   // mesma informação vai no rótulo do chip.
   const rotulo = [user.name,
-    formacao ? `formação ${formacao}` : 'formação não informada',
+    cargo ? `cargo ${cargo}` : 'cargo não informado',
     setor ? `setor ${setor}` : 'setor não informado',
     `${minhas.length} atividade${minhas.length === 1 ? '' : 's'} neste projeto`].join(', ')
 
@@ -47,7 +47,7 @@ function FichaResponsavel({ user, doProjeto }) {
             <i>{user.email}</i>
           </span>
         </span>
-        {linha('Formação', formacao)}
+        {linha('Cargo', cargo)}
         {linha('Setor', setor)}
         <span className="ds-ficha-linha">
           <span>Neste projeto</span>
@@ -312,6 +312,18 @@ export function ProjectCover({ project, tasks, users }) {
             <strong>{formatBRL(project.valorOrcado)}</strong>
             {origem && <span className="cover-money-sub">{origem.label}</span>}
           </div>
+          {/* O convênio é o dinheiro que de fato entra, então fica ao lado dos
+              outros dois e não escondido na ficha lá embaixo. O número vem como
+              legenda: é o que se cita em ofício e protocolo. */}
+          {project.ehConvenio && (
+            <div className="cover-money alt">
+              <span className="cover-eyebrow">Valor do convênio</span>
+              <strong>{formatBRL(project.convenioValor)}</strong>
+              <span className="cover-money-sub">
+                {project.convenioNumero ? `Convênio ${project.convenioNumero}` : 'Convênio sem número informado'}
+              </span>
+            </div>
+          )}
           <span className="proj-status-badge lg" style={{ color: st.color, background: st.color + '1f' }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: st.color }} />{st.label}
           </span>
@@ -327,14 +339,18 @@ export function ProjectCover({ project, tasks, users }) {
           <div>
             <label>Prefeitura</label>
             <div className="fact-value">{dash(project.prefeitura)}</div>
-            {project.secretaria && <div className="fact-sub">Secretaria de {project.secretaria}</div>}
+            {/* Sem "Secretaria de " na frente: a lista passou a guardar o nome
+                inteiro do órgão, e nem todos são secretaria. */}
+            {project.secretaria && <div className="fact-sub">{project.secretaria}</div>}
           </div>
         </div>
         <div className="card fact">
           <span className="fact-ic"><Icon name="banknote" size={18} /></span>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <label>Origem do recurso</label>
             <div className="fact-value">{origem ? origem.label : '—'}</div>
+            {/* O convênio subiu para o topo do Panorama, junto dos outros valores;
+                repeti-lo aqui seria a mesma informação duas vezes na mesma tela. */}
           </div>
         </div>
         <div className="card fact">

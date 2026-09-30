@@ -122,8 +122,17 @@ export const api = {
   // enxerga — o servidor filtra, não o cliente.
   checklistSuggestions: () => req('GET', '/checklist-suggestions'),
 
-  // Acrescenta um item ao checklist de uma atividade — exige Edição total.
-  addChecklistItem: (taskId, text, assigneeId) => req('POST', `/tasks/${taskId}/checklist`, { text, assigneeId }),
+  // Acrescenta uma ou VÁRIAS atividades a uma etapa, numa ida só — exige Edição
+  // total. A tela deixa escrever uma lista, e um pedido por linha repetiria o
+  // custo de rede que o "criar template" já teve.
+  addChecklistItems: (taskId, items) => req('POST', `/tasks/${taskId}/checklist`, { items }),
+
+  // Remove UMA atividade da etapa, sem reescrever o checklist inteiro.
+  deleteChecklistItem: (taskId, itemId) => req('DELETE', `/tasks/${taskId}/checklist/${itemId}`),
+
+  // Exclui várias etapas de uma vez (seleção em massa da aba Etapas).
+  bulkDeleteTasks: (ids) => req('POST', '/tasks/bulk-delete', { ids }),
+
   // Cria de uma vez as etapas do processo que faltam no projeto.
   createStages: (projectId) => req('POST', `/projects/${projectId}/stages`),
 

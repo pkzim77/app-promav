@@ -1,7 +1,7 @@
 import React from 'react'
 import { Sidebar, TopBar } from './components/Chrome/Chrome.jsx'
 import { Toast } from './components/primitives/primitives.jsx'
-import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal, PeopleModal, StageItemModal } from './components/Modals/Modals.jsx'
+import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal, PeopleModal, PersonCard, StageItemModal } from './components/Modals/Modals.jsx'
 import { Hub } from './screens/Hub/Hub.jsx'
 import { ProjectList, ProjectDetail } from './screens/Projects/Projects.jsx'
 import { Kanban } from './screens/Kanban/Kanban.jsx'
@@ -50,6 +50,9 @@ export default function App() {
   const [changes, setChanges] = React.useState([])
   const [route, setRoute] = React.useState({ view: 'hub' })
   const [projectSearch, setProjectSearch] = React.useState('')
+  // Em que pé está o relatório desta semana: 'nenhum', 'rascunho' ou 'enviado'.
+  // Vem do bootstrap, então acompanha sozinho quando a pessoa salva ou envia.
+  const [relatorioSemana, setRelatorioSemana] = React.useState('enviado')
   // Pasta aberta na lista de projetos. Fica aqui, e não dentro do ProjectList,
   // porque aquela tela desmonta ao abrir um projeto.
   const [pastaAberta, setPastaAberta] = React.useState(null)
@@ -96,6 +99,7 @@ export default function App() {
       const data = await api.bootstrap()
       setUsers(data.users); setProjects(data.projects); setTasks(data.tasks); setSessions(data.sessions); setFolders(data.folders || [])
       setChanges(data.changes || [])
+      setRelatorioSemana(data.relatorioSemana || 'nenhum')
       setDataReady(true)
     } catch (err) { setLoadError(err.message) }
   }, [])
@@ -259,8 +263,12 @@ export default function App() {
 
   // ----- projects -----
   const openNewProject = (folderId) => setModal({ type: 'project', defaultFolderId: typeof folderId === 'string' ? folderId : null })
-  const openNewPerson = () => setModal({ type: 'person' })
-  const openEditPerson = (user) => setModal({ type: 'person', user })
+  // Ver e editar são coisas diferentes: clicar numa pessoa abre a ficha, e
+  // editar é um botão dentro dela. Antes o clique caía direto no formulário,
+  // e quem só queria um telefone corria o risco de salvar sem querer.
+  const openNewPerson = () => setModal({ type: 'personEdit' })
+  const openPerson = (user) => setModal({ type: 'person', user })
+  const openEditPerson = (user) => setModal({ type: 'personEdit', user })
   const openProjectFromPerson = (projectId) => { setModal(null); setRoute({ view: 'projects', projectId }) }
   const openEditProject = (project) => setModal({ type: 'project', project })
   const renameProject = async (project) => {
@@ -291,6 +299,7 @@ export default function App() {
         phone: data.phone?.trim() || null,
         shortName: data.shortName?.trim() || null,
         sector: data.sector || null,
+        jobTitle: data.jobTitle?.trim() || null,
         formation: data.formation || null,
         professionalRegister: data.professionalRegister?.trim() || null,
         initials: data.initials || '',
@@ -462,6 +471,48 @@ export default function App() {
       setModal(null)
     } catch (e) { falhou('Erro ao salvar atividade.') }
   }
+  // Excluir etapa — uma pela lixeira da linha, ou várias pela seleção em massa.
+  //
+  // A pergunta muda conforme haja atividades dentro. Avisar que "as atividades
+  // também serão excluídas" numa etapa vazia assusta à toa; e não avisar numa
+  // cheia esconde o que o clique realmente faz.
+  const askDeleteStages = (etapas, aoConcluir) => {
+    const alvos = etapas.flatMap(e => e.tasks)
+    const ids = alvos.map(t => t.id)
+    const nAtividades = alvos.reduce((n, t) => n + (t.checklist || []).length, 0)
+    const uma = etapas.length === 1
+    const alvo = uma ? `a etapa "${etapas[0].n} · ${etapas[0].nome}"` : `estas ${etapas.length} etapas`
+    setModal({
+      type: 'confirm',
+      title: uma ? 'Excluir etapa?' : `Excluir ${etapas.length} etapas?`,
+      message: nAtividades
+        ? `Você quer excluir ${alvo} e suas ${nAtividades} atividade${nAtividades === 1 ? '' : 's'}?`
+        : `Você quer excluir ${alvo}?`,
+      onConfirm: async () => {
+        try {
+          await api.bulkDeleteTasks(ids)
+          setTasks(ts => ts.filter(t => !ids.includes(t.id)))
+          setModal(null)
+          aoConcluir?.()
+          flash(uma ? 'Etapa excluída.' : `${etapas.length} etapas excluídas.`)
+        } catch (e) { falhou(e.message || 'Erro ao excluir a etapa.') }
+      },
+    })
+  }
+
+  // Excluir UMA atividade de dentro da etapa, pela lixeira da linha.
+  const askDeleteChecklistItem = (task, item) => setModal({
+    type: 'confirm', title: 'Excluir atividade?',
+    message: `Você quer excluir "${item.text}" desta etapa?`,
+    onConfirm: async () => {
+      try {
+        const saved = await api.deleteChecklistItem(task.id, item.id)
+        setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
+        setModal(null); flash('Atividade excluída.')
+      } catch (e) { falhou(e.message || 'Erro ao excluir a atividade.') }
+    },
+  })
+
   const askDeleteTask = (task) => setModal({
     type: 'confirm', title: 'Excluir atividade?',
     message: `"${task.title}" será removida permanentemente.`,
@@ -540,12 +591,16 @@ export default function App() {
   const openStageItem = (projectId, stageTaskId = null) =>
     setModal({ type: 'stageItem', projectId, stageTaskId })
 
-  const addStageItem = async (taskId, text, assigneeId) => {
+  // Várias atividades de uma vez, numa ida só ao servidor — a tela deixa
+  // escrever uma lista, e um pedido por linha repetiria o custo de rede que o
+  // "criar template" já teve.
+  const addStageItems = async (taskId, items) => {
     try {
-      const saved = await api.addChecklistItem(taskId, text, assigneeId)
+      const saved = await api.addChecklistItems(taskId, items)
       setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
-      setModal(null); flash('Atividade adicionada à etapa.')
-    } catch (e) { falhou(e.message || 'Erro ao adicionar a atividade.') }
+      setModal(null)
+      flash(items.length === 1 ? 'Atividade adicionada à etapa.' : `${items.length} atividades adicionadas à etapa.`)
+    } catch (e) { falhou(e.message || 'Erro ao adicionar as atividades.') }
   }
 
   // Cria de uma vez as etapas do processo que faltam no projeto. É idempotente
@@ -915,7 +970,9 @@ export default function App() {
 
   let screen
   if (effectiveRoute.view === 'hub') {
-    screen = <Hub projects={projects} recentProjects={searchedProjects} tasks={tasks} onNavigate={navigate} sessions={sessions} currentUserId={currentUserId} now={now} />
+    screen = <Hub projects={projects} recentProjects={searchedProjects} tasks={tasks} changes={changes}
+      onNavigate={navigate} sessions={sessions} currentUserId={currentUserId} authUser={authUser}
+      relatorioSemana={relatorioSemana} now={now} />
   } else if (effectiveRoute.view === 'projects' && currentProject) {
     screen = <ProjectDetail project={currentProject} tasks={tasks} users={users} changes={changes}
       sessions={sessions} currentUserId={currentUserId} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
@@ -929,6 +986,7 @@ export default function App() {
       onNewTask={openNewTask} onEditTask={openEditTask} onDeleteTask={askDeleteTask}
       onAssignChecklist={assignChecklistItem} onMoveTask={moveTask}
       onSetChecklistState={setChecklistState} onEditChecklistItem={editChecklistItem}
+      onExcluirChecklistItem={askDeleteChecklistItem} onDeleteStages={askDeleteStages}
       onNewStageItem={openStageItem} onCreateStages={createStages}
       onCopyResource={copyResourceLink} onDeleteResource={(resource) => askDeleteResource(currentProject, resource)}
       onAddResource={openAddResource}
@@ -951,7 +1009,7 @@ export default function App() {
     screen = <Gantt tasks={tasks} projects={projects} filterProject={filterProject} onFilterProject={setFilterProject} />
   } else if (effectiveRoute.view === 'people' && isAdmin) {
     screen = <People users={users} projects={projects} tasks={tasks} currentUserId={currentUserId}
-      onNewPerson={openNewPerson} onEditPerson={openEditPerson} onDeletePerson={askDeletePerson} />
+      onNewPerson={openNewPerson} onOpenPerson={openPerson} onEditPerson={openEditPerson} onDeletePerson={askDeletePerson} />
   } else if (effectiveRoute.view === 'reports') {
     screen = <Reports projects={projects} tasks={tasks} users={users} />
   } else if (effectiveRoute.view === 'team') {
@@ -1017,6 +1075,10 @@ export default function App() {
         <ProjectModal project={modal.project} users={users} folders={folders} defaultFolderId={modal.defaultFolderId} isAdmin={isAdmin} onSave={saveProject} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'person' && (
+        <PersonCard user={modal.user} projects={projects} tasks={tasks}
+          onEdit={openEditPerson} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'personEdit' && (
         <PeopleModal user={modal.user} currentUserId={currentUserId} users={users} projects={projects} tasks={tasks} changes={changes}
           onOpenProject={openProjectFromPerson} onSave={saveUser} onClose={() => setModal(null)} />
       )}
@@ -1035,7 +1097,7 @@ export default function App() {
           users={users}
           members={projects.find(p => p.id === modal.projectId)?.members || []}
           defaultStageId={modal.stageTaskId}
-          onSave={addStageItem}
+          onSave={addStageItems}
           onClose={() => setModal(null)} />
       )}
       {modal?.type === 'confirm' && (

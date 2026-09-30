@@ -81,7 +81,10 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   }
 
   return (
-    <Modal className="project-modal" title={ro ? 'Detalhes da atividade' : (editing ? 'Editar atividade' : 'Nova atividade')} onClose={onClose}
+    // O que este modal edita é uma ETAPA do processo; o que ele lista dentro é
+    // que são as atividades. O nome antigo chamava as duas coisas de atividade,
+    // e na aba Etapas isso ficou impossível de conversar.
+    <Modal className="project-modal" title={ro ? 'Detalhes da etapa' : (editing ? 'Editar etapa' : 'Nova etapa')} onClose={onClose}
       footer={ro ? (
         <button className="btn btn-secondary" onClick={onClose}>Fechar</button>
       ) : (<>
@@ -156,7 +159,7 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
 
       <div className="field">
         <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          Checklist
+          Atividades
           {checklist.length > 0 && (
             <span className="ck-badge"><Icon name="check" size={11} stroke={3} />{ckDone}/{checklist.length} · {ckPct}%</span>
           )}
@@ -201,7 +204,7 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
           <div className="ck-add">
             <SugestaoItem value={newItem} onChange={setNewItem} onEnter={addItem}
               etapa={nEtapa} jaUsados={checklist.map(i => i.text)}
-              placeholder="Adicionar item…" ariaLabel="Adicionar item ao checklist" />
+              placeholder="Adicionar atividade…" ariaLabel="Adicionar atividade à etapa" />
             <button type="button" className="btn btn-secondary btn-sm" onClick={addItem}><Icon name="plus" size={15} stroke={2.2} />Adicionar</button>
           </div>
         )}

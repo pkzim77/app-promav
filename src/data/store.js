@@ -71,17 +71,31 @@ export const RESOURCE_ORIGIN_MAP = Object.fromEntries(RESOURCE_ORIGINS.map(o => 
 // modal reaproveita o valor antigo como opção do seletor (ver canonizar()).
 export const PREFEITURAS = ['UMARI', 'MOMBAÇA']
 
+// Órgãos da prefeitura, com o nome INTEIRO como eles se chamam — inclusive os
+// que não são secretaria (Controladoria, Procuradoria). A lista anterior usava
+// nomes curtos e a tela completava com "Secretaria de " na frente, o que agora
+// produziria "Secretaria de Controladoria Geral do Município".
+//
+// O que já está gravado num projeto continua aparecendo no seletor mesmo fora
+// desta lista (opcoesCom, no ProjectModal), então trocar a lista não apaga o
+// valor de projeto nenhum.
 export const SECRETARIAS = [
-  'Obras e Infraestrutura',
-  'Planejamento Urbano',
-  'Meio Ambiente',
-  'Habitação',
-  'Mobilidade Urbana e Transportes',
-  'Serviços Públicos',
-  'Educação',
-  'Saúde',
-  'Esporte, Lazer e Cultura',
-  'Administração',
+  'Controladoria Geral do Município',
+  'Procuradoria Geral do Município',
+  'Sec. de Orçamento e Finanças',
+  'Sec. de Saúde',
+  'Sec. Municipal da Cultura e Turismo',
+  'Sec. Municipal da Mulher',
+  'Sec. Municipal de Administração',
+  'Sec. Municipal de Agricultura e Pecuária',
+  'Sec. Municipal de Desenvolvimento Social',
+  'Sec. Municipal de Desenvolvimento Econômico, Tecnologia e Inovações',
+  'Sec. Municipal de Educação',
+  'Sec. Municipal de Esporte e Juventude',
+  'Sec. Municipal de Governo',
+  'Sec. Municipal de Meio Ambiente e Sustentabilidade',
+  'Sec. Municipal de Obras e Infraestrutura',
+  'Sec. Municipal de Segurança e Ordem Púbica',
 ]
 
 // Contas de manutenção do sistema (users.is_dev) e profissionais inativos
@@ -211,7 +225,27 @@ export function etapasDoProjeto(tasks = [], projectId) {
   return [...vistas.values()].sort((a, b) => a.n - b.n)
 }
 
-// Formação profissional da pessoa (users.formation).
+//CARGOS
+// Sementes para a sugestão do campo de cargo, que é texto livre. Orçamentista,
+// Coordenação e Direção eram SETORES até esta versão — e era justamente isso
+// que impedia o CREA de aparecer para eles: nenhum é uma área, os três são
+// cargos dentro de Engenharia.
+//
+// Cargo não é formação. "Projetos Prediais" e "Estagiário de TI" são cargos
+// reais no cadastro e não cabem em nenhum diploma; a formação, logo abaixo, é
+// que diz qual conselho a pessoa tem.
+export const CARGOS = [
+  {id: 'Arquitetura', label: 'Arquitetura'},
+  {id: 'Projetos Prediais', label: 'Projetos Prediais'},
+  {id: 'Orçamentista', label: 'Orçamentista'},
+  {id: 'Coordenação', label: 'Coordenação'},
+  {id: 'Direção', label: 'Direção'},
+  {id: 'Estagiário', label: 'Estagiário'},
+  {id: 'TI', label: 'TI'}
+]
+
+// Formação profissional da pessoa (users.formation). É o diploma, não o que a
+// pessoa faz: é daqui que sai o conselho, porque o conselho segue a formação.
 export const FORMACOES = [
   { id: 'sistemas-informacao', label: 'Sistemas de Informação' },
   { id: 'arquitetura',         label: 'Arquitetura' },
@@ -221,13 +255,29 @@ export const FORMACOES = [
 export const FORMACAO_MAP = Object.fromEntries(FORMACOES.map(f => [f.id, f]))
 export const formacaoLabel = (id) => FORMACAO_MAP[id]?.label || null
 
-// Conselho profissional exigido por formação (CAU = arquitetura, CREA =
-// engenharia). Formações fora daqui (Sistemas de Informação) não têm conselho
-// aplicável — o campo de registro fica oculto para elas.
+// Conselho profissional: CREA para engenharia, CAU para arquitetura.
+//
+// Três fontes, da mais precisa para a menos. A FORMAÇÃO manda, porque o
+// conselho é dela: o arquiteto que trabalha no setor de Engenharia tem CAU, e
+// quem é de Engenharia Elétrica tem CREA sem que o setor precise dizer nada.
+// O setor entra quando a formação está em branco (a maioria do cadastro hoje),
+// e o cargo é o último recurso.
 export const FORMACAO_CONSELHO = {
   'arquitetura': 'CAU',
   'engenharia-civil': 'CREA',
   'engenharia-eletrica': 'CREA',
+}
+
+export const SETOR_CONSELHO = {
+  'Engenharia': 'CREA',
+  'Arquitetura': 'CAU',
+}
+
+// O cargo virou texto livre, então a comparação ignora caixa e acento:
+// "arquitetura" e "Arquitetura" são o mesmo cargo para quem digitou com pressa.
+export const CARGO_CONSELHO = {
+  'Arquitetura': 'CAU',
+  'Projetos Prediais': 'CREA',
 }
 
 export const YES_NO_OPTIONS = [
@@ -235,19 +285,41 @@ export const YES_NO_OPTIONS = [
   {id: 'não', label: 'Não'}
 ]
 
+const CARGO_CONSELHO_POR_CHAVE = Object.fromEntries(
+  Object.entries(CARGO_CONSELHO).map(([cargo, conselho]) => [chaveTexto(cargo), conselho]))
+
 export const conselhoDaFormacao = (formacao) => FORMACAO_CONSELHO[formacao] || null
+export const conselhoDoSetor = (setor) => SETOR_CONSELHO[setor] || null
+export const conselhoDoCargo = (cargo) => CARGO_CONSELHO_POR_CHAVE[chaveTexto(cargo)] || null
+
+// A regra completa. Recebe a pessoa (ou o rascunho dela no formulário) em vez
+// de três argumentos soltos: na ordem errada eles se trocam sem erro nenhum.
+//
+// Sistemas de Informação é formação SEM conselho, e isso precisa vencer o setor:
+// quem tem esse diploma no setor Engenharia não tem CREA. Por isso a checagem é
+// "tem formação conhecida?", não "a formação deu conselho?".
+//
+// Formação que não está na lista conta como formação em branco, e não como
+// "sem conselho": valor estranho vindo do banco cai no setor em vez de sumir
+// com o campo de registro. O servidor faz a mesma coisa (normFormacao).
+export const conselhoDe = ({ formation = null, sector = null, jobTitle = null } = {}) =>
+  (FORMACAO_MAP[formation] ? conselhoDaFormacao(formation) : conselhoDoSetor(sector) || conselhoDoCargo(jobTitle))
 
 
 // ---------- mudanças do projeto (orientações) ----------
-// Setores da PROMAV. Cada usuário pertence a um (users.sector); é isso que faz
-// "destinatário: Engenharia" resolver para pessoas de verdade.
+// Setores da PROMAV: as três ÁREAS que existem na empresa. Cada usuário
+// pertence a uma (users.sector); é isso que faz "destinatário: Engenharia"
+// resolver para pessoas de verdade. O conselho sai da FORMAÇÃO; o setor só
+// responde por ele em quem ainda não tem formação preenchida.
+//
+// A lista tinha seis e quatro deles eram cargo, não área — Orçamento,
+// Coordenação, Direção e Estágio. Com isso o orçamentista, que é engenheiro,
+// ficava num "setor" sem conselho e nunca via o campo de CREA. Quem diferencia
+// as pessoas dentro da área é o CARGO.
 export const SECTORS = [
-  { id: 'orcamento',          label: 'Orçamento' },
-  { id: 'arquitetura',        label: 'Arquitetura' },
-  { id: 'projetos-prediais',  label: 'Projetos Prediais' },
-  { id: 'projetos-eletricos', label: 'Projetos Elétricos' },
-  { id: 'coordenacao',        label: 'Coordenação' },
-  { id: 'tecnologia-informacao', label: 'TI' },
+  { id: 'Engenharia',  label: 'Engenharia' },
+  { id: 'Arquitetura', label: 'Arquitetura' },
+  { id: 'TI',          label: 'TI' },
 ]
 export const SECTOR_MAP = Object.fromEntries(SECTORS.map(s => [s.id, s]))
 export const sectorLabel = (id) => SECTOR_MAP[id]?.label || null
