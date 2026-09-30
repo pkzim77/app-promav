@@ -249,7 +249,11 @@ function Etapa({ etapa, aberta, onToggleAberta, selecionando, selecionada, onSel
             {duplicada && <span className="et-dup">{etapa.tasks.length}× duplicada</span>}
           </span>
         </button>
-        {canEdit && !selecionando && (
+        {/* Só com a etapa fechada. Aberta, cada atividade já tem a sua lixeira
+            logo abaixo, e duas lixeiras à mesma distância do olho — uma que
+            apaga a etapa inteira e outra que apaga uma linha — é o tipo de
+            vizinhança que faz alguém apagar a coisa errada. */}
+        {canEdit && !selecionando && !aberta && (
           <button type="button" className="btn-icon et-lixo" onClick={() => onExcluirEtapa(etapa)}
             title="Excluir a etapa" aria-label={`Excluir a etapa ${etapa.n} · ${etapa.nome}`}>
             <Icon name="trash" size={16} />
@@ -266,7 +270,7 @@ function Etapa({ etapa, aberta, onToggleAberta, selecionando, selecionada, onSel
             </p>
           )}
           {etapa.tasks.map(t => (
-            <CorpoDaTask key={t.id} task={t} mostrarTitulo={duplicada} {...resto} />
+            <CorpoDaTask key={t.id} task={t} mostrarTitulo={duplicada} canEdit={canEdit} {...resto} />
           ))}
         </div>
       )}
