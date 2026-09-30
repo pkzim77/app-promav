@@ -515,6 +515,21 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
 
 .et-barra-acoes .et-nova { margin-left: auto; }
 
+/* O filtro é um chip que abre menu. `.msel` já dá o position: relative que a
+   lista usa para se ancorar; o que muda aqui é a largura — a lista do msel
+   cola nas duas bordas do botão, e este é estreito demais para caber
+   "Em andamento (11)" em cada linha. */
+.et-filtro-botao { cursor: pointer; }
+
+.et-filtro-lista { right: auto; min-width: 232px; }
+
+/* O menu é feito de botões, e botão não herda alinhamento de texto. */
+.et-filtro-lista .msel-item { width: 100%; text-align: left; background: none; border: 0; font-family: inherit; }
+
+.et-filtro-lista .msel-item.on { background: var(--brand-soft); }
+
+.et-filtro-seta { margin-left: 2px; opacity: .7; }
+
 /* flex-shrink: 0 porque .proj-etapas é um flex column — sem isto a lista pode
    ser espremida a quase nada quando o contêiner tem altura restrita. */
 .et-lista { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface); flex-shrink: 0; }
