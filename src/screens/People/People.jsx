@@ -4,7 +4,7 @@ import { AgGridReact } from 'ag-grid-react'
 import { ModuleRegistry, ClientSideRowModelModule, TextFilterModule, RenderApiModule, ValidationModule, themeQuartz } from 'ag-grid-community'
 import { Avatar } from '../../components/primitives/primitives.jsx'
 import { Icon } from '../../components/Icon.jsx'
-import { taskMembers } from '../../data/store.js'
+import { taskMembers, sectorLabel } from '../../data/store.js'
 
 // Só os módulos que esta tela usa. AllCommunityModule agrega 44 — trazia
 // paginação, exportação CSV, todos os editores de célula, os filtros de data
@@ -108,14 +108,6 @@ function LinkCell({ data }) {
       <span> · </span>
       <strong>{data.openActivities}</strong> em aberto
     </div>
-  )
-}
-
-function AdminCell({ value }) {
-  return value ? (
-    <span className="people-badge admin">Admin</span>
-  ) : (
-    <span className="people-badge neutral">Não</span>
   )
 }
 
@@ -269,15 +261,15 @@ export function People({ users = [], projects = [], tasks = [], currentUserId = 
       // eram dez colunas numa tabela que já precisava de um truque de rolagem
       // horizontal para caber na tela.
       {
-        field: 'jobTitle',
-        headerName: 'Cargo',
-        valueFormatter: (p) => p.value || '—',
-        minWidth: 140,
-        flex: 0.9,
-      },
-      {
         field: 'sector',
         headerName: 'Setor',
+        valueFormatter: (p) => sectorLabel(p.value) || '—',
+        minWidth: 145,
+        flex: 1.2,
+      },
+      {
+        field: 'jobTitle',
+        headerName: 'Cargo',
         valueFormatter: (p) => p.value || '—',
         minWidth: 130,
         flex: 0.7,

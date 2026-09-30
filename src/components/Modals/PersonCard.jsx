@@ -1,7 +1,7 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal } from '../primitives/primitives.jsx'
-import { taskMembers, conselhoDe, sectorLabel } from '../../data/store.js'
+import { taskMembers, conselhoDe, sectorLabel, formacaoLabel } from '../../data/store.js'
 
 // Ficha do profissional — leitura, no formato de uma carteira de identificação.
 //
@@ -46,7 +46,7 @@ export function PersonCard({ user, projects = [], tasks = [], onEdit, onClose })
     return { projetos: ids.size, emAberto: abertas }
   }, [user.id, projects, tasks])
 
-  const conselho = conselhoDe(user.sector, user.jobTitle)
+  const conselho = conselhoDe(user)
   const inativo = user.isActive === false
 
   return (
@@ -81,6 +81,7 @@ export function PersonCard({ user, projects = [], tasks = [], onEdit, onClose })
             <Campo rotulo="Nome completo" valor={user.name} largo />
             <Campo rotulo="Cargo" valor={traco(user.jobTitle)} vazio={!user.jobTitle} />
             <Campo rotulo="Setor" valor={user.sector ? (sectorLabel(user.sector) || user.sector) : '—'} vazio={!user.sector} />
+            <Campo rotulo="Formação" valor={formacaoLabel(user.formation) || '—'} vazio={!user.formation} />
             <Campo rotulo={conselho || 'Registro'}
               valor={conselho ? traco(user.professionalRegister) : 'não se aplica'}
               vazio={!conselho || !user.professionalRegister} />

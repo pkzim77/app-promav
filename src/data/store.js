@@ -230,6 +230,10 @@ export function etapasDoProjeto(tasks = [], projectId) {
 // Coordenação e Direção eram SETORES até esta versão — e era justamente isso
 // que impedia o CREA de aparecer para eles: nenhum é uma área, os três são
 // cargos dentro de Engenharia.
+//
+// Cargo não é formação. "Projetos Prediais" e "Estagiário de TI" são cargos
+// reais no cadastro e não cabem em nenhum diploma; a formação, logo abaixo, é
+// que diz qual conselho a pessoa tem.
 export const CARGOS = [
   {id: 'Arquitetura', label: 'Arquitetura'},
   {id: 'Projetos Prediais', label: 'Projetos Prediais'},
@@ -240,13 +244,30 @@ export const CARGOS = [
   {id: 'TI', label: 'TI'}
 ]
 
+// Formação profissional da pessoa (users.formation). É o diploma, não o que a
+// pessoa faz: é daqui que sai o conselho, porque o conselho segue a formação.
+export const FORMACOES = [
+  { id: 'sistemas-informacao', label: 'Sistemas de Informação' },
+  { id: 'arquitetura',         label: 'Arquitetura' },
+  { id: 'engenharia-civil',    label: 'Engenharia Civil' },
+  { id: 'engenharia-eletrica', label: 'Engenharia Elétrica' },
+]
+export const FORMACAO_MAP = Object.fromEntries(FORMACOES.map(f => [f.id, f]))
+export const formacaoLabel = (id) => FORMACAO_MAP[id]?.label || null
+
 // Conselho profissional: CREA para engenharia, CAU para arquitetura.
 //
-// Vem do SETOR, e só cai no cargo quando o setor não disser nada (Estágio,
-// Coordenação, em branco). Antes vinha só do cargo, e os dois se contradiziam
-// no cadastro real: havia gente no setor Engenharia com cargo Arquitetura,
-// recebendo CAU quando o conselho dela é CREA. O setor é o que define a área
-// de atuação; o cargo, o que a pessoa faz dentro dela.
+// Três fontes, da mais precisa para a menos. A FORMAÇÃO manda, porque o
+// conselho é dela: o arquiteto que trabalha no setor de Engenharia tem CAU, e
+// quem é de Engenharia Elétrica tem CREA sem que o setor precise dizer nada.
+// O setor entra quando a formação está em branco (a maioria do cadastro hoje),
+// e o cargo é o último recurso.
+export const FORMACAO_CONSELHO = {
+  'arquitetura': 'CAU',
+  'engenharia-civil': 'CREA',
+  'engenharia-eletrica': 'CREA',
+}
+
 export const SETOR_CONSELHO = {
   'Engenharia': 'CREA',
   'Arquitetura': 'CAU',
@@ -267,17 +288,29 @@ export const YES_NO_OPTIONS = [
 const CARGO_CONSELHO_POR_CHAVE = Object.fromEntries(
   Object.entries(CARGO_CONSELHO).map(([cargo, conselho]) => [chaveTexto(cargo), conselho]))
 
+export const conselhoDaFormacao = (formacao) => FORMACAO_CONSELHO[formacao] || null
 export const conselhoDoSetor = (setor) => SETOR_CONSELHO[setor] || null
 export const conselhoDoCargo = (cargo) => CARGO_CONSELHO_POR_CHAVE[chaveTexto(cargo)] || null
 
-// A regra completa: setor manda, cargo é reserva.
-export const conselhoDe = (setor, cargo) => conselhoDoSetor(setor) || conselhoDoCargo(cargo)
+// A regra completa. Recebe a pessoa (ou o rascunho dela no formulário) em vez
+// de três argumentos soltos: na ordem errada eles se trocam sem erro nenhum.
+//
+// Sistemas de Informação é formação SEM conselho, e isso precisa vencer o setor:
+// quem tem esse diploma no setor Engenharia não tem CREA. Por isso a checagem é
+// "tem formação conhecida?", não "a formação deu conselho?".
+//
+// Formação que não está na lista conta como formação em branco, e não como
+// "sem conselho": valor estranho vindo do banco cai no setor em vez de sumir
+// com o campo de registro. O servidor faz a mesma coisa (normFormacao).
+export const conselhoDe = ({ formation = null, sector = null, jobTitle = null } = {}) =>
+  (FORMACAO_MAP[formation] ? conselhoDaFormacao(formation) : conselhoDoSetor(sector) || conselhoDoCargo(jobTitle))
 
 
 // ---------- mudanças do projeto (orientações) ----------
 // Setores da PROMAV: as três ÁREAS que existem na empresa. Cada usuário
 // pertence a uma (users.sector); é isso que faz "destinatário: Engenharia"
-// resolver para pessoas de verdade, e é daqui que sai o conselho.
+// resolver para pessoas de verdade. O conselho sai da FORMAÇÃO; o setor só
+// responde por ele em quem ainda não tem formação preenchida.
 //
 // A lista tinha seis e quatro deles eram cargo, não área — Orçamento,
 // Coordenação, Direção e Estágio. Com isso o orçamentista, que é engenheiro,
