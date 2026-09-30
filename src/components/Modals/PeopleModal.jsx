@@ -1,7 +1,7 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field } from '../primitives/primitives.jsx'
-import { CARGOS, SECTORS, ROLE_LABEL, effectiveProjectRole, AVATAR_COLORS, conselhoDe } from '../../data/store.js'
+import { CARGOS, FORMACOES, SECTORS, ROLE_LABEL, effectiveProjectRole, AVATAR_COLORS, conselhoDe } from '../../data/store.js'
 // Cadastro/edição de um profissional, com as abas de dados e de acesso.
 //
 // Este componente veio de 9724d68 (tela de Profissionais). O refactor d14c415
@@ -25,6 +25,7 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
   const [sector, setSector] = React.useState(user?.sector || '')
   const [outsourced, setOutsourced] = React.useState(!!user?.isOutsourced)
   const [jobTitle, setJobTitle] = React.useState(user?.jobTitle || '')
+  const [formation, setFormation] = React.useState(user?.formation || '')
   const [professionalRegister, setProfessionalRegister] = React.useState(user?.professionalRegister || '')
   const [initials, setInitials] = React.useState(user?.initials || '')
   const [color, setColor] = React.useState(user?.color || 'var(--proj-blue)')
@@ -54,8 +55,9 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
   // Usa as iniciais manuais se existirem, senão as automáticas.
   const displayInitials = initials || autoInitials
 
-  // CREA ou CAU pelo setor, caindo no cargo quando o setor não disser nada.
-  const conselho = conselhoDe(sector, jobTitle)
+  // CAU ou CREA: a formação manda, o setor responde por quem ainda não tem
+  // formação preenchida, e o cargo é o último recurso. Ver conselhoDe.
+  const conselho = conselhoDe({ formation, sector, jobTitle })
 
   // Cargo é texto livre, mas com as opções que a casa já usa à mão: a lista
   // fechada não dava conta dos cargos reais, e texto livre puro faria cada
@@ -142,13 +144,14 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
       shortName: shortName.trim() || null,
       sector: sector || null,
       jobTitle: jobTitle.trim() || null,
+      formation: formation || null,
       professionalRegister: conselho ? (professionalRegister.trim() || null) : null,
       initials: displayInitials || 'P',
       color: color || 'var(--proj-blue)',
       isAdmin,
       isOutsourced: outsourced,
       isActive,
-      initialPassword: initialPassword || undefined,
+      initialPassword: pedeSenha ? (initialPassword || undefined) : undefined,
     })
   }
 
@@ -301,6 +304,27 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
           </datalist>
           {jobTitleErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{jobTitleErr}</span>}
         </Field>
+      </div>
+
+      <div className="field-row">
+        <Field label="Setor">
+          <select className="control" value={sector} onChange={e => setSector(e.target.value)}>
+            <option value="">Selecione</option>
+            {SECTORS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+          {sectorErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{sectorErr}</span>}
+        </Field>
+        {/* Opcional de propósito: são quatro diplomas e o cadastro tem gente
+            que não cabe em nenhum. Quando está em branco, o conselho vem do
+            setor — é assim que o CREA continua aparecendo para quem já está
+            cadastrado sem formação. */}
+        <Field label="Formação (opcional)">
+          <select className="control" value={formation} onChange={e => setFormation(e.target.value)}>
+            <option value="">Selecione</option>
+            {FORMACOES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+          </select>
+          <span className="marca-nota">É o diploma, não o que a pessoa faz: é daqui que sai CAU ou CREA.</span>
+        </Field>
         {conselho && (
         <Field label={`Registro (${conselho})`}>
           <input className="control" value={professionalRegister}
@@ -313,13 +337,6 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
       
 
       <div className="field-row">
-        <Field label="Setor">
-          <select className="control" value={sector} onChange={e => setSector(e.target.value)}>
-            <option value="">Selecione</option>
-            {SECTORS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
-          {sectorErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{sectorErr}</span>}
-        </Field>
         <Field label="Vínculo e acesso">
           {/* Lado a lado, e com a altura de um campo: empilhadas, as duas caixas
               faziam esta coluna crescer o dobro da vizinha e a linha saía torta. */}

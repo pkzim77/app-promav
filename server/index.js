@@ -331,9 +331,9 @@ app.get('/api/health', wrap(async (_req, res) => {
 }))
 
 // Forma pública de um usuário (sem hash de senha).
-const PUBLIC_USER = 'id, name, initials, color, email, short_name AS "shortName", phone, sector, job_title AS "jobTitle", professional_register AS "professionalRegister", is_admin AS "isAdmin", is_active AS "isActive", is_outsourced AS "isOutsourced", is_dev AS "isDev"'
+const PUBLIC_USER = 'id, name, initials, color, email, short_name AS "shortName", phone, sector, formation, professional_register AS "professionalRegister", is_admin AS "isAdmin", is_active AS "isActive", is_outsourced AS "isOutsourced", is_dev AS "isDev"'
 // Forma reduzida usada em listas (bootstrap/equipe).
-const LIST_USER = 'id, name, initials, color, email, short_name AS "shortName", phone, sector, job_title AS "jobTitle", professional_register AS "professionalRegister", is_admin AS "isAdmin", is_active AS "isActive", is_outsourced AS "isOutsourced", is_dev AS "isDev"'
+const LIST_USER = 'id, name, initials, color, email, short_name AS "shortName", phone, sector, job_title AS "jobTitle", formation, professional_register AS "professionalRegister", is_admin AS "isAdmin", is_active AS "isActive", is_outsourced AS "isOutsourced", is_dev AS "isDev"'
 
 // ----- autenticação (rotas públicas) -----
 app.post('/api/auth/login', wrap(async (req, res) => {
@@ -415,7 +415,7 @@ app.post('/api/auth/change-password', wrap(async (req, res) => {
   const { currentPassword, newPassword } = req.body
   if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'A nova senha precisa ter ao menos 6 caracteres.' })
   const [row] = await q('SELECT password_hash FROM users WHERE id = $1', [req.userId])
-  if (!row || !(await verifyPassword(currentPassword || '', row.password_hash))) {
+  if (!row || !row.password_hash || !(await verifyPassword(currentPassword || '', row.password_hash))) {
     return res.status(401).json({ error: 'Senha atual incorreta.' })
   }
   await q('UPDATE users SET password_hash = $2 WHERE id = $1', [req.userId, await hashPassword(newPassword)])
@@ -476,7 +476,7 @@ app.get('/api/users', requireAdmin, wrap(async (_req, res) => {
 }))
 
 app.post('/api/users', requireAdmin, wrap(async (req, res) => {
-  const { name, phone, shortName, email, sector = null, jobTitle = null, professionalRegister = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, isOutsourced = false, initialPassword } = req.body || {}
+  const { name, phone, shortName, email, sector = null, jobTitle = null, formation = null, professionalRegister = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, isOutsourced = false, initialPassword } = req.body || {}
   const cleanName = String(name || '').trim()
   const cleanEmail = String(email || '').trim()
   const terceirizado = !!isOutsourced
@@ -504,16 +504,16 @@ app.post('/api/users', requireAdmin, wrap(async (req, res) => {
   }
   const passwordHash = terceirizado ? null : await hashPassword(passwordToUse)
   await q(`
-    INSERT INTO users (id, name, initials, color, email, phone, short_name, sector, job_title, professional_register, is_admin, is_active, is_outsourced, password_hash, is_dev)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, false)
-  `, [id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail || null, phone || null, shortName || null, sector || null, jobTitle || null, professionalRegister || null, !!isAdmin, isActive !== false, terceirizado, passwordHash])
+    INSERT INTO users (id, name, initials, color, email, phone, short_name, sector, job_title, formation, professional_register, is_admin, is_active, is_outsourced, password_hash, is_dev)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, false)
+  `, [id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail || null, phone || null, shortName || null, sector || null, jobTitle || null, normFormacao(formation), normRegistro(formation, sector, jobTitle, professionalRegister), !!isAdmin, isActive !== false, terceirizado, passwordHash])
 
   const [row] = await q(`SELECT ${LIST_USER} FROM users WHERE id = $1`, [id])
   res.status(201).json(row)
 }))
 
 app.put('/api/users/:id', requireAdmin, wrap(async (req, res) => {
-  const { name, phone, shortName, email, sector = null, jobTitle = null, professionalRegister = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, isOutsourced = false, initialPassword } = req.body || {}
+  const { name, phone, shortName, email, sector = null, jobTitle = null, formation = null, professionalRegister = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, isOutsourced = false, initialPassword } = req.body || {}
   const cleanName = String(name || '').trim()
   const cleanEmail = String(email || '').trim()
   const terceirizado = !!isOutsourced
@@ -577,14 +577,15 @@ app.put('/api/users/:id', requireAdmin, wrap(async (req, res) => {
         short_name = $7,
         sector = $8,
         job_title = $9,
-        professional_register = $10,
-        is_admin = $11,
-        is_active = $12,
-        is_outsourced = $13${terceirizado ? ', password_hash = NULL' : passwordHash ? ', password_hash = $14' : ''}
+        formation = $10,
+        professional_register = $11,
+        is_admin = $12,
+        is_active = $13,
+        is_outsourced = $14${terceirizado ? ', password_hash = NULL' : passwordHash ? ', password_hash = $15' : ''}
     WHERE id = $1
   `, passwordHash && !terceirizado
-    ? [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail || null, phone || null, shortName || null, sector || null, jobTitle || null, professionalRegister || null, !!isAdmin, isActive !== false, terceirizado, passwordHash]
-    : [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail || null, phone || null, shortName || null, sector || null, jobTitle || null, professionalRegister || null, !!isAdmin, isActive !== false, terceirizado])
+    ? [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail || null, phone || null, shortName || null, sector || null, jobTitle || null, normFormacao(formation), normRegistro(formation, sector, jobTitle, professionalRegister), !!isAdmin, isActive !== false, terceirizado, passwordHash]
+    : [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail || null, phone || null, shortName || null, sector || null, jobTitle || null, normFormacao(formation), normRegistro(formation, sector, jobTitle, professionalRegister), !!isAdmin, isActive !== false, terceirizado])
 
   const [row] = await q(`SELECT ${LIST_USER} FROM users WHERE id = $1`, [req.params.id])
   if (!row) return res.status(404).json({ error: 'Usuário não encontrado.' })
@@ -1247,10 +1248,32 @@ app.post('/api/sessions/stop', wrap(async (req, res) => {
 // "eu não fui avisado" sem impedir o trabalho de andar.
 // ============================================================
 
-const SETORES = ['engenharia', 'arquitetura', 'orcamento', 'coordenacao', 'direcao', 'estagio']
+// As três áreas da empresa, com o MESMO id que o front grava (SECTORS, em
+// src/data/store.js). As rotas de setor validam contra esta lista, e ela tinha
+// ficado com os slugs antigos: quem escolhia "Engenharia" em Meu setor tinha o
+// campo APAGADO em vez de gravado, porque normSetor devolvia null.
+const SETORES = ['Engenharia', 'Arquitetura', 'TI']
+const FORMACOES = ['sistemas-informacao', 'arquitetura', 'engenharia-civil', 'engenharia-eletrica']
 const CHANGE_KINDS = ['requisicao', 'sugestao']
 const URGENCIES = ['low', 'medium', 'high']
 const normSetor = (v) => (SETORES.includes(v) ? v : null)
+const normFormacao = (v) => (FORMACOES.includes(v) ? v : null)
+// Espelho de conselhoDe() em src/data/store.js: a formação manda, o setor
+// responde por quem ainda não tem formação preenchida, e o cargo é o último
+// recurso. Fica duplicado aqui porque o servidor não importa o front — as
+// listas SETORES e FORMACOES já são duplicadas pelo mesmo motivo.
+const CONSELHO_FORMACAO = { 'arquitetura': 'CAU', 'engenharia-civil': 'CREA', 'engenharia-eletrica': 'CREA' }
+const CONSELHO_SETOR = { 'Engenharia': 'CREA', 'Arquitetura': 'CAU' }
+const CONSELHO_CARGO = { 'arquitetura': 'CAU', 'projetos prediais': 'CREA' }
+const chaveCargo = (v) => String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase()
+// Sistemas de Informação é formação SEM conselho, e isso vence o setor: quem
+// tem esse diploma no setor Engenharia não tem CREA.
+const conselhoDe = (formacao, setor, cargo) => (normFormacao(formacao)
+  ? CONSELHO_FORMACAO[formacao] || null
+  : CONSELHO_SETOR[setor] || CONSELHO_CARGO[chaveCargo(cargo)] || null)
+// O número só faz sentido para quem tem conselho. Guardar um CAU em quem não
+// tem deixa o dado esperando para reaparecer quando a formação mudar.
+const normRegistro = (formacao, setor, cargo, v) => (conselhoDe(formacao, setor, cargo) && v ? String(v).trim() || null : null)
 const normKind = (v) => (CHANGE_KINDS.includes(v) ? v : 'requisicao')
 const normUrgency = (v) => (URGENCIES.includes(v) ? v : 'medium')
 
@@ -1635,7 +1658,7 @@ app.put('/api/users/:id/sector', requireAdmin, wrap(async (req, res) => {
   res.json({ id: req.params.id, sector: setor })
 }))
 
-// A própria pessoa define seu setor — é o vínculo da conta com o cargo que
+// A própria pessoa define seu setor — é o vínculo da conta com o setor que
 // exerce. Sem isso, endereçar uma mudança a um setor não encontra ninguém.
 app.post('/api/auth/sector', wrap(async (req, res) => {
   const setor = normSetor(req.body.sector)
@@ -2046,17 +2069,31 @@ async function ensureSchema() {
   // Setor da pessoa (engenharia, arquitetura…). É o que faz "destinatário:
   // Engenharia" resolver para gente de verdade na hora de cobrar ciência.
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS sector text')
-  // Cargo, telefone, nome curto e situação ativa/inativa da pessoa.
+  // Cargo, formação, telefone, nome curto e situação ativa/inativa da pessoa.
+  //
+  // Cargo e formação são campos diferentes e os dois ficam: o cargo é o que a
+  // pessoa faz ("Projetos Prediais", "Estagiário de TI") e a formação é o
+  // diploma, que é de onde sai o conselho. O cadastro real tem 'Coordenação' e
+  // 'Orçamentista' como cargo — nenhum é diploma, e nenhum caberia na lista de
+  // formações sem inventar o dado.
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title text')
+  await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS formation text')
+  // Só o que dá para traduzir sem adivinhar: "Arquitetura" é o único cargo que
+  // nomeia um diploma. Projetos Prediais pode ser civil ou elétrica e
+  // Coordenação não diz nada — esses ficam em branco, e enquanto estiverem em
+  // branco o conselho continua vindo do setor, como vinha antes.
+  await q("UPDATE users SET formation = 'arquitetura' WHERE formation IS NULL AND job_title ILIKE 'arquitetura'")
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS phone text')
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS short_name text')
-  // Número do registro profissional (CREA ou CAU, conforme o cargo — ver
-  // CARGO_CONSELHO em data/store.js). Só o número; a sigla não é gravada
-  // porque é sempre derivada do cargo, nunca escolhida à parte.
+  // Número do registro profissional (CREA ou CAU, conforme a formação — ver
+  // FORMACAO_CONSELHO em data/store.js). Só o número; a sigla não é gravada
+  // porque é sempre derivada da formação, nunca escolhida à parte.
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS professional_register text')
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true')
   // Se a pessoa é terceirizada (Sim/Não na ficha) — não confundir com o setor.
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_outsourced boolean NOT NULL DEFAULT false')
+  // Terceirizado não tem login, então a conta pode ficar sem senha.
+  await q('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL')
 
   // ----- permissões -----
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin boolean NOT NULL DEFAULT false')
@@ -2122,36 +2159,90 @@ async function ensureSchema() {
   await q('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL')
 
   // ----- setor passa a ser so a AREA -----
-  // Orcamento, Coordenacao e Direcao eram setores e sao cargos: quem estava
-  // neles ficava sem conselho e nunca via o campo de CREA, embora seja
-  // engenheiro. Estagio tambem nao e area — o estagiario fica na area em que
-  // trabalha, e "Estagiario" vira o cargo dele.
+  // Setor é ÁREA, e a empresa tem três: Engenharia, Arquitetura e TI. A coluna
+  // acumulou gerações de valor — cargos que eram setor (Orçamento, Coordenação,
+  // Direção, Estágio), a lista em slug do início do app ('engenharia',
+  // 'tecnologia-informacao') e a segunda lista em slug que chegou junto com a
+  // formação ('projetos-prediais', 'projetos-eletricos').
   //
-  // Sem esta migracao, quem tiver um valor antigo fica com setor invalido: o
-  // campo aparece vazio no cadastro e o conselho some — reproduzindo a falha
-  // que a mudanca veio corrigir.
-  const setoresAntigos = await q(`
+  // Qualquer valor fora das três atuais é setor inválido: o campo abre vazio no
+  // cadastro e o conselho some — a mesma falha que os usuários apontaram.
+  //
+  // Estágio depende do cargo: o estagiário fica na área em que trabalha, e
+  // "Estagiário" é o cargo dele. A busca por TI é por palavra inteira porque
+  // '%TI%' casa com "OrçamenTIsta", que é engenharia.
+  const estagios = await q(`
     UPDATE users SET sector = CASE
-      WHEN sector IN ('Orcamento', 'Coordenacão', 'Direcão') THEN 'Engenharia'
-      WHEN sector = 'Estágio' AND job_title ILIKE '%arquitet%' THEN 'Arquitetura'
-      WHEN sector = 'Estágio' AND job_title ILIKE '%TI%' THEN 'TI'
-      WHEN sector = 'Estágio' THEN 'Engenharia'
-      ELSE sector END
-    WHERE sector IN ('Orcamento', 'Coordenacão', 'Direcão', 'Estágio')
+      WHEN job_title ILIKE '%arquitet%' THEN 'Arquitetura'
+      WHEN job_title ~* '(^|[^a-zà-ú])ti([^a-zà-ú]|$)' THEN 'TI'
+      ELSE 'Engenharia' END
+    WHERE lower(sector) IN ('estagio', 'estágio')
     RETURNING id`)
-  if (setoresAntigos.length) {
-    console.log(`[promav] setor migrado para area em ${setoresAntigos.length} cadastro(s)`)
+
+  // O resto sai por equivalência. A comparação é em minúsculas e aceita as duas
+  // grafias de cada nome, com e sem acento, porque a coluna tem as duas.
+  //
+  // Vem DEPOIS do estágio de propósito: a tabela também traduz "Estágio", para
+  // dar conta dos destinatários de mudança (que não têm cargo para consultar),
+  // e se rodasse primeiro atropelaria a regra por cargo acima.
+  const setoresAntigos = await q(`
+    UPDATE users u SET sector = m.novo
+      FROM (VALUES
+      ('engenharia',               'Engenharia'),
+      ('orcamento',                'Engenharia'),
+      ('orçamento',                'Engenharia'),
+      ('coordenacao',              'Engenharia'),
+      ('coordenação',              'Engenharia'),
+      ('coordenacão',              'Engenharia'),
+      ('direcao',                  'Engenharia'),
+      ('direção',                  'Engenharia'),
+      ('direcão',                  'Engenharia'),
+      ('estagio',                  'Engenharia'),
+      ('estágio',                  'Engenharia'),
+      ('projetos-prediais',        'Engenharia'),
+      ('projetos prediais',        'Engenharia'),
+      ('projetos-eletricos',       'Engenharia'),
+      ('projetos elétricos',       'Engenharia'),
+      ('arquitetura',              'Arquitetura'),
+      ('ti',                       'TI'),
+      ('tecnologia-informacao',    'TI'),
+      ('tecnologia da informação', 'TI')
+      ) AS m(antigo, novo)
+     WHERE lower(u.sector) = m.antigo AND u.sector IS DISTINCT FROM m.novo
+    RETURNING u.id`)
+
+  if (setoresAntigos.length || estagios.length) {
+    console.log(`[promav] setor normalizado para area em ${setoresAntigos.length + estagios.length} cadastro(s)`)
   }
 
-  // As mudancas enderecadas a um setor antigo deixariam de encontrar alguem.
+  // As mudanças endereçadas a um setor antigo deixariam de encontrar alguém — o
+  // destinatário fica gravado pelo nome do setor, não por id de tabela.
   await q(`
     UPDATE changes c SET target_sectors = novo.lista
       FROM (
-        SELECT ch.id, jsonb_agg(DISTINCT CASE
-                 WHEN s IN ('Orcamento', 'Coordenacão', 'Direcão') THEN 'Engenharia'
-                 WHEN s = 'Estágio' THEN 'TI'
-                 ELSE s END) AS lista
+        SELECT ch.id, jsonb_agg(DISTINCT COALESCE(m.novo, s)) AS lista
           FROM changes ch, jsonb_array_elements_text(COALESCE(ch.target_sectors, '[]'::jsonb)) s
+          LEFT JOIN (VALUES
+      ('engenharia',               'Engenharia'),
+      ('orcamento',                'Engenharia'),
+      ('orçamento',                'Engenharia'),
+      ('coordenacao',              'Engenharia'),
+      ('coordenação',              'Engenharia'),
+      ('coordenacão',              'Engenharia'),
+      ('direcao',                  'Engenharia'),
+      ('direção',                  'Engenharia'),
+      ('direcão',                  'Engenharia'),
+      ('estagio',                  'Engenharia'),
+      ('estágio',                  'Engenharia'),
+      ('projetos-prediais',        'Engenharia'),
+      ('projetos prediais',        'Engenharia'),
+      ('projetos-eletricos',       'Engenharia'),
+      ('projetos elétricos',       'Engenharia'),
+      ('arquitetura',              'Arquitetura'),
+      ('ti',                       'TI'),
+      ('tecnologia-informacao',    'TI'),
+      ('tecnologia da informação', 'TI')
+          ) AS m(antigo, novo) ON lower(s) = m.antigo
          GROUP BY ch.id
       ) novo
      WHERE c.id = novo.id AND c.target_sectors IS DISTINCT FROM novo.lista`)

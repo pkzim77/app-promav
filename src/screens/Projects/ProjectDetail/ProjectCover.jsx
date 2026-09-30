@@ -1,6 +1,6 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
-import { RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, dayDiff, parseDate, todayISO, formatBRL, calcularProgresso, fmtFull, taskMembers } from '../../../data/store.js'
+import { sectorLabel, RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, dayDiff, parseDate, todayISO, formatBRL, calcularProgresso, fmtFull, taskMembers } from '../../../data/store.js'
 import { NotesText } from '../shared/NotesText.jsx'
 
 // Ficha que abre ao passar o mouse num responsável.
@@ -18,7 +18,7 @@ function FichaResponsavel({ user, doProjeto }) {
   const minhas = doProjeto.filter(t => taskMembers(t).includes(user.id))
   const feitas = minhas.filter(t => t.status === 'done').length
   const cargo = (user.jobTitle || '').trim()
-  const setor = (user.sector || '').trim()
+  const setor = sectorLabel(user.sector)
 
   // O leitor de tela não enxerga a ficha (ela some com visibility), então a
   // mesma informação vai no rótulo do chip.
