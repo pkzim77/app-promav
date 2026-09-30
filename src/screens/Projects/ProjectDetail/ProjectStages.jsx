@@ -355,16 +355,15 @@ function FiltroEstado({ valor, contagem, onEscolher }) {
   )
 }
 
-// "Minhas" é sobre ATIVIDADE, não sobre estar na equipe: numa etapa de oito
-// atividades onde nenhuma é sua, não há o que você fazer ali. A exceção é a
-// etapa sem checklist — não tem atividade para carregar o nome de ninguém, e
-// aí vale quem responde pela etapa.
-const etapaDaPessoa = (etapa, userId) => !!userId && etapa.tasks.some(t => {
-  const itens = t.checklist || []
-  return itens.length
-    ? itens.some(i => i.assigneeId === userId)
-    : taskMembers(t).includes(userId)
-})
+// "Minhas" é tudo em que a pessoa está: atividade no nome dela OU a etapa no
+// nome dela. A primeira versão exigia atividade marcada, e escondia a etapa que
+// é sua mas cujas atividades ainda não foram distribuídas — que é justamente
+// quando você precisa vê-la.
+//
+// Status não entra: etapa concluída também é sua, e some da lista quem escolhe
+// o estado no filtro ao lado, não este botão.
+const etapaDaPessoa = (etapa, userId) => !!userId && etapa.tasks.some(t =>
+  taskMembers(t).includes(userId) || (t.checklist || []).some(i => i.assigneeId === userId))
 
 export function ProjectStages({ project, tasks, users, sessions, currentUserId, now, canEdit = true, isAdmin = false,
                                onAssignChecklist, onSetChecklistState, onEditChecklistItem, onExcluirChecklistItem,
