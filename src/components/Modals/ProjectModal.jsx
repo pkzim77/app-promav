@@ -1,6 +1,6 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
-import { Modal, Field, SelecaoMultipla, PainelPendencias } from '../primitives/primitives.jsx'
+import { Modal, Field, SelecaoMultipla, PopupPendencias } from '../primitives/primitives.jsx'
 import { PROJECT_HEX, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, PREFEITURAS, SECRETARIAS, canonizar, parseBRL, pendenciasDoProjeto } from '../../data/store.js'
 import { dateError } from './shared/formHelpers.js'
 import { MoneyInput } from './shared/MoneyInput.jsx'
@@ -181,14 +181,19 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const estimadoErr = touched && badMoney(estimadoText) ? 'Valor inválido. Ex.: 250000,00' : null
   const orcadoErr = touched && badMoney(orcadoText) ? 'Valor inválido. Ex.: 250000,00' : null
 
-  // Duas etapas quando há pendência: a primeira mostra o que falta, a segunda
-  // grava. Gravar direto e avisar depois deixaria o aviso chegar quando já não
-  // dá para desistir; travar de vez é o que esta mudança veio desfazer.
+  // O que falta é dito ANTES de gravar, num popup por cima do formulário, com o
+  // caminho seguindo em frente ali mesmo. Gravar e avisar depois entregaria o
+  // aviso quando já não dá para desistir; travar de vez é o que esta mudança
+  // veio desfazer.
   const save = () => {
     setTouched(true)
     if (!name.trim() || dErr) return
     if (badMoney(estimadoText) || badMoney(orcadoText)) return
-    if (pendencias.length && !avisado) { setAvisado(true); return }
+    if (pendencias.length) { setAvisado(true); return }
+    gravar()
+  }
+
+  const gravar = () => {
     onSave({
       ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start, end, notes: notes.trim(), resources, members,
       prefeitura: prefeitura.trim(), secretaria: secretaria.trim(), responsibleIds,
@@ -202,17 +207,13 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
     <Modal className="project-modal" title={editing ? 'Editar projeto' : 'Novo projeto'} onClose={onClose}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-primary" onClick={save}>
-          {avisado && pendencias.length
-            ? (editing ? 'Salvar mesmo assim' : 'Criar mesmo assim')
-            : (editing ? 'Salvar alterações' : 'Criar projeto')}
-        </button>
+        <button className="btn btn-primary" onClick={save}>{editing ? 'Salvar alterações' : 'Criar projeto'}</button>
       </>}>
       {avisado && (
-        <PainelPendencias itens={pendencias}
-          acao={editing
-            ? 'Dá para salvar assim e completar depois. Enquanto faltar, um aviso fica ao lado do nome do projeto.'
-            : 'Dá para criar assim e completar depois. Enquanto faltar, um aviso fica ao lado do nome do projeto.'} />
+        <PopupPendencias itens={pendencias} onCancelar={() => setAvisado(false)}
+          onSalvar={() => { setAvisado(false); gravar() }}
+          rotulo={editing ? 'Salvar mesmo assim' : 'Criar mesmo assim'}
+          acao={'Dá para ' + (editing ? 'salvar' : 'criar') + ' assim e completar depois. Enquanto faltar, um aviso fica ao lado do nome do projeto.'} />
       )}
       <Field label="Nome do projeto">
         <input className="control" value={name?? ''} autoFocus placeholder="Ex.: Rebrand 2026" onChange={e => setName(e.target.value)} />

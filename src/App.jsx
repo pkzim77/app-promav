@@ -1,7 +1,7 @@
 import React from 'react'
 import { Sidebar, TopBar } from './components/Chrome/Chrome.jsx'
 import { Toast } from './components/primitives/primitives.jsx'
-import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal, PeopleModal, PersonCard, StageItemModal } from './components/Modals/Modals.jsx'
+import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal, PeopleModal, PersonCard, StageItemModal, StageActivitiesModal } from './components/Modals/Modals.jsx'
 import { Hub } from './screens/Hub/Hub.jsx'
 import { ProjectList, ProjectDetail } from './screens/Projects/Projects.jsx'
 import { Kanban } from './screens/Kanban/Kanban.jsx'
@@ -454,6 +454,11 @@ export default function App() {
   // modal é que troca para avulsa. Nas outras telas segue avulsa, que é o que
   // elas sempre criaram.
   const openNewStage = (projectId) => setModal({ type: 'task', defaultProjectId: projectId, comoEtapa: true })
+
+  // Pelo cronômetro abre só a lista de atividades. Guarda o id, não a etapa:
+  // mudar o estado de uma atividade reescreve a etapa em `tasks`, e uma cópia
+  // presa aqui mostraria o estado antigo até fechar e abrir de novo.
+  const openStageActivities = (task) => setModal({ type: 'atividades', taskId: task.id })
   // Abrir a atividade conta como acesso: é o que adia a notificação daquilo
   // que a própria pessoa criou para si. Falha aqui não pode travar o modal —
   // o registro de leitura é secundário em relação a ver a atividade.
@@ -1043,7 +1048,7 @@ export default function App() {
           onMySector={MY_SECTOR_ENABLED ? () => setModal({ type: 'mysector' }) : undefined}
           onLogout={handleLogout} onNewProject={openNewProject}
           tasks={tasks} projects={projects} sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
-          onOpenTask={openEditTask}
+          onOpenTask={openStageActivities}
           searchQuery={projectSearch} onSearchChange={setProjectSearch}
           notifications={visibleNotifications} unreadCount={unreadNotifications.length}
           readNewsIds={new Set(readNewsIds)} onMarkRead={markNewsAsRead} onMarkAllRead={markAllNewsAsRead}
@@ -1068,6 +1073,14 @@ export default function App() {
           onToggleChecklist={toggleChecklistItem} onToggleMembership={toggleMyMembership}
           onSave={saveTask} onClose={() => setModal(null)} />
       )}
+      {modal?.type === 'atividades' && (() => {
+        const etapa = tasks.find(t => t.id === modal.taskId)
+        return etapa ? (
+          <StageActivitiesModal task={etapa} project={projects.find(p => p.id === etapa.projectId)}
+            users={users} onSetState={setChecklistState}
+            onAbrirEtapa={(t) => openEditTask(t)} onClose={() => setModal(null)} />
+        ) : null
+      })()}
       {modal?.type === 'mysector' && (
         <MySectorModal current={authUser?.sector} onSubmit={saveMySector} onClose={() => setModal(null)} />
       )}

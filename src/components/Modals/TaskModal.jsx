@@ -1,6 +1,6 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
-import { Modal, Field, SegControl, StatusTag, PriorityTag, PainelPendencias } from '../primitives/primitives.jsx'
+import { Modal, Field, SegControl, StatusTag, PriorityTag, PopupPendencias } from '../primitives/primitives.jsx'
 import { STATUSES, PRIORITIES, CHECK_STATES, STATUS_MAP, estadoDoItem, paraAtribuir, ETAPAS_PADRAO, tituloDaEtapa, PADRAO_ETAPA, pendenciasDaEtapa } from '../../data/store.js'
 import { dateError } from './shared/formHelpers.js'
 import { SugestaoItem } from './shared/SugestaoItem.jsx'
@@ -41,12 +41,24 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
       .map(t => PADRAO_ETAPA.exec(t.title || '')?.[1])
       .filter(Boolean).map(Number)), [tasks, projectId])
   const livres = ETAPAS_PADRAO.map((_, i) => i).filter(i => !jaNoProjeto.has(i))
-  const nEtapaNova = etapaEscolhida !== '' && livres.includes(Number(etapaEscolhida))
-    ? Number(etapaEscolhida)
+
+  // O template são onze etapas, mas o processo não acaba nelas: projeto que
+  // precisa de uma décima segunda ganha uma, e a numeração continua de onde
+  // parou. Antes, com as onze criadas, o modal simplesmente se recusava a
+  // trabalhar — e o trabalho extra virava atividade avulsa, fora da contagem.
+  const maiorNumero = Math.max(ETAPAS_PADRAO.length - 1, ...[...jaNoProjeto, -1])
+  const proximoNumero = maiorNumero + 1
+  const criandoNova = etapaEscolhida === 'nova' || (etapaEscolhida === '' && !livres.length)
+  const nEtapaNova = criandoNova ? proximoNumero
+    : etapaEscolhida !== '' && ETAPAS_PADRAO[Number(etapaEscolhida)] ? Number(etapaEscolhida)
     : livres[0]
-  const semEtapaLivre = livres.length === 0
-  // O título de uma etapa não se digita: ele se monta.
-  const tituloFinal = avulsa || editing ? title.trim() : (nEtapaNova != null ? tituloDaEtapa(nEtapaNova) : '')
+  // O título de uma etapa do template não se digita: ele se monta. O da etapa
+  // nova junta o número da vez com o nome que a pessoa escrever.
+  const tituloFinal = avulsa || editing
+    ? title.trim()
+    : criandoNova
+      ? (title.trim() ? `${proximoNumero} · ${title.trim()}` : '')
+      : (nEtapaNova != null ? tituloDaEtapa(nEtapaNova) : '')
 
   const ckDone = checklist.filter(i => estadoDoItem(i) === 'done').length
   const ckPct = checklist.length ? Math.round(ckDone / checklist.length * 100) : 0
@@ -97,7 +109,8 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
   const nEtapa = /^(\d+) · /.exec(task?.title || '')?.[1]
 
   const dErr = dateError(start, end)
-  const titleErr = touched && avulsa && !title.trim() ? 'Informe um título.' : null
+  const titleErr = touched && (avulsa || criandoNova) && !title.trim()
+    ? (criandoNova ? 'Dê um nome à etapa.' : 'Informe um título.') : null
   const projErr = touched && !projectId ? 'Selecione um projeto.' : null
 
   // O que falta numa etapa não impede de criá-la: a etapa nasce e o responsável
@@ -108,7 +121,11 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
   const save = () => {
     setTouched(true)
     if (!tituloFinal || !projectId || dErr) return
-    if (pendencias.length && !avisado) { setAvisado(true); return }
+    if (pendencias.length) { setAvisado(true); return }
+    gravar()
+  }
+
+  const gravar = () => {
     onSave({ ...(task || {}), title: tituloFinal, projectId, assigneeId, memberIds: memberIds.filter(id => id !== assigneeId), status, priority, start: start || null, end: end || null, checklist })
   }
 
@@ -121,17 +138,17 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
         <button className="btn btn-secondary" onClick={onClose}>Fechar</button>
       ) : (<>
         <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-primary" onClick={save} disabled={!editing && !avulsa && semEtapaLivre}>
-          {avisado && pendencias.length
-            ? (editing ? 'Salvar mesmo assim' : 'Criar mesmo assim')
-            : (editing ? 'Salvar alterações' : avulsa ? 'Criar atividade' : 'Criar etapa')}
+        <button className="btn btn-primary" onClick={save}>
+          {editing ? 'Salvar alterações' : avulsa ? 'Criar atividade' : 'Criar etapa'}
         </button>
       </>)}>
       {ro && (
         <p className="ro-hint"><Icon name="lock" size={14} />Você tem acesso de exibição. Pode marcar o checklist, mas não editar a atividade.</p>
       )}
       {avisado && !ro && (
-        <PainelPendencias itens={pendencias}
+        <PopupPendencias itens={pendencias} onCancelar={() => setAvisado(false)}
+          onSalvar={() => { setAvisado(false); gravar() }}
+          rotulo={editing ? 'Salvar mesmo assim' : 'Criar mesmo assim'}
           acao={'Dá para ' + (editing ? 'salvar' : 'criar') + ' assim e completar depois. Enquanto faltar, um aviso fica ao lado do nome da etapa.'} />
       )}
       {!editing && !ro && (
@@ -156,25 +173,32 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
         </Field>
       ) : (
         <Field label="Etapa do processo">
-          {semEtapaLivre ? (
-            <p className="ro-hint">
-              <Icon name="flag" size={14} />
-              Este projeto já tem as {ETAPAS_PADRAO.length} etapas do processo. Para
-              trabalho que não cabe em nenhuma delas, marque <strong>atividade avulsa</strong>.
-            </p>
-          ) : (<>
-            <select className="control" value={nEtapaNova} onChange={e => setEtapaEscolhida(e.target.value)}>
-              {ETAPAS_PADRAO.map((nome, i) => (
-                <option key={i} value={i} disabled={jaNoProjeto.has(i)}>
-                  {i} · {nome}{jaNoProjeto.has(i) ? ' — já existe neste projeto' : ''}
-                </option>
-              ))}
-            </select>
+          <select className="control" value={criandoNova ? 'nova' : nEtapaNova}
+            onChange={e => setEtapaEscolhida(e.target.value)}>
+            {ETAPAS_PADRAO.map((nome, i) => (
+              <option key={i} value={i}>
+                {i} · {nome}{jaNoProjeto.has(i) ? ' — o projeto já tem esta' : ''}
+              </option>
+            ))}
+            {/* Nada fica desligado: repetir uma etapa é decisão de quem cadastra,
+                não erro. O aviso ao lado do nome basta para ninguém fazer por
+                descuido, e a aba já sabe mostrar etapa duplicada. */}
+            <option value="nova">Nova etapa — continuar a numeração ({proximoNumero})</option>
+          </select>
+          {criandoNova ? (<>
+            <input className="control" value={title} placeholder="Nome da etapa. Ex.: Complementação de projeto"
+              style={{ marginTop: 8 }} onChange={e => setTitle(e.target.value)} />
+            {titleErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{titleErr}</span>}
             <span className="marca-nota">
-              A etapa entra como <strong>{tituloFinal}</strong>. As que o projeto já tem
-              aparecem desligadas, para não nascer duplicada.
+              Entra como <strong>{tituloFinal || `${proximoNumero} · …`}</strong>, depois
+              da última etapa do projeto.
             </span>
-          </>)}
+          </>) : (
+            <span className="marca-nota">
+              A etapa entra como <strong>{tituloFinal}</strong>.
+              {jaNoProjeto.has(nEtapaNova) && ' O projeto já tem uma com este número — vão aparecer as duas.'}
+            </span>
+          )}
         </Field>
       )}
       <div className="field-row">

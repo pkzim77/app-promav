@@ -192,7 +192,7 @@ function CorpoDaTask({ task, users, sessions, currentUserId, now, canEdit, mostr
         </div>
       )}
       {semChecklist
-        ? <p className="et-vazio">{avulsa ? 'Esta atividade não tem checklist.' : 'Esta etapa não tem checklist.'}</p>
+        ? <p className="et-vazio">{avulsa ? 'Esta atividade não tem sub-atividades.' : 'Esta etapa não tem atividades.'}</p>
         : <Checklist task={task} responsaveis={membros} canEdit={canEdit} onAssign={onAssignChecklist}
             onSetState={onSetChecklistState} onEditItem={onEditChecklistItem}
             onExcluirItem={onExcluirChecklistItem} />}
