@@ -1039,6 +1039,7 @@ export default function App() {
           onMySector={MY_SECTOR_ENABLED ? () => setModal({ type: 'mysector' }) : undefined}
           onLogout={handleLogout} onNewProject={openNewProject}
           tasks={tasks} projects={projects} sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
+          onOpenTask={openEditTask}
           searchQuery={projectSearch} onSearchChange={setProjectSearch}
           notifications={visibleNotifications} unreadCount={unreadNotifications.length}
           readNewsIds={new Set(readNewsIds)} onMarkRead={markNewsAsRead} onMarkAllRead={markAllNewsAsRead}
