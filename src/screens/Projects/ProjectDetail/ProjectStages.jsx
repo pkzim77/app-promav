@@ -266,7 +266,7 @@ function Etapa({ etapa, aberta, onToggleAberta, selecionando, selecionada, onSel
             </p>
           )}
           {etapa.tasks.map(t => (
-            <CorpoDaTask key={t.id} task={t} mostrarTitulo={duplicada} {...resto} />
+            <CorpoDaTask key={t.id} task={t} mostrarTitulo={duplicada} canEdit={canEdit} {...resto} />
           ))}
         </div>
       )}
