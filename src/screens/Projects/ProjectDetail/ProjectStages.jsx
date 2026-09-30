@@ -1,8 +1,8 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
-import { AvatarStack, SegControl, SemResponsavel } from '../../../components/primitives/primitives.jsx'
+import { AvatarStack, SegControl, SemResponsavel, AvisoPendencias } from '../../../components/primitives/primitives.jsx'
 import { TaskTimerButton } from '../../../components/TimeTracker/TimeTracker.jsx'
-import { STATUSES, STATUS_MAP, CHECK_STATES, estadoDoItem, calcularProgresso, checklistStats, taskMembers } from '../../../data/store.js'
+import { STATUSES, STATUS_MAP, CHECK_STATES, estadoDoItem, calcularProgresso, checklistStats, taskMembers, pendenciasDaEtapa } from '../../../data/store.js'
 import { EmptyState } from '../shared/EmptyState.jsx'
 
 // Etapas — substitui a antiga aba Atividades. As duas mostravam a MESMA tabela
@@ -244,6 +244,14 @@ function Etapa({ etapa, aberta, onToggleAberta, selecionando, selecionada, onSel
           <span className="et-linha">
             <Icon name="chevronRight" size={14} className="et-seta" />
             <span className="et-nome">{etapa.nome}</span>
+            {/* A etapa pode nascer sem responsável, sem prazo ou sem atividades.
+                O aviso é o que impede isso de virar esquecimento: a etapa existe,
+                mas ninguém sabe de quem é nem para quando. */}
+            <AvisoPendencias itens={pendenciasDaEtapa({
+              assigneeId: etapa.tasks.some(t => t.assigneeId) || null,
+              end: etapa.tasks.find(t => t.end)?.end || null,
+              checklist: etapa.tasks.flatMap(t => t.checklist || []),
+            })} oque="Falta nesta etapa" />
             <SeloEtapa status={etapa.status} />
             {etapa.total > 0 && <span className="et-conta">{etapa.feitos}/{etapa.total}</span>}
             {duplicada && <span className="et-dup">{etapa.tasks.length}× duplicada</span>}

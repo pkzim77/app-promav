@@ -300,6 +300,32 @@ export function SelecaoMultipla({ itens, onAlternar, rotulo, buscaAcima = 8, ari
   )
 }
 
+// Triângulo ao lado do nome: o registro existe, mas com buracos. O que falta
+// vai no title e no aria-label — um ícone que só diz "algo está errado" obriga
+// a abrir o cadastro para descobrir o quê.
+export function AvisoPendencias({ itens = [], oque = 'Informações pendentes' }) {
+  if (!itens.length) return null
+  const texto = oque + ': ' + itens.join(', ')
+  return (
+    <span className="pend-aviso" title={texto} aria-label={texto} role="img">
+      <Icon name="alert" size={14} />
+    </span>
+  )
+}
+
+// A lista que aparece ao tentar criar. Não é erro: é o que ainda falta, dito
+// antes de gravar, com o caminho seguindo em frente no clique seguinte.
+export function PainelPendencias({ itens = [], acao }) {
+  if (!itens.length) return null
+  return (
+    <div className="pend-painel" role="status">
+      <strong><Icon name="alert" size={15} />Informações pendentes</strong>
+      <ul>{itens.map(i => <li key={i}>{i}</li>)}</ul>
+      <p>{acao}</p>
+    </div>
+  )
+}
+
 export function Toast({ aviso, onClose }) {
   const erro = aviso?.tipo === 'erro'
   return (

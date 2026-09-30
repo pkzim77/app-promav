@@ -70,7 +70,10 @@ export function ProjectDetail({ project, tasks, users, sessions, changes = [], c
         {partes.tipo && <span className="proj-head-tipo">{partes.tipo}</span>}
         {partes.complemento && <span className="proj-head-compl">{partes.complemento}</span>}
         <span className="proj-head-datas">
-          <Icon name="calendar" size={14} />{fmtMed(project.start)} — {fmtMed(project.end)}
+          <Icon name="calendar" size={14} />
+          {project.start || project.end
+            ? <>{fmtMed(project.start)} — {fmtMed(project.end)}</>
+            : 'Sem prazo definido'}
         </span>
       </div>
 

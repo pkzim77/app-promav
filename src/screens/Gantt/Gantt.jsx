@@ -11,9 +11,14 @@ export function Gantt({ tasks, projects, filterProject, onFilterProject }) {
   const shownTasks = tasks.filter(t => shownProjects.some(p => p.id === t.projectId))
 
   // date range across project + task bounds, padded to whole weeks-ish
+  // Sem prazo não há barra para desenhar, e uma data vazia no meio do cálculo
+  // de extremos contaminava o intervalo inteiro.
   const allDates = []
   shownProjects.forEach(p => { allDates.push(p.start, p.end) })
   shownTasks.forEach(t => { allDates.push(t.start, t.end) })
+  const comData = allDates.filter(Boolean)
+  allDates.length = 0
+  allDates.push(...comData)
   if (!allDates.length) allDates.push(todayISO(), addDays(todayISO(), 14))
   const minD = allDates.reduce((a, b) => parseDate(b) < parseDate(a) ? b : a)
   const maxD = allDates.reduce((a, b) => parseDate(b) > parseDate(a) ? b : a)
@@ -45,10 +50,13 @@ export function Gantt({ tasks, projects, filterProject, onFilterProject }) {
     if (scrollRef.current) scrollRef.current.scrollLeft = Math.max(0, todayLeft - 220)
   }, [filterProject])
 
+  // Devolve null quando falta prazo: quem desenha decide o que fazer, em vez de
+  // receber uma barra em NaN, que o navegador desenha como uma faixa na origem.
   const barStyle = (item, color) => {
     const offset = dayDiff(rangeStart, item.start)
-    const dur = dayDiff(item.start, item.end) + 1
-    return { left: offset * DAY_W + 2, width: dur * DAY_W - 4, background: color }
+    const dias = dayDiff(item.start, item.end)
+    if (offset == null || dias == null) return null
+    return { left: offset * DAY_W + 2, width: (dias + 1) * DAY_W - 4, background: color }
   }
 
   return (
@@ -105,16 +113,22 @@ export function Gantt({ tasks, projects, filterProject, onFilterProject }) {
                         <span className="dot" style={{ width: 10, height: 10, borderRadius: 50, background: color }} />{p.name}
                       </div>
                       <div className="gantt-track" style={{ width: trackW, height: 38 }}>
-                        <div className="gantt-bar" style={{ ...barStyle(p, color), opacity: .28, top: 13, height: 12, color: 'transparent', boxShadow: 'none' }} />
+                        {barStyle(p, color) && (
+                          <div className="gantt-bar" style={{ ...barStyle(p, color), opacity: .28, top: 13, height: 12, color: 'transparent', boxShadow: 'none' }} />
+                        )}
                       </div>
                     </div>
                     {list.map(t => (
                       <div className="gantt-row" key={t.id}>
                         <div className="gantt-rowlabel" style={{ paddingLeft: 26, color: 'var(--fg-2)', fontSize: 12.5 }}>{t.title}</div>
                         <div className="gantt-track" style={{ width: trackW }}>
-                          <div className="gantt-bar" style={barStyle(t, color)} title={`${fmtShort(t.start)} – ${fmtShort(t.end)}`}>
-                            {t.title}
-                          </div>
+                          {barStyle(t, color) ? (
+                            <div className="gantt-bar" style={barStyle(t, color)} title={`${fmtShort(t.start)} – ${fmtShort(t.end)}`}>
+                              {t.title}
+                            </div>
+                          ) : (
+                            <span className="gantt-sem-prazo">sem prazo definido</span>
+                          )}
                         </div>
                       </div>
                     ))}

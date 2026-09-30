@@ -1,7 +1,7 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
-import { Modal, Field, SegControl, StatusTag, PriorityTag } from '../primitives/primitives.jsx'
-import { STATUSES, PRIORITIES, CHECK_STATES, STATUS_MAP, estadoDoItem, paraAtribuir, ETAPAS_PADRAO, tituloDaEtapa, PADRAO_ETAPA } from '../../data/store.js'
+import { Modal, Field, SegControl, StatusTag, PriorityTag, PainelPendencias } from '../primitives/primitives.jsx'
+import { STATUSES, PRIORITIES, CHECK_STATES, STATUS_MAP, estadoDoItem, paraAtribuir, ETAPAS_PADRAO, tituloDaEtapa, PADRAO_ETAPA, pendenciasDaEtapa } from '../../data/store.js'
 import { dateError } from './shared/formHelpers.js'
 import { SugestaoItem } from './shared/SugestaoItem.jsx'
 
@@ -21,6 +21,7 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
   const [checklist, setChecklist] = React.useState(task?.checklist ? task.checklist.map(i => ({ ...i })) : [])
   const [newItem, setNewItem] = React.useState('')
   const [touched, setTouched] = React.useState(false)
+  const [avisado, setAvisado] = React.useState(false)
 
   // Criar pela aba Etapas é criar uma ETAPA do template: o título nasce no
   // padrão "N · Nome", que é o que a aba lê para agrupar. Digitá-lo à mão foi
@@ -99,9 +100,15 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
   const titleErr = touched && avulsa && !title.trim() ? 'Informe um título.' : null
   const projErr = touched && !projectId ? 'Selecione um projeto.' : null
 
+  // O que falta numa etapa não impede de criá-la: a etapa nasce e o responsável
+  // ou o prazo chegam depois. Mas é dito antes de gravar, e continua dito por um
+  // aviso ao lado do nome dela na aba.
+  const pendencias = pendenciasDaEtapa({ assigneeId, end, checklist })
+
   const save = () => {
     setTouched(true)
     if (!tituloFinal || !projectId || dErr) return
+    if (pendencias.length && !avisado) { setAvisado(true); return }
     onSave({ ...(task || {}), title: tituloFinal, projectId, assigneeId, memberIds: memberIds.filter(id => id !== assigneeId), status, priority, start: start || null, end: end || null, checklist })
   }
 
@@ -115,11 +122,17 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
       ) : (<>
         <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
         <button className="btn btn-primary" onClick={save} disabled={!editing && !avulsa && semEtapaLivre}>
-          {editing ? 'Salvar alterações' : avulsa ? 'Criar atividade' : 'Criar etapa'}
+          {avisado && pendencias.length
+            ? (editing ? 'Salvar mesmo assim' : 'Criar mesmo assim')
+            : (editing ? 'Salvar alterações' : avulsa ? 'Criar atividade' : 'Criar etapa')}
         </button>
       </>)}>
       {ro && (
         <p className="ro-hint"><Icon name="lock" size={14} />Você tem acesso de exibição. Pode marcar o checklist, mas não editar a atividade.</p>
+      )}
+      {avisado && !ro && (
+        <PainelPendencias itens={pendencias}
+          acao={'Dá para ' + (editing ? 'salvar' : 'criar') + ' assim e completar depois. Enquanto faltar, um aviso fica ao lado do nome da etapa.'} />
       )}
       {!editing && !ro && (
         <Field label="O que você está criando">
