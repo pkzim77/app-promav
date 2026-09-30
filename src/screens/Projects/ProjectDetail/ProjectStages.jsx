@@ -307,6 +307,65 @@ const FILTROS = [
   { id: 'todo', label: 'Pendentes' },
 ]
 
+// Os seis estados viravam seis chips numa fileira que empurrava os botões de
+// ação para a linha de baixo — e cinco deles costumam marcar zero. Como só um
+// vale por vez, eles cabem num botão que diz qual está valendo.
+//
+// Não é <select> porque o rótulo carrega a contagem de cada estado, e o
+// seletor nativo não deixa desenhar isso do lado direito de cada linha.
+function FiltroEstado({ valor, contagem, onEscolher }) {
+  const [aberto, setAberto] = React.useState(false)
+  const caixa = React.useRef(null)
+
+  React.useEffect(() => {
+    if (!aberto) return
+    const fora = (e) => { if (!caixa.current?.contains(e.target)) setAberto(false) }
+    const tecla = (e) => { if (e.key === 'Escape') setAberto(false) }
+    document.addEventListener('mousedown', fora)
+    document.addEventListener('keydown', tecla)
+    return () => {
+      document.removeEventListener('mousedown', fora)
+      document.removeEventListener('keydown', tecla)
+    }
+  }, [aberto])
+
+  const atual = FILTROS.find(f => f.id === valor) || FILTROS[0]
+  return (
+    <div className="msel et-filtro" ref={caixa}>
+      <button type="button" className={'chip et-filtro-botao' + (valor === 'all' ? '' : ' active')}
+        aria-expanded={aberto} aria-haspopup="true" onClick={() => setAberto(a => !a)}>
+        <Icon name="filter" size={14} />
+        {atual.label} ({contagem[atual.id]})
+        <Icon name="chevronDown" size={15} className="et-filtro-seta" />
+      </button>
+
+      {aberto && (
+        <div className="msel-lista et-filtro-lista" role="menu">
+          {FILTROS.map(f => (
+            <button key={f.id} type="button" role="menuitemradio" aria-checked={f.id === valor}
+              className={'msel-item' + (f.id === valor ? ' on' : '')}
+              onClick={() => { onEscolher(f.id); setAberto(false) }}>
+              <span className="msel-nome">{f.label}</span>
+              <span className="msel-tag">{contagem[f.id]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// "Minhas" é sobre ATIVIDADE, não sobre estar na equipe: numa etapa de oito
+// atividades onde nenhuma é sua, não há o que você fazer ali. A exceção é a
+// etapa sem checklist — não tem atividade para carregar o nome de ninguém, e
+// aí vale quem responde pela etapa.
+const etapaDaPessoa = (etapa, userId) => !!userId && etapa.tasks.some(t => {
+  const itens = t.checklist || []
+  return itens.length
+    ? itens.some(i => i.assigneeId === userId)
+    : taskMembers(t).includes(userId)
+})
+
 export function ProjectStages({ project, tasks, users, sessions, currentUserId, now, canEdit = true, isAdmin = false,
                                onAssignChecklist, onSetChecklistState, onEditChecklistItem, onExcluirChecklistItem,
                                onMoveTask, onNewTask, onNewStageItem, onCreateStages,
@@ -320,6 +379,7 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
   // uma, que é o gesto de sempre.
   const [selecionando, setSelecionando] = React.useState(false)
   const [selecionadas, setSelecionadas] = React.useState([])
+  const [somenteMinhas, setSomenteMinhas] = React.useState(false)
   // Abre sozinhas as etapas em andamento: é onde o trabalho está agora.
   // Reaproveita o `etapas` do useMemo acima — o inicializador do useState
   // refazia o agrupamento inteiro por conta própria, calculando duas vezes a
@@ -360,7 +420,22 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
   // duas vezes o mesmo trabalho.
   const pctEmCurso = prog.detalhes.reduce(
     (a, d) => a + (d.fatia === 'emAndamento' ? d.peso - d.executado : 0), 0)
-  const visiveis = filtro === 'all' ? etapas : etapas.filter(e => e.status === filtro)
+  // O recorte pessoal vem ANTES do estado: "minhas em andamento" é a pergunta
+  // que se faz, e a contagem do menu tem de bater com o que a lista mostra.
+  // A legenda do progresso continua sobre o projeto inteiro (contagem, acima):
+  // ela responde pelo projeto, não por quem está olhando.
+  const minhas = React.useMemo(
+    () => etapas.filter(e => etapaDaPessoa(e, currentUserId)), [etapas, currentUserId])
+  const base = somenteMinhas ? minhas : etapas
+  const contagemFiltro = {
+    all: base.length,
+    progress: base.filter(e => e.status === 'progress').length,
+    review: base.filter(e => e.status === 'review').length,
+    diligence: base.filter(e => e.status === 'diligence').length,
+    done: base.filter(e => e.status === 'done').length,
+    todo: base.filter(e => e.status === 'todo').length,
+  }
+  const visiveis = filtro === 'all' ? base : base.filter(e => e.status === filtro)
 
   // Uma etapa duplicada são várias linhas de tarefa com o mesmo número; excluir
   // a etapa leva todas, senão a duplicata sobreviveria à exclusão.
@@ -474,17 +549,21 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
       )}
 
       <div className="et-barra-acoes">
-        {FILTROS.map(f => (
-          <button key={f.id} type="button"
-            className={'chip' + (filtro === f.id ? ' active' : '')}
-            aria-pressed={filtro === f.id}
-            onClick={() => setFiltro(f.id)}>
-            {f.label} ({contagem[f.id]})
-          </button>
-        ))}
+        <FiltroEstado valor={filtro} contagem={contagemFiltro} onEscolher={setFiltro} />
+
+        <button type="button" aria-pressed={somenteMinhas}
+          className={'chip' + (somenteMinhas ? ' active' : '')}
+          onClick={() => setSomenteMinhas(v => !v)}
+          title="Mostra só as etapas que têm atividade sua">
+          <Icon name="user" size={14} />Minhas atividades ({minhas.length})
+        </button>
+        {/* O modo de seleção só serve para excluir, então o nome diz o que ele
+            faz e não o gesto que ele pede: quem quer apagar três etapas de uma
+            vez procura "excluir", não "selecionar". */}
         {canEdit && !selecionando && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelecionando(true)}>
-            <Icon name="check" size={16} stroke={2.2} />Selecionar etapas
+          <button type="button" className="btn btn-ghost btn-sm et-excluir-varias"
+            onClick={() => setSelecionando(true)}>
+            <Icon name="trash" size={15} />Excluir etapas
           </button>
         )}
         {canEdit && (
@@ -504,7 +583,13 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
       </div>
 
       {visiveis.length === 0 ? (
-        <p className="et-vazio-filtro">Nenhuma etapa neste estado.</p>
+        <p className="et-vazio-filtro">
+          {somenteMinhas && !minhas.length
+            ? 'Você não tem atividade nenhuma neste projeto.'
+            : somenteMinhas
+              ? 'Nenhuma etapa sua neste estado.'
+              : 'Nenhuma etapa neste estado.'}
+        </p>
       ) : (
         <ol className="et-lista">
           {visiveis.map(e => (
