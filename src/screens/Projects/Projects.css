@@ -530,6 +530,10 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
 
 .et-filtro-seta { margin-left: 2px; opacity: .7; }
 
+/* Entra no modo de exclusão, não exclui: o vermelho só no hover. Em repouso
+   ele divide a barra com o filtro e não é o assunto da tela. */
+.et-excluir-varias:hover { color: var(--danger); background: var(--danger-soft); }
+
 /* flex-shrink: 0 porque .proj-etapas é um flex column — sem isto a lista pode
    ser espremida a quase nada quando o contêiner tem altura restrita. */
 .et-lista { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface); flex-shrink: 0; }

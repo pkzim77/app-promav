@@ -557,9 +557,13 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
           title="Mostra só as etapas que têm atividade sua">
           <Icon name="user" size={14} />Minhas atividades ({minhas.length})
         </button>
+        {/* O modo de seleção só serve para excluir, então o nome diz o que ele
+            faz e não o gesto que ele pede: quem quer apagar três etapas de uma
+            vez procura "excluir", não "selecionar". */}
         {canEdit && !selecionando && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelecionando(true)}>
-            <Icon name="check" size={16} stroke={2.2} />Selecionar etapas
+          <button type="button" className="btn btn-ghost btn-sm et-excluir-varias"
+            onClick={() => setSelecionando(true)}>
+            <Icon name="trash" size={15} />Excluir etapas
           </button>
         )}
         {canEdit && (
