@@ -1,11 +1,11 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field, SegControl, StatusTag, PriorityTag } from '../primitives/primitives.jsx'
-import { STATUSES, PRIORITIES, CHECK_STATES, STATUS_MAP, estadoDoItem, paraAtribuir } from '../../data/store.js'
+import { STATUSES, PRIORITIES, CHECK_STATES, STATUS_MAP, estadoDoItem, paraAtribuir, ETAPAS_PADRAO, tituloDaEtapa, PADRAO_ETAPA } from '../../data/store.js'
 import { dateError } from './shared/formHelpers.js'
 import { SugestaoItem } from './shared/SugestaoItem.jsx'
 
-export function TaskModal({ task, projects, users, currentUserId, defaultProjectId, defaultStatus, canEdit = true, onToggleChecklist, onToggleMembership, onSave, onClose }) {
+export function TaskModal({ task, projects, tasks = [], users, currentUserId, defaultProjectId, defaultStatus, comoEtapa = false, canEdit = true, onToggleChecklist, onToggleMembership, onSave, onClose }) {
   const editing = !!task
   const ro = !canEdit // somente leitura (papel 'Só exibição'): só checklist + entrar/sair
   const [title, setTitle] = React.useState(task?.title || '')
@@ -21,6 +21,31 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   const [checklist, setChecklist] = React.useState(task?.checklist ? task.checklist.map(i => ({ ...i })) : [])
   const [newItem, setNewItem] = React.useState('')
   const [touched, setTouched] = React.useState(false)
+
+  // Criar pela aba Etapas é criar uma ETAPA do template: o título nasce no
+  // padrão "N · Nome", que é o que a aba lê para agrupar. Digitá-lo à mão foi
+  // como os projetos ganharam etapas duplicadas e trabalho que caía em "Outras
+  // atividades" sem ninguém entender por quê.
+  //
+  // A caixa de avulsa fica no topo porque é ela que decide o resto do
+  // formulário — descobrir isso depois de preencher seria refazer o preenchido.
+  const [avulsa, setAvulsa] = React.useState(editing ? true : !comoEtapa)
+  const [etapaEscolhida, setEtapaEscolhida] = React.useState('')
+
+  // As etapas que o projeto já tem. Oferecer uma delas é oferecer a duplicata —
+  // e etapa duplicada é problema velho aqui: a própria aba tem um aviso para
+  // quando acontece.
+  const jaNoProjeto = React.useMemo(() => new Set(
+    tasks.filter(t => t.projectId === projectId)
+      .map(t => PADRAO_ETAPA.exec(t.title || '')?.[1])
+      .filter(Boolean).map(Number)), [tasks, projectId])
+  const livres = ETAPAS_PADRAO.map((_, i) => i).filter(i => !jaNoProjeto.has(i))
+  const nEtapaNova = etapaEscolhida !== '' && livres.includes(Number(etapaEscolhida))
+    ? Number(etapaEscolhida)
+    : livres[0]
+  const semEtapaLivre = livres.length === 0
+  // O título de uma etapa não se digita: ele se monta.
+  const tituloFinal = avulsa || editing ? title.trim() : (nEtapaNova != null ? tituloDaEtapa(nEtapaNova) : '')
 
   const ckDone = checklist.filter(i => estadoDoItem(i) === 'done').length
   const ckPct = checklist.length ? Math.round(ckDone / checklist.length * 100) : 0
@@ -71,34 +96,74 @@ export function TaskModal({ task, projects, users, currentUserId, defaultProject
   const nEtapa = /^(\d+) · /.exec(task?.title || '')?.[1]
 
   const dErr = dateError(start, end)
-  const titleErr = touched && !title.trim() ? 'Informe um título.' : null
+  const titleErr = touched && avulsa && !title.trim() ? 'Informe um título.' : null
   const projErr = touched && !projectId ? 'Selecione um projeto.' : null
 
   const save = () => {
     setTouched(true)
-    if (!title.trim() || !projectId || dErr) return
-    onSave({ ...(task || {}), title: title.trim(), projectId, assigneeId, memberIds: memberIds.filter(id => id !== assigneeId), status, priority, start: start || null, end: end || null, checklist })
+    if (!tituloFinal || !projectId || dErr) return
+    onSave({ ...(task || {}), title: tituloFinal, projectId, assigneeId, memberIds: memberIds.filter(id => id !== assigneeId), status, priority, start: start || null, end: end || null, checklist })
   }
 
   return (
     // O que este modal edita é uma ETAPA do processo; o que ele lista dentro é
     // que são as atividades. O nome antigo chamava as duas coisas de atividade,
     // e na aba Etapas isso ficou impossível de conversar.
-    <Modal className="project-modal" title={ro ? 'Detalhes da etapa' : (editing ? 'Editar etapa' : 'Nova etapa')} onClose={onClose}
+    <Modal className="project-modal" title={ro ? 'Detalhes da etapa' : editing ? 'Editar etapa' : avulsa ? 'Nova atividade avulsa' : 'Nova etapa'} onClose={onClose}
       footer={ro ? (
         <button className="btn btn-secondary" onClick={onClose}>Fechar</button>
       ) : (<>
         <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-primary" onClick={save}>{editing ? 'Salvar alterações' : 'Criar atividade'}</button>
+        <button className="btn btn-primary" onClick={save} disabled={!editing && !avulsa && semEtapaLivre}>
+          {editing ? 'Salvar alterações' : avulsa ? 'Criar atividade' : 'Criar etapa'}
+        </button>
       </>)}>
       {ro && (
         <p className="ro-hint"><Icon name="lock" size={14} />Você tem acesso de exibição. Pode marcar o checklist, mas não editar a atividade.</p>
       )}
-      <Field label="Título da atividade">
-        <input className="control" value={title} autoFocus={!ro} disabled={ro} placeholder="Ex.: Revisar protótipo"
-          onChange={e => setTitle(e.target.value)} />
-        {titleErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{titleErr}</span>}
-      </Field>
+      {!editing && !ro && (
+        <Field label="O que você está criando">
+          <label className="marca">
+            <input type="checkbox" checked={avulsa} onChange={e => setAvulsa(e.target.checked)} />
+            Atividade avulsa — fora do template de etapas
+          </label>
+          <span className="marca-nota">
+            {avulsa
+              ? 'Nasce solta, em "Outras atividades", com o título que você escrever.'
+              : 'Entra como etapa numerada do processo, no padrão que a aba Etapas agrupa.'}
+          </span>
+        </Field>
+      )}
+
+      {avulsa || editing ? (
+        <Field label={editing ? 'Título' : 'Título da atividade'}>
+          <input className="control" value={title} autoFocus={!ro} disabled={ro} placeholder="Ex.: Revisar protótipo"
+            onChange={e => setTitle(e.target.value)} />
+          {titleErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{titleErr}</span>}
+        </Field>
+      ) : (
+        <Field label="Etapa do processo">
+          {semEtapaLivre ? (
+            <p className="ro-hint">
+              <Icon name="flag" size={14} />
+              Este projeto já tem as {ETAPAS_PADRAO.length} etapas do processo. Para
+              trabalho que não cabe em nenhuma delas, marque <strong>atividade avulsa</strong>.
+            </p>
+          ) : (<>
+            <select className="control" value={nEtapaNova} onChange={e => setEtapaEscolhida(e.target.value)}>
+              {ETAPAS_PADRAO.map((nome, i) => (
+                <option key={i} value={i} disabled={jaNoProjeto.has(i)}>
+                  {i} · {nome}{jaNoProjeto.has(i) ? ' — já existe neste projeto' : ''}
+                </option>
+              ))}
+            </select>
+            <span className="marca-nota">
+              A etapa entra como <strong>{tituloFinal}</strong>. As que o projeto já tem
+              aparecem desligadas, para não nascer duplicada.
+            </span>
+          </>)}
+        </Field>
+      )}
       <div className="field-row">
         <Field label="Projeto">
           <select className="control" value={projectId} disabled={ro} onChange={e => setProjectId(e.target.value)}>

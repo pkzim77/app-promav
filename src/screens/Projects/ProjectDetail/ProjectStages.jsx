@@ -367,7 +367,7 @@ const etapaDaPessoa = (etapa, userId) => !!userId && etapa.tasks.some(t =>
 
 export function ProjectStages({ project, tasks, users, sessions, currentUserId, now, canEdit = true, isAdmin = false,
                                onAssignChecklist, onSetChecklistState, onEditChecklistItem, onExcluirChecklistItem,
-                               onMoveTask, onNewTask, onNewStageItem, onCreateStages,
+                               onMoveTask, onNewTask, onNewStageItem, onNewStage, onCreateStages,
                                onEditTask, onDeleteTask, onDeleteStages, onStartTimer, onStopTimer }) {
   const doProjeto = React.useMemo(() => tasks.filter(t => t.projectId === project.id), [tasks, project.id])
   const { etapas, avulsas } = React.useMemo(() => agruparEtapas(doProjeto), [doProjeto])
@@ -491,7 +491,7 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
             action={
               <div className="et-nova">
                 <BotaoCriarTemplate projectId={project.id} onCreateStages={onCreateStages} />
-                <button className="btn btn-ghost" onClick={() => onNewTask(project.id)}>Atividade avulsa</button>
+                <button className="btn btn-ghost" onClick={() => onNewStage(project.id)}>Criar etapa</button>
               </div>
             } />
         ) : (
@@ -573,9 +573,12 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
             <button className="btn btn-primary btn-sm" onClick={() => onNewStageItem(project.id)}>
               <Icon name="plus" size={16} stroke={2.2} />Nova atividade
             </button>
-            <button className="btn btn-ghost btn-sm" onClick={() => onNewTask(project.id)}
-              title="Cria uma atividade fora do template de etapas">
-              Atividade avulsa
+            {/* Cria uma etapa do template. A caixa no topo do modal é que troca
+                para atividade avulsa — o caminho existe, mas deixou de ser o
+                rótulo do botão: etapa é o que se cria aqui todo dia. */}
+            <button className="btn btn-ghost btn-sm" onClick={() => onNewStage(project.id)}
+              title="Cria uma etapa do processo neste projeto">
+              <Icon name="flag" size={15} />Criar etapa
             </button>
           </div>
         )}

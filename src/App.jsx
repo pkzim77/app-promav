@@ -450,6 +450,10 @@ export default function App() {
 
   // ----- tasks -----
   const openNewTask = (projectId, status) => setModal({ type: 'task', defaultProjectId: projectId, defaultStatus: status })
+  // Pela aba Etapas, o padrão é criar uma etapa do template; a caixa no topo do
+  // modal é que troca para avulsa. Nas outras telas segue avulsa, que é o que
+  // elas sempre criaram.
+  const openNewStage = (projectId) => setModal({ type: 'task', defaultProjectId: projectId, comoEtapa: true })
   // Abrir a atividade conta como acesso: é o que adia a notificação daquilo
   // que a própria pessoa criou para si. Falha aqui não pode travar o modal —
   // o registro de leitura é secundário em relação a ver a atividade.
@@ -986,7 +990,7 @@ export default function App() {
       onNewTask={openNewTask} onEditTask={openEditTask} onDeleteTask={askDeleteTask}
       onAssignChecklist={assignChecklistItem} onMoveTask={moveTask}
       onSetChecklistState={setChecklistState} onEditChecklistItem={editChecklistItem}
-      onExcluirChecklistItem={askDeleteChecklistItem} onDeleteStages={askDeleteStages}
+      onExcluirChecklistItem={askDeleteChecklistItem} onDeleteStages={askDeleteStages} onNewStage={openNewStage}
       onNewStageItem={openStageItem} onCreateStages={createStages}
       onCopyResource={copyResourceLink} onDeleteResource={(resource) => askDeleteResource(currentProject, resource)}
       onAddResource={openAddResource}
@@ -1058,8 +1062,8 @@ export default function App() {
       </div>
 
       {modal?.type === 'task' && (
-        <TaskModal task={modal.task} projects={projects} users={users} currentUserId={currentUserId}
-          defaultProjectId={modal.defaultProjectId} defaultStatus={modal.defaultStatus}
+        <TaskModal task={modal.task} projects={projects} tasks={tasks} users={users} currentUserId={currentUserId}
+          defaultProjectId={modal.defaultProjectId} defaultStatus={modal.defaultStatus} comoEtapa={modal.comoEtapa}
           canEdit={modal.task ? canEditProject(effectiveProjectRole(projects.find(p => p.id === modal.task.projectId), authUser)) : isAdmin}
           onToggleChecklist={toggleChecklistItem} onToggleMembership={toggleMyMembership}
           onSave={saveTask} onClose={() => setModal(null)} />
