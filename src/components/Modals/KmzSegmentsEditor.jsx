@@ -163,6 +163,11 @@ export function KmzSegmentsEditor({ resource, onChange }) {
                   {pct !== null && (
                     <span className={'kmz-edit-pct' + (pct >= 100 ? ' done' : '')}>{pct}%</span>
                   )}
+                  <button type="button" className="kmz-edit-del" title="Apagar trecho"
+                    aria-label={`Apagar o trecho ${f.nome}`}
+                    onClick={() => editar(f.id, { removido: true })}>
+                    <Icon name="trash" size={14} />
+                  </button>
                 </div>
               )
             })}

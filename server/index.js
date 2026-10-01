@@ -127,8 +127,10 @@ function normSegmentos(input) {
       if (nome) item.nome = nome
       if (grupo) item.grupo = grupo
       if (Number.isFinite(exec) && exec >= 0) item.extensaoExecutadaM = exec
-      // Sem nome, grupo nem extensão executada não há edição nenhuma para guardar.
-      return (item.nome || item.grupo || item.extensaoExecutadaM != null) ? item : null
+      // Trecho apagado: o desenho continua no arquivo, só deixa de aparecer.
+      if (s.removido === true) item.removido = true
+      // Sem nome, grupo, extensão executada nem remoção não há edição nenhuma para guardar.
+      return (item.nome || item.grupo || item.extensaoExecutadaM != null || item.removido) ? item : null
     })
     .filter(Boolean)
 }

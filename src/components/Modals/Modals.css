@@ -326,7 +326,10 @@
 
 .kmz-edit-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
 
-.kmz-edit-row { display: grid; grid-template-columns: 1fr 160px auto auto auto; align-items: center; gap: 8px; }
+.kmz-edit-row { display: grid; grid-template-columns: 1fr 160px auto auto auto auto; align-items: center; gap: 8px; }
+.kmz-edit-del { display: grid; place-items: center; width: 28px; height: 28px; border: 0; background: none; color: var(--fg-4);
+  border-radius: var(--r-sm); cursor: pointer; }
+.kmz-edit-del:hover { color: var(--danger, #c0392b); background: var(--bg-subtle); }
 .kmz-edit-nome, .kmz-edit-grupo-inp { min-width: 0; }
 
 /* Cabeçalho de grupo no editor: nome do grupo e o subtotal dele. */

@@ -174,7 +174,7 @@ export function montarFeatures(geojson, pastas = []) {
 export function aplicarEdicoes(features, segmentos) {
   if (!Array.isArray(segmentos) || !segmentos.length) return features
   const porId = new Map(segmentos.map(s => [s.id, s]))
-  return features.map((f) => {
+  return features.filter(f => !porId.get(f.id)?.removido).map((f) => {
     const edicao = porId.get(f.id)
     if (!edicao) return f
     const nome = typeof edicao.nome === 'string' && edicao.nome.trim() ? edicao.nome.trim() : f.nome
