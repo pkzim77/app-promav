@@ -155,6 +155,10 @@ export function KmzMapView({ resource, equipe = false }) {
   const feats = React.useMemo(() => aplicarEdicoes(base, JSON.parse(segKey)), [base, segKey])
   const featsRef = React.useRef(feats)
   featsRef.current = feats
+  // Quais trechos estão vivos (os apagados no editor saem de `feats`). O mapa é
+  // desenhado a partir do GeoJSON inteiro, então precisa ser refeito quando
+  // esse conjunto muda — só recolorir não tira o traço apagado da tela.
+  const idsVivos = feats.map(f => f.id).join(',')
 
   const totais = React.useMemo(() => totalizar(feats), [feats])
   const trechos = React.useMemo(() => resumirTrechos(feats), [feats])
@@ -202,8 +206,12 @@ export function KmzMapView({ resource, equipe = false }) {
   // silenciosamente se o ref ainda não estivesse pronto.
   React.useEffect(() => {
     if (status !== 'ok' || !parsedRef.current || !boxRef.current) return
-    const { geo } = parsedRef.current
     const lista = featsRef.current
+    // Sem os trechos apagados. Mantém a mesma ordem de `lista`, que é o que
+    // faz o índice de style/onEachFeature (abaixo) casar com cada trecho.
+    const vivos = new Set(lista.map(f => f.id))
+    const geoCompleto = parsedRef.current.geo
+    const geo = { ...geoCompleto, features: geoCompleto.features.filter((_, i) => vivos.has(`f${i}`)) }
 
     // preferCanvas: com dezenas de trechos o canvas rende bem melhor que SVG.
     const map = L.map(boxRef.current, { zoomControl: true, preferCanvas: true })
@@ -241,7 +249,7 @@ export function KmzMapView({ resource, equipe = false }) {
       if (mapRef.current === map) mapRef.current = null
       layersRef.current.clear()
     }
-  }, [status, geoVersion])
+  }, [status, geoVersion, idsVivos])
 
   // ---------- execução lançada muda: recolore no lugar ----------
   // Depois de "Lançar execução" o projeto volta com segments novos. Em vez de

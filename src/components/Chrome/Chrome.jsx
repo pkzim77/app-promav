@@ -160,6 +160,11 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
     ...(isAdmin ? [{ id: 'people', label: 'Profissionais', icon: 'users' }] : []),
     { id: 'reports', label: 'Relatórios Dos Projetos', icon: 'trendingUp' },
     { id: 'team', label: 'Relatórios Da Equipe', icon: 'users' },
+    // Quem escreve vê o próprio relatório; quem recebe vê o de todo mundo. São
+    // telas diferentes de verdade, não a mesma com permissão diferente.
+    ...(isAdmin
+      ? [{ id: 'weeklyreports', label: 'Relatórios Individuais', icon: 'file' }]
+      : [{ id: 'myreport', label: 'Meu Relatório', icon: 'file' }]),
   ]
 
   // Um botão de projeto (a "lista de tarefas"), reutilizado dentro e fora das pastas.
@@ -421,7 +426,7 @@ export function NewsPanel({ open, items = [], readIds = new Set(), onClose, onMa
   )
 }
 
-export function TopBar({ title, currentUser, canNewProject = true, onToggleMobileNav, onChangePassword, onMySector, onLogout, onNewProject, tasks, projects, sessions, now, onStartTimer, onStopTimer, searchQuery, onSearchChange, notifications = [], unreadCount = 0, readNewsIds = new Set(), onMarkRead, onMarkAllRead, onOpenNotification, onDismiss, onDismissAll, avisos, onToggleSom, onToggleNavegador }) {
+export function TopBar({ title, currentUser, canNewProject = true, onToggleMobileNav, onChangePassword, onMySector, onLogout, onNewProject, tasks, projects, sessions, now, onStartTimer, onStopTimer, onOpenTask, searchQuery, onSearchChange, notifications = [], unreadCount = 0, readNewsIds = new Set(), onMarkRead, onMarkAllRead, onOpenNotification, onDismiss, onDismissAll, avisos, onToggleSom, onToggleNavegador }) {
   const [newsOpen, setNewsOpen] = React.useState(false)
 
   return (
@@ -436,7 +441,8 @@ export function TopBar({ title, currentUser, canNewProject = true, onToggleMobil
           <Icon name="search" size={17} />
           <input value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Buscar projetos" />
         </div>
-        <TimeClock currentUser={currentUser} tasks={tasks} projects={projects} sessions={sessions} now={now} onStart={onStartTimer} onStop={onStopTimer} />
+        <TimeClock currentUser={currentUser} tasks={tasks} projects={projects} sessions={sessions} now={now}
+          onStart={onStartTimer} onStop={onStopTimer} onOpenTask={onOpenTask} />
         {canNewProject && (
           <button className="btn btn-primary" onClick={onNewProject}>
             <Icon name="plus" size={17} stroke={2.2} />Novo projeto

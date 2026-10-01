@@ -1,12 +1,13 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
-import { ProgressBar } from '../../../components/primitives/primitives.jsx'
-import { PROJECT_COLORS, projectProgress, fmtShort, effectiveProjectRole, canEditProject } from '../../../data/store.js'
+import { ProgressBar, AvisoPendencias } from '../../../components/primitives/primitives.jsx'
+import { PROJECT_COLORS, SEM_ATIVIDADES, projectProgress, tasksByProject, fmtShort, effectiveProjectRole, canEditProject, pendenciasDoProjeto } from '../../../data/store.js'
 import { EmptyState } from '../shared/EmptyState.jsx'
 
 function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete, draggable, dragging, dropHint, onDragStart, onDragEnd, onDragOver, onDrop }) {
-  const pct = projectProgress(tasks, project.id)
-  const count = tasks.filter(t => t.projectId === project.id).length
+  // `tasks` são só as DESTE projeto — o pai agrupa uma vez (tasksByProject).
+  const pct = projectProgress(tasks)
+  const count = tasks.length
   const color = PROJECT_COLORS[project.color]
   const role = effectiveProjectRole(project, authUser)
   const canEdit = canEditProject(role)
@@ -21,7 +22,12 @@ function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete, d
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
         <span style={{ width: 34, height: 34, borderRadius: 'var(--r-md)', background: color, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ font: 'var(--text-h4)', color: 'var(--fg-1)', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden', overflowWrap: 'anywhere' }}>{project.name}</div>
+          <div style={{ font: 'var(--text-h4)', color: 'var(--fg-1)', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden', overflowWrap: 'anywhere' }}>
+            {project.name}
+            {/* O projeto pode ser criado incompleto; o que falta fica dito aqui,
+                senão ninguém descobre sem abrir o cadastro um por um. */}
+            {' '}<AvisoPendencias itens={pendenciasDoProjeto(project)} />
+          </div>
           <p style={{ fontSize: 13, color: 'var(--fg-3)', margin: '3px 0 0', lineHeight: 1.45, display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 3, overflow: 'hidden', overflowWrap: 'anywhere' }}>{project.desc}</p>
         </div>
         {(canEdit || canDelete) && (
@@ -32,7 +38,10 @@ function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete, d
         )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--fg-3)', marginBottom: 14 }}>
-        <Icon name="calendar" size={14} />{fmtShort(project.start)} — {fmtShort(project.end)}
+        <Icon name="calendar" size={14} />
+        {project.start || project.end
+          ? <>{fmtShort(project.start)} — {fmtShort(project.end)}</>
+          : 'Sem prazo definido'}
       </div>
       <div style={{ marginTop: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
@@ -97,11 +106,17 @@ function FolderGridCard({ folder, subCount, projCount, onEnter, onNewProject, on
   )
 }
 
-export function ProjectList({ projects, tasks, folders = [], authUser, canCreate = true, onOpen, onEdit, onDelete, onNew, onMoveProject, onMoveFolder, onNewSubfolder, onDeleteFolder }) {
-  const [openId, setOpenId] = React.useState(null) // pasta aberta (null = raiz)
+// A pasta aberta vem de fora (openId/onOpenFolder) e não de um useState daqui.
+// Como estado interno ela morria ao abrir um projeto — a tela desmonta — e
+// voltar jogava a pessoa na raiz, obrigando-a a refazer a navegação inteira
+// para chegar ao projeto vizinho.
+export function ProjectList({ projects, tasks, folders = [], authUser, canCreate = true, openId = null, onOpenFolder = () => {}, onOpen, onEdit, onDelete, onNew, onMoveProject, onMoveFolder, onNewSubfolder, onDeleteFolder }) {
   const [drag, setDrag] = React.useState(null)
   const dragRef = React.useRef(null)
   const [dropHint, setDropHint] = React.useState(null)
+
+  // Uma passada sobre as atividades em vez de dois filters por card.
+  const porProjeto = React.useMemo(() => tasksByProject(tasks), [tasks])
 
   const folderIds = React.useMemo(() => new Set(folders.map(f => f.id)), [folders])
   // Pasta atual é válida? (pode ter sido excluída) — senão, volta à raiz.
@@ -215,7 +230,7 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
 
       {/* Trilha de navegação: Projetos / Pasta / Subpasta */}
       <nav className="proj-crumbs">
-        <button className={'proj-crumb' + hintClass('root')} onClick={() => setOpenId(null)} disabled={!currentId}
+        <button className={'proj-crumb' + hintClass('root')} onClick={() => onOpenFolder(null)} disabled={!currentId}
           onDragOver={overRoot} onDrop={dropRoot}>
           <Icon name="folder" size={15} />Projetos
         </button>
@@ -223,7 +238,7 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
           <React.Fragment key={f.id}>
             <Icon name="chevronRight" size={14} style={{ color: 'var(--fg-4)' }} />
             <button className={'proj-crumb' + (dropHint?.key === 'f:' + f.id ? ' drop-into' : '')}
-              onClick={() => setOpenId(f.id)} disabled={f.id === currentId}
+              onClick={() => onOpenFolder(f.id)} disabled={f.id === currentId}
               onDragEnter={overFolder(f)} onDragOver={overFolder(f)} onDrop={dropFolder(f)}>
               {f.name}
             </button>
@@ -248,13 +263,13 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
                   dropHint={dropHint?.key === 'f:' + f.id ? dropHint.mode : null}
                   onDragStart={startDrag(f.id)} onDragEnd={clearDrag} onDragOver={overFolder(f)} onDrop={dropFolderTarget(f)}
                   subCount={childFolders(f.id).length} projCount={projectsIn(f.id).length}
-                  onEnter={setOpenId} />
+                  onEnter={onOpenFolder} />
               ))}
             </div>
           )}
           {projs.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 18 }}>
-              {projs.map(p => <ProjectGridCard key={p.id} project={p} tasks={tasks} authUser={authUser} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete}
+              {projs.map(p => <ProjectGridCard key={p.id} project={p} tasks={porProjeto.get(p.id) || SEM_ATIVIDADES} authUser={authUser} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete}
                 draggable={canMove} dragging={drag?.id === p.id} dropHint={dropHint?.key === 'p:' + p.id ? dropHint.mode : null}
                 onDragStart={startDrag(p.id)} onDragEnd={clearDrag} onDragOver={overProject(p)} onDrop={dropProject(p)} />)}
             </div>

@@ -31,7 +31,11 @@ const itemFeito = (i) => !!(i && (i.done ?? i.concluido))
 // Status do quadro. Aceita os ids do app ('done'/'progress'/'todo') e os
 // nomes usados na especificação, para a função servir aos dois formatos.
 const ehConcluido = (a) => a?.status === 'done' || a?.status === 'concluido'
+// Revisão e diligência são serviço começado e não entregue — a mesma fatia de
+// 'Em andamento'. Separá-las aqui quebraria a soma em 100 das três fatias, e o
+// que o Panorama responde é onde o projeto está, não em que subestado.
 const ehAndamento = (a) => a?.status === 'progress' || a?.status === 'andamento'
+  || a?.status === 'review' || a?.status === 'diligence'
 
 // Arredonda as três fatias para 1 casa mantendo a soma exata em 100.
 // A sobra do arredondamento vai para a maior fatia, onde pesa menos.

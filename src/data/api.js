@@ -69,6 +69,13 @@ export const api = {
   reorderFolders: (parentId, orderedIds) => req('PUT', '/folders/reorder', { parentId, orderedIds }),
   reorderProjects: (folderId, orderedIds) => req('PUT', '/projects/reorder', { folderId, orderedIds }),
 
+  // ----- relatório semanal -----
+  // A semana vai como a sexta que a encerra; o servidor normaliza de novo, para
+  // não depender do fuso de quem clicou.
+  weeklyReportMine: (week) => req('GET', `/weekly-reports/me?week=${week}`),
+  saveWeeklyReport: (data) => req('PUT', '/weekly-reports/me', data),
+  weeklyReports: (week) => req('GET', `/weekly-reports?week=${week}`),
+
   // ----- arquivos (upload/download de documentos e imagens guardados no banco) -----
   // Envia o arquivo cru; metadados (tipo, nome, rótulo) vão na query string.
   uploadFile: async (projectId, file, kind, label = '') => {
@@ -95,6 +102,11 @@ export const api = {
   deleteResource: (projectId, resourceId) => req('DELETE', `/projects/${projectId}/resources/${resourceId}`),
   // Marca/desmarca itens de checklist — permitido para 'Só exibição'.
   toggleChecklist: (taskId, checklist) => req('PATCH', `/tasks/${taskId}/checklist`, { checklist }),
+
+  // Mexe num item só, mandando apenas os campos que mudaram: o servidor toca
+  // no que vier e ignora o resto. Mandar o item inteiro faria o backend achar
+  // que o texto está sendo editado e cobrar Edição total de quem só marcou.
+  patchChecklistItem: (taskId, item) => req('PATCH', `/tasks/${taskId}/checklist`, { checklist: [item] }),
   // Entrar/sair de uma atividade (só a própria participação) — permitido para 'Só exibição'.
   toggleMembership: (taskId, join) => req('POST', `/tasks/${taskId}/membership`, { join }),
 
@@ -106,6 +118,23 @@ export const api = {
   pulse: () => req('GET', '/pulse'),
   // Registra que a pessoa abriu a atividade — permitido para 'Só exibição'.
   viewTask: (id) => req('POST', `/tasks/${id}/view`),
+  // Textos de item já usados, por número de etapa. Só dos projetos que a pessoa
+  // enxerga — o servidor filtra, não o cliente.
+  checklistSuggestions: () => req('GET', '/checklist-suggestions'),
+
+  // Acrescenta uma ou VÁRIAS atividades a uma etapa, numa ida só — exige Edição
+  // total. A tela deixa escrever uma lista, e um pedido por linha repetiria o
+  // custo de rede que o "criar template" já teve.
+  addChecklistItems: (taskId, items) => req('POST', `/tasks/${taskId}/checklist`, { items }),
+
+  // Remove UMA atividade da etapa, sem reescrever o checklist inteiro.
+  deleteChecklistItem: (taskId, itemId) => req('DELETE', `/tasks/${taskId}/checklist/${itemId}`),
+
+  // Exclui várias etapas de uma vez (seleção em massa da aba Etapas).
+  bulkDeleteTasks: (ids) => req('POST', '/tasks/bulk-delete', { ids }),
+
+  // Cria de uma vez as etapas do processo que faltam no projeto.
+  createStages: (projectId) => req('POST', `/projects/${projectId}/stages`),
 
   // ----- mudanças do projeto (orientações) -----
   publishChange: (projectId, data) => req('POST', `/projects/${projectId}/changes`, data),

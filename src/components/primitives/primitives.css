@@ -28,6 +28,9 @@
   overflow-y: scroll;
   box-shadow: var(--shadow-lg); 
   animation: rise var(--dur-slow) var(--ease-out); 
+  /* A caixa recebe o foco ao abrir, para o leitor de tela anunciar o título.
+     Sem isto o navegador desenharia um anel em volta do modal inteiro. */
+  outline: none;
 }
 
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid var(--border); }
@@ -50,10 +53,34 @@
 
 .ck-mini.full svg { color: var(--success); }
 
+/* ---------- pendências ---------- */
+
+.pend-aviso { display: inline-flex; align-items: center; color: #A8680A; flex-shrink: 0; }
+
+.pend-painel { margin: 0 0 16px; padding: 12px 14px; border-radius: var(--r-md); background: #FDF2E2; border: 1px solid #F3D8A8; }
+
+.pend-painel > strong { display: flex; align-items: center; gap: 7px; font-size: 13.5px; color: #8A5407; }
+
+.pend-painel > ul { margin: 7px 0 0; padding-left: 26px; font-size: 13px; color: var(--fg-2); line-height: 1.7; }
+
+.pend-painel > p { margin: 9px 0 0; font-size: 12.5px; color: var(--fg-3); }
+
 /* ---------- Toast ---------- */
 
-.toast-wrap { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+/* A região existe mesmo sem aviso na tela (ver Toast). Vazia ela não tem
+   tamanho, mas pointer-events garante que nunca engula um clique. */
+.toast-wrap { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
 
-.toast { display: flex; align-items: center; gap: 10px; background: var(--brand-ink); color: #fff; font-size: 14px; font-weight: 500; padding: 11px 16px; border-radius: var(--r-md); box-shadow: var(--shadow-lg); animation: rise var(--dur) var(--ease-out); }
+.toast { display: flex; align-items: center; gap: 10px; background: var(--brand-ink); color: #fff; font-size: 14px; font-weight: 500; padding: 11px 16px; border-radius: var(--r-md); box-shadow: var(--shadow-lg); animation: rise var(--dur) var(--ease-out); pointer-events: auto; max-width: min(520px, calc(100vw - 32px)); }
 
 .toast .ic { color: #6ee7a8; display: flex; }
+
+/* Erro mantém o fundo de tinta: vermelho atrás de texto branco não alcança
+   contraste 4.5:1 no corpo de 14px. A faixa e o triângulo é que marcam. */
+.toast.erro { border-left: 3px solid var(--danger); padding-left: 13px; }
+
+.toast.erro .ic { color: var(--danger); }
+
+.toast-x { display: flex; flex: none; margin-left: 4px; padding: 3px; border-radius: var(--r-xs); color: rgba(255,255,255,.55); }
+
+.toast-x:hover { color: #fff; background: rgba(255,255,255,.14); }

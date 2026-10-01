@@ -48,17 +48,181 @@
 
 .ck-text { font-size: 13.5px; color: var(--fg-1); flex: 1; }
 
+/* O texto do item virou campo. Discreto até receber o foco: uma linha de
+   caixas com borda pareceria um formulário de cadastro, não um checklist. */
+.ck-input { flex: 1; min-width: 0; padding: 5px 8px; font-size: 13.5px; border-color: transparent; background: transparent; }
+
+.ck-edit-row:hover .ck-input { border-color: var(--border); background: var(--surface); }
+
+.ck-input:focus { border-color: var(--brand); background: var(--surface); }
+
+.ck-input.done { color: var(--fg-4); text-decoration: line-through; }
+
 .ck-text.done { color: var(--fg-4); text-decoration: line-through; }
 
 .ck-del { opacity: 0; padding: 5px; }
 
 .ck-edit-row:hover .ck-del { opacity: 1; }
 
+/* As caixas ocupam a altura de um .control para a linha bater com o campo ao
+   lado (Setor). Sem isso a coluna da direita subia e as duas ficavam tortas. */
+.marcas { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; min-height: 38px; }
+
+/* ---------- ficha do profissional (carteirinha) ---------- */
+
+.modal-ficha { max-width: 560px; }
+
+/* Cartão de identificação: fundo de tinta, rótulos em bege da marca e cada
+   valor numa caixa clara — o mesmo desenho do crachá impresso, onde a caixa é
+   a linha que se preenche. */
+.cart { background: var(--brand-ink); border-radius: var(--r-lg); padding: 18px 20px 16px; color: #fff; box-shadow: var(--shadow-md); }
+
+.cart-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 14px; border-bottom: 2px solid var(--accent-strong); }
+
+.cart-marca { display: flex; flex-direction: column; gap: 1px; }
+
+.cart-logo { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+
+.cart-logo b { color: #fff; }
+
+.cart-logo em { color: var(--accent); font-style: normal; }
+
+.cart-eng { font-size: 9.5px; font-weight: 600; letter-spacing: 0.18em; color: var(--accent); }
+
+.cart-org { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,.62); }
+
+.cart-org em { font-style: normal; font-size: 12.5px; letter-spacing: 0; text-transform: none; color: #fff; }
+
+/* Enquanto não há foto, os campos ocupam a largura inteira. A moldura de
+   retrato (3x4, à esquerda) volta quando a foto existir. */
+.cart-corpo { display: flex; gap: 16px; padding-top: 16px; }
+
+.cart-campos { flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; align-content: start; }
+
+.cart-campo { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+.cart-campo.largo { grid-column: 1 / -1; }
+
+.cart-rotulo { font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+
+.cart-caixa { background: #fff; color: #16150F; border-radius: var(--r-sm); padding: 6px 10px; font-size: 13px; font-weight: 600; min-height: 30px; display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Campo sem valor fica visivelmente vazio, como a linha em branco do crachá:
+   some do olho como dado, mas continua aparecendo como lacuna. */
+.cart-caixa.vazia { color: var(--fg-4); font-weight: 500; font-style: italic; background: rgba(255,255,255,.82); }
+
+.cart-rodape { margin: 14px 0 0; font-size: 11.5px; color: rgba(255,255,255,.62); }
+
+.cart-rodape strong { color: #fff; }
+
+/* ---------- o que é do sistema, fora da carteirinha ---------- */
+
+.pc-sistema { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding-top: 16px; }
+
+.pc-selos { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.pc-selo { font-size: 11.5px; font-weight: 600; border-radius: var(--r-full); padding: 3px 10px; background: var(--bg-muted); color: var(--fg-2); }
+
+.pc-selo.admin { background: var(--info-soft); color: #1f64cc; }
+
+.pc-selo.terc { background: var(--warning-soft); color: #8a5a08; }
+
+.pc-selo.ativo { background: var(--success-soft); color: #157a49; }
+
+.pc-selo.inativo { background: var(--danger-soft); color: #b0343a; }
+
+.pc-alocacao { margin: 0; font-size: 13px; color: var(--fg-2); }
+
+.pc-alocacao strong { color: var(--fg-1); }
+
+.pc-sep { color: var(--fg-4); margin: 0 5px; }
+
+.pc-nota { display: flex; align-items: center; gap: 8px; margin: 14px 0 0; padding: 10px 12px; border-radius: var(--r-sm); background: var(--bg-subtle); font-size: 12.5px; color: var(--fg-3); }
+
+@media (max-width: 520px) {
+  .cart-campos { grid-template-columns: 1fr; }
+  .cart-org { display: none; }
+}
+
+/* Marcação simples dentro de um campo (terceirizado, administrador). */
+.marca { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--fg-1); cursor: pointer; padding: 3px 0; }
+
+.marca input { width: 17px; height: 17px; flex-shrink: 0; accent-color: var(--brand); cursor: pointer; }
+
+.marca-nota { font-size: 12px; color: var(--fg-4); line-height: 1.45; }
+
 .ck-add { display: flex; gap: 8px; margin-top: 8px; }
 
 .ck-add .control { flex: 1; }
 
+/* ---------- sugestão de item ---------- */
+
+/* relative para a lista ancorar no campo; flex:1 porque dentro do .ck-add quem
+   estica agora é este invólucro, não mais o <input>. */
+.sug { position: relative; flex: 1; min-width: 0; }
+
+.sug .control { width: 100%; }
+
+.sug-lista { position: absolute; z-index: 5; top: calc(100% + 4px); left: 0; right: 0; margin: 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-md); max-height: 232px; overflow-y: auto; }
+
+.sug-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; border-radius: var(--r-sm); font-size: 13.5px; color: var(--fg-1); cursor: pointer; }
+
+.sug-item.on { background: var(--bg-muted); }
+
+.sug-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Quantos projetos já usaram o texto. É o que separa o padrão da casa do
+   improviso de alguém — sem isso as oito linhas têm todas o mesmo peso. */
+.sug-n { flex-shrink: 0; font-size: 11.5px; font-weight: 600; color: var(--fg-4); }
+
 .ck-add .btn { flex-shrink: 0; }
+
+/* ---------- várias atividades de uma vez (modal "Novas atividades") ---------- */
+
+.ev-lista { display: flex; flex-direction: column; gap: 8px; }
+
+/* O texto manda na largura; o responsável tem largura fixa porque um nome longo
+   não pode empurrar o campo que a pessoa está digitando.
+
+   A largura precisa de três classes: `.field .control` (kit.css) tem duas e
+   vencia `.ev-dono`, que tem uma — o seletor esticava para a linha inteira e
+   espremia o campo de texto até ele virar um risco. */
+.ev-linha { display: flex; align-items: center; gap: 8px; }
+
+.field .ev-linha .ev-dono { flex-shrink: 0; width: 172px; }
+
+.ev-tirar { flex-shrink: 0; color: var(--fg-4); }
+
+.ev-tirar:hover:not(:disabled) { color: var(--danger); background: var(--danger-soft); }
+
+.ev-mais { margin-top: 9px; }
+
+/* Em tela estreita a linha vira duas: o texto inteiro em cima, o responsável e a
+   lixeira embaixo — com 172px de seletor ao lado sobrariam ~90px para digitar. */
+@media (max-width: 560px) {
+  .ev-linha { flex-wrap: wrap; }
+  .ev-linha .sug { flex-basis: 100%; }
+  .field .ev-linha .ev-dono { flex: 1; width: auto; }
+}
+
+/* ---------- atividades da etapa (aberto pelo cronômetro) ---------- */
+
+.ma-onde { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 14px; font-size: 12.5px; color: var(--fg-3); }
+
+.ma-proj { font-weight: 600; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ma-conta { flex-shrink: 0; font-family: var(--font-mono); }
+
+.ma-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.ma-lista > li { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); }
+
+/* Concluída continua legível: risca o texto, não apaga a linha. */
+.ma-lista > li.ok .ma-texto { text-decoration: line-through; color: var(--fg-4); }
+
+.ma-texto { flex: 1; min-width: 0; font-size: 13.5px; color: var(--fg-1); overflow-wrap: anywhere; }
+
+.ma-dono { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; font-size: 12.5px; font-weight: 600; color: var(--fg-2); }
 
 /* ---------- Member picker (task modal) ---------- */
 
@@ -164,11 +328,7 @@
 
 .perm-head-role { flex: 0 0 168px; }
 
-.perm-add { display: flex; gap: 8px; margin-bottom: 12px; }
-
-.perm-add .control { flex: 1; min-width: 0; }
-
-.perm-add .btn { flex-shrink: 0; }
+.perm-add { margin-bottom: 12px; }
 
 /* Caixa de marcação "é responsável pelo projeto" */
 .resp-check { flex: 0 0 20px; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid var(--border-strong, var(--border)); border-radius: var(--r-sm); color: #fff; background: transparent; transition: background var(--dur), border-color var(--dur); }

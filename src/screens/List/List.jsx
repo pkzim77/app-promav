@@ -1,8 +1,8 @@
 import './List.css'
 import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
-import { Avatar, StatusTag, PriorityTag, ChecklistMini } from '../../components/primitives/primitives.jsx'
-import { STATUSES, PROJECT_COLORS, fmtShort, effectiveProjectRole, canEditProject } from '../../data/store.js'
+import { Avatar, StatusTag, PriorityTag, ChecklistMini, SemResponsavel } from '../../components/primitives/primitives.jsx'
+import { STATUSES, PROJECT_COLORS, taskMembers, fmtShort, effectiveProjectRole, canEditProject } from '../../data/store.js'
 // Lista — atividades em formato de tabela, agrupadas por status (estilo ClickUp).
 
 export function TaskListView({ tasks, projects, users, authUser, filterProject, mine, currentUserId, onFilterProject, onToggleMine, onMoveTask, onNewTask, onEditTask }) {
@@ -42,7 +42,11 @@ export function TaskListView({ tasks, projects, users, authUser, filterProject, 
 
   let visible = tasks
   if (filterProject) visible = visible.filter(t => t.projectId === filterProject)
-  if (mine) visible = visible.filter(t => t.assigneeId === currentUserId)
+  // "Minhas" é onde a pessoa está, não só o que está no nome dela. taskMembers
+  // devolve responsável + participantes, que é a mesma regra que o App já usa
+  // para decidir quem é avisado de uma mudança — aqui ela estava faltando, e
+  // quem entrava numa atividade de outro simplesmente não a via mais.
+  if (mine) visible = visible.filter(t => taskMembers(t).includes(currentUserId))
 
   // Subtarefas visíveis por mãe; e quem é "de topo" na lista (sem mãe visível).
   const visibleIds = new Set(visible.map(t => t.id))
@@ -81,7 +85,7 @@ export function TaskListView({ tasks, projects, users, authUser, filterProject, 
             )}
           </div>
           <div>{p && <span className="proj-pill" style={{ fontSize: 12 }}><span className="dot" style={{ background: PROJECT_COLORS[p.color] }} />{p.name}</span>}</div>
-          <div>{u ? <span className="lv-assignee"><Avatar user={u} size={22} />{u.name.split(' ')[0]}</span> : <span className="lv-empty">—</span>}</div>
+          <div>{u ? <span className="lv-assignee"><Avatar user={u} size={22} />{u.name.split(' ')[0]}</span> : <SemResponsavel compacto />}</div>
           <div>{t.end ? <span className="lv-date"><Icon name="calendar" size={13} />{fmtShort(t.end)}</span> : <span className="lv-empty">—</span>}</div>
           <div><PriorityTag priority={t.priority} /></div>
           <div><StatusTag status={t.status} /></div>

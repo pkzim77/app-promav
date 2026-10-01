@@ -57,6 +57,18 @@ input, textarea, select { font-family: inherit; }
 
 .btn:active { transform: scale(.98); }
 
+/* Botão esperando o servidor ou faltando um campo. Não havia estilo nenhum
+   para :disabled — o botão ficava idêntico ao clicável, e a única diferença
+   era o clique não fazer nada. */
+.btn:disabled { opacity: .6; pointer-events: none; }
+
+/* Giro de espera. Anda junto com um rótulo no gerúndio, nunca sozinho: sob
+   prefers-reduced-motion a regra lá embaixo zera a animação e sobra um anel
+   parado, e leitor de tela não vê giro nenhum de qualquer forma. */
+.spin { flex: none; width: 15px; height: 15px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; animation: girar .7s linear infinite; }
+
+@keyframes girar { to { transform: rotate(360deg); } }
+
 .btn-primary { background: var(--brand); color: #fff; }
 
 .btn-primary:hover { background: var(--brand-hover); }
@@ -84,6 +96,36 @@ input, textarea, select { font-family: inherit; }
 .proj-pill { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--fg-2); }
 
 .proj-pill .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* ---------- Seleção múltipla (lista suspensa com caixas) ---------- */
+
+.msel { position: relative; }
+
+.msel-botao { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left; cursor: pointer; color: var(--fg-1); }
+
+.msel-botao:hover { border-color: var(--fg-4); }
+
+.msel-lista { position: absolute; z-index: 10; top: calc(100% + 4px); left: 0; right: 0; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-md); }
+
+.msel-busca { margin-bottom: 8px; }
+
+/* Teto de altura porque a lista pode ser longa — sem isto ela passa do rodapé
+   da tela e as últimas opções ficam inalcançáveis. */
+.msel-itens { display: flex; flex-direction: column; gap: 2px; max-height: 264px; overflow-y: auto; }
+
+.msel-item { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: var(--r-sm); font-size: 13.5px; color: var(--fg-1); cursor: pointer; }
+
+.msel-item:hover { background: var(--bg-subtle); }
+
+.msel-item.on { background: var(--brand-soft); }
+
+.msel-item input { width: 17px; height: 17px; flex-shrink: 0; accent-color: var(--brand); cursor: pointer; }
+
+.msel-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.msel-tag { flex-shrink: 0; font-size: 11px; font-weight: 600; color: var(--accent-strong); background: var(--brand-soft-2); border-radius: var(--r-full); padding: 2px 8px; }
+
+.msel-vazio { margin: 0; padding: 8px 9px; font-size: 13px; color: var(--fg-3); }
 
 /* ---------- Cards ---------- */
 
@@ -138,9 +180,12 @@ input, textarea, select { font-family: inherit; }
 
 textarea.control { resize: vertical; min-height: 70px; line-height: 1.5; }
 
-.seg { display: flex; gap: 7px; }
+/* Quebra em duas linhas quando as opções não cabem. O seletor de status foi de
+   três para cinco (entraram Em revisão e Em diligência) e, em linha única,
+   "Em diligência" era cortado na linha da etapa e no modal estreito. */
+.seg { display: flex; flex-wrap: wrap; gap: 7px; }
 
-.seg button { flex: 1; font-size: 13px; font-weight: 600; padding: 8px; border-radius: var(--r-sm); color: var(--fg-2); background: var(--bg-muted); border: 1.5px solid transparent; transition: all var(--dur); }
+.seg button { flex: 1 1 auto; min-width: 84px; font-size: 13px; font-weight: 600; padding: 8px; border-radius: var(--r-sm); color: var(--fg-2); background: var(--bg-muted); border: 1.5px solid transparent; transition: all var(--dur); }
 
 .seg button:hover { background: var(--bg-subtle); box-shadow: inset 0 0 0 1px var(--border); }
 
@@ -150,6 +195,13 @@ textarea.control { resize: vertical; min-height: 70px; line-height: 1.5; }
 .seg button.on { background: var(--surface); border-color: var(--brand); color: var(--fg-1); font-weight: 700; box-shadow: var(--shadow-xs); }
 
 .seg button.on:hover { background: var(--surface); box-shadow: var(--shadow-xs); }
+
+/* Chip de estado de um item de checklist. Vive aqui, e não no CSS de uma tela,
+   porque aparece na aba Etapas e dentro do modal — o mesmo estado não pode ter
+   duas aparências. A cor vem de STATUS_MAP por estilo inline. */
+.estado-chip { flex-shrink: 0; font-family: inherit; font-size: 11.5px; font-weight: 700; border: 1px solid transparent; border-radius: var(--r-full); padding: 4px 9px; cursor: pointer; }
+
+.estado-chip:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
 
 .ck-box { width: 19px; height: 19px; flex-shrink: 0; border-radius: var(--r-xs); border: 1.5px solid var(--border-strong); background: var(--surface); display: flex; align-items: center; justify-content: center; color: #fff; transition: all var(--dur); }
 
@@ -182,3 +234,12 @@ textarea.control { resize: vertical; min-height: 70px; line-height: 1.5; }
 .empty p { font-size: 14px; color: var(--fg-3); margin: 0; max-width: 360px; line-height: 1.55; }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* Falta de responsável: pendência de gestão, não campo em branco. Um travessão
+   discreto some no meio da tela e a lacuna nunca é resolvida. Fica fora do
+   Panorama de propósito — aquela aba é a que se projeta ao cliente. */
+.sem-resp { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-style: italic; font-weight: 600; color: var(--danger); white-space: nowrap; }
+
+.sem-resp.compacto { font-size: 11.5px; gap: 4px; padding: 2px 7px; border-radius: var(--r-full); background: var(--danger-soft); font-style: normal; }
+
+.sem-resp svg { flex-shrink: 0; }

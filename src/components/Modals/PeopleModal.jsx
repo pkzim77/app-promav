@@ -1,7 +1,7 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field } from '../primitives/primitives.jsx'
-import { SECTORS, ROLE_LABEL, effectiveProjectRole, PROJECT_HEX } from '../../data/store.js'
+import { CARGOS, FORMACOES, SECTORS, ROLE_LABEL, effectiveProjectRole, AVATAR_COLORS, conselhoDe, PROJECT_HEX } from '../../data/store.js'
 // Cadastro/edição de um profissional, com as abas de dados e de acesso.
 //
 // Este componente veio de 9724d68 (tela de Profissionais). O refactor d14c415
@@ -9,17 +9,34 @@ import { SECTORS, ROLE_LABEL, effectiveProjectRole, PROJECT_HEX } from '../../da
 // tinha o PeopleModal, deixando o App.jsx importando algo inexistente.
 // Restaurado aqui na convenção nova: um arquivo por modal.
 
-export function PeopleModal({ user, currentUserId, projects = [], tasks = [], changes = [], onOpenProject, onSave, onClose }) {
+export function PeopleModal({ user, currentUserId, users = [], projects = [], tasks = [], changes = [], onOpenProject, onSave, onClose }) {
   const editing = !!user
   // Editando a própria conta: travar o próprio "is_admin"/"Inativo" evita se
   // trancar fora do sistema (o backend também recusa, isto é só o aviso na hora).
   const isSelf = editing && user.id === currentUserId
+  // Só trava a remoção do admin se ela for a única administradora ativa —
+  // havendo outra pessoa admin, alguém pode reabrir o acesso dela depois.
+ 
+    && users.filter(u => u.isAdmin && u.isActive !== false).length <= 1
+  
+  // Só trava a remoção do admin se ela for a única administradora ativa —
+  // havendo outra pessoa admin, alguém pode reabrir o acesso dela depois.
+  const isLastAdmin = editing && user.isAdmin
+    && users.filter(u => u.isAdmin && u.isActive !== false).length <= 1
   const [name, setName] = React.useState(user?.name || '')
+  const [shortName, setShortName] = React.useState(user?.shortName || '')
+  const [phone, setPhone] = React.useState(user?.phone || '')
   const [email, setEmail] = React.useState(user?.email || '')
   const [sector, setSector] = React.useState(user?.sector || '')
+  const [outsourced, setOutsourced] = React.useState(!!user?.isOutsourced)
   const [jobTitle, setJobTitle] = React.useState(user?.jobTitle || '')
+  const [formation, setFormation] = React.useState(user?.formation || '')
+  const [professionalRegister, setProfessionalRegister] = React.useState(user?.professionalRegister || '')
   const [initials, setInitials] = React.useState(user?.initials || '')
   const [color, setColor] = React.useState(user?.color || 'var(--proj-blue)')
+  // Caixa de marcar: o padrão de quem entra é "não é terceirizado, não é
+  // administrador". Um seletor de três estados obrigava a responder duas
+  // perguntas cuja resposta é quase sempre a mesma.
   const [isAdmin, setIsAdmin] = React.useState(!!user?.isAdmin)
   const [isActive, setIsActive] = React.useState(user?.isActive !== false)
   const [initialPassword, setInitialPassword] = React.useState('')
@@ -43,13 +60,38 @@ export function PeopleModal({ user, currentUserId, projects = [], tasks = [], ch
   // Usa as iniciais manuais se existirem, senão as automáticas.
   const displayInitials = initials || autoInitials
 
-  // Cores disponíveis do projeto para o avatar.
-  const colorOptions = Object.entries(PROJECT_HEX).map(([id, hex]) => ({ id, hex }))
-  const currentColorHex = colorOptions.find(c => c.id === color)?.hex || '#5A7695'
+  // CAU ou CREA: a formação manda, o setor responde por quem ainda não tem
+  // formação preenchida, e o cargo é o último recurso. Ver conselhoDe.
+  const conselho = conselhoDe({ formation, sector, jobTitle })
+
+  // Cargo é texto livre, mas com as opções que a casa já usa à mão: a lista
+  // fechada não dava conta dos cargos reais, e texto livre puro faria cada
+  // pessoa escrever "Orçamentista", "orçamentista" e "Orcamentista".
+  const cargoListId = React.useId()
+  const cargosUsados = React.useMemo(() => {
+    const vistos = new Set()
+    return [...CARGOS.map(c => c.label), ...users.map(u => u.jobTitle)]
+      .map(c => String(c || '').trim()).filter(Boolean)
+      .filter(c => { const k = c.toLocaleLowerCase('pt-BR'); if (vistos.has(k)) return false; vistos.add(k); return true })
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  }, [users])
+
+  // Cores disponíveis para o avatar — o valor salvo é sempre o hex puro, seja
+  // de um swatch fixo ou escolhido livremente no seletor de cor personalizado.
+  const isHex = /^#[0-9a-f]{6}$/i.test(color)
+  const isCustomColor = isHex && !AVATAR_COLORS.includes(color)
+  const currentColorHex = isHex ? color : '#5A7695'
 
   const nameErr = touched && !name.trim() ? 'Informe o nome.' : null
-  const emailErr = touched && !email.trim() ? 'Informe o e-mail.' : null
-  const passwordErr = touched && !editing && initialPassword.trim().length < 6
+  // Para terceirizado o e-mail é contato, não credencial: pode não existir.
+  const emailErr = touched && !outsourced && !email.trim() ? 'Informe o e-mail.'
+    : touched && email.trim() && !email.includes('@') ? 'E-mail inválido.' : null
+  const shortNameErr = touched && !shortName.trim() ? 'Informe o nome social.' : null
+  const jobTitleErr = touched && !jobTitle ? 'Selecione o cargo.' : null
+  const sectorErr = touched && !sector ? 'Selecione o setor.' : null
+  // Terceirizado não entra no sistema, então não tem senha para definir.
+  const pedeSenha = !editing && !outsourced
+  const passwordErr = touched && pedeSenha && initialPassword.trim().length < 6
     ? 'A senha inicial precisa ter ao menos 6 caracteres.' : null
 
   // Projetos em que a pessoa participa e o papel em cada um — só leitura; a
@@ -77,21 +119,44 @@ export function PeopleModal({ user, currentUserId, projects = [], tasks = [], ch
     }
   }, [willDeactivate, tasks, projects, changes, user])
 
+  
+  function formatarMascaraTelefone(numero) {
+    const digitos = numero.replace(/\D/g, '').slice(0, 11)
+    if (!digitos) return ''
+    const ddd = digitos.slice(0, 2)
+    if (digitos.length <= 2) return `(${ddd}`
+    const resto = digitos.slice(2)
+    const tamanhoMeio = digitos.length > 10 ? 5 : 4 
+    const meio = resto.slice(0, tamanhoMeio)
+    const fim = resto.slice(tamanhoMeio)
+    return fim ? `(${ddd}) ${meio}-${fim}` : `(${ddd}) ${meio}`
+  }
+
   const save = () => {
     setTouched(true)
-    if (!name.trim() || !email.trim()) return
-    if (!editing && initialPassword.trim().length < 6) return
+    if (!name.trim()) return
+    if (!outsourced && (!email.trim() || !email.includes('@'))) return
+    if (email.trim() && !email.includes('@')) return
+    // Telefone não entra: é contato, não identidade. Exigir travava o cadastro
+    // de quem ainda não tinha o número à mão, e ele pode ser preenchido depois.
+    if (!shortName.trim() || !jobTitle || !sector) return
+    if (pedeSenha && initialPassword.trim().length < 6) return
     onSave({
       ...(user || {}),
       name: name.trim(),
       email: email.trim(),
+      phone: phone.trim() || null,
+      shortName: shortName.trim() || null,
       sector: sector || null,
       jobTitle: jobTitle.trim() || null,
+      formation: formation || null,
+      professionalRegister: conselho ? (professionalRegister.trim() || null) : null,
       initials: displayInitials || 'P',
       color: color || 'var(--proj-blue)',
       isAdmin,
+      isOutsourced: outsourced,
       isActive,
-      initialPassword: initialPassword || undefined,
+      initialPassword: pedeSenha ? (initialPassword || undefined) : undefined,
     })
   }
 
@@ -174,35 +239,75 @@ export function PeopleModal({ user, currentUserId, projects = [], tasks = [], ch
           <span style={{ fontSize: 12, color: 'var(--fg-4)' }}>Deixe vazio para usar automaticamente</span>
         </Field>
         <Field label="Cor do avatar">
-          <div className="color-swatches" style={{ display: 'flex', gap: 6 }}>
-            {colorOptions.map(c => (
-              <button key={c.id} type="button"
-                className={color === c.id ? 'on' : ''}
+          <div className="color-swatches" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {AVATAR_COLORS.map(hex => (
+              <button key={hex} type="button"
+                className={color === hex ? 'on' : ''}
                 style={{
                   width: 32,
                   height: 32,
-                  background: c.hex,
-                  border: color === c.id ? '3px solid var(--fg-1)' : '1px solid var(--border)',
+                  background: hex,
+                  border: color === hex ? '3px solid var(--fg-1)' : '1px solid var(--border)',
                   borderRadius: 'var(--r-sm)',
                   cursor: 'pointer',
                 }}
-                onClick={() => setColor(c.id)}
-                title={c.id}
+                onClick={() => setColor(hex)}
+                title={hex}
               />
             ))}
+            {/* Cor livre: o botão mostra um degradê (ou a própria cor já escolhida) e
+                esconde por cima um <input type="color"> nativo — sem o quadrado feio do navegador. */}
+            <label
+              style={{
+                position: 'relative',
+                width: 32,
+                height: 32,
+                borderRadius: 'var(--r-sm)',
+                border: isCustomColor ? '3px solid var(--fg-1)' : '1px solid var(--border)',
+                cursor: 'pointer',
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: isCustomColor
+                  ? color
+                  : 'conic-gradient(from 180deg, #E5484D, #E8920C, #7E8A4C, #4C7F78, #5A7695, #6E6A9B, #8A6690, #B0757F, #E5484D)',
+              }}
+              title="Escolher outra cor">
+              {!isCustomColor && <Icon name="plus" size={14} style={{ color: '#fff', filter: 'drop-shadow(0 0 1px rgba(0,0,0,.6))' }} />}
+              <input type="color" value={currentColorHex} onChange={e => setColor(e.target.value)}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', border: 0, padding: 0 }} />
+            </label>
           </div>
         </Field>
       </div>
 
       <div className="field-row">
-        <Field label="E-mail">
+        <Field label={"Nome Social"}>
+          <input className="control" value={shortName} placeholder='Ana Rodrigues'
+          onChange={e => setShortName(e.target.value)} />
+          {shortNameErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{shortNameErr}</span>}
+        </Field>
+        <Field label="Telefone (opcional)">
+          <input className="control" type="tel" value={phone} placeholder="(11) 99999-9999"
+            onChange={e => setPhone(formatarMascaraTelefone(e.target.value))} />
+        </Field>
+      </div>
+
+      <div className="field-row">
+        <Field label={outsourced ? 'E-mail (contato, opcional)' : 'E-mail'}>
           <input className="control" type="email" value={email} placeholder="ana@promav.com.br"
             onChange={e => setEmail(e.target.value)} />
           {emailErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{emailErr}</span>}
         </Field>
         <Field label="Cargo">
-          <input className="control" value={jobTitle} placeholder="Ex.: Engenheira"
+          <input className="control" value={jobTitle} list={cargoListId}
+            placeholder="Ex.: Projetos Prediais"
             onChange={e => setJobTitle(e.target.value)} />
+          <datalist id={cargoListId}>
+            {cargosUsados.map(c => <option key={c} value={c} />)}
+          </datalist>
+          {jobTitleErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{jobTitleErr}</span>}
         </Field>
       </div>
 
@@ -212,19 +317,55 @@ export function PeopleModal({ user, currentUserId, projects = [], tasks = [], ch
             <option value="">Selecione</option>
             {SECTORS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
+          {sectorErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{sectorErr}</span>}
         </Field>
-        <Field label="Administrador">
-          <label className="checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 42 }}>
-            <input type="checkbox" checked={isAdmin} disabled={isSelf} onChange={e => setIsAdmin(e.target.checked)} />
-            <span>Marcar como administrador</span>
-          </label>
-          {isSelf && (
-            <span style={{ fontSize: 12, color: 'var(--fg-4)' }}>Você não pode remover sua própria permissão de administrador.</span>
+        {/* Opcional de propósito: são quatro diplomas e o cadastro tem gente
+            que não cabe em nenhum. Quando está em branco, o conselho vem do
+            setor — é assim que o CREA continua aparecendo para quem já está
+            cadastrado sem formação. */}
+        <Field label="Formação (opcional)">
+          <select className="control" value={formation} onChange={e => setFormation(e.target.value)}>
+            <option value="">Selecione</option>
+            {FORMACOES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+          </select>
+          <span className="marca-nota">É o diploma, não o que a pessoa faz: é daqui que sai CAU ou CREA.</span>
+        </Field>
+        {conselho && (
+        <Field label={`Registro (${conselho})`}>
+          <input className="control" value={professionalRegister}
+            placeholder={conselho === 'CAU' ? 'Ex.: A123456-7' : 'Ex.: 123456/SP'}
+            onChange={e => setProfessionalRegister(e.target.value)} />
+        </Field>
+      )}
+      </div>
+
+      
+
+      <div className="field-row">
+        <Field label="Vínculo e acesso">
+          {/* Lado a lado, e com a altura de um campo: empilhadas, as duas caixas
+              faziam esta coluna crescer o dobro da vizinha e a linha saía torta. */}
+          <div className="marcas">
+            <label className="marca">
+              <input type="checkbox" checked={outsourced} onChange={e => setOutsourced(e.target.checked)} />
+              Terceirizado
+            </label>
+            <label className="marca">
+              <input type="checkbox" checked={isAdmin} disabled={isSelf && isLastAdmin}
+                onChange={e => setIsAdmin(e.target.checked)} />
+              Administrador
+            </label>
+          </div>
+          {outsourced && (
+            <span className="marca-nota">Não acessa o sistema: entra sem senha e o e-mail vira contato.</span>
+          )}
+          {isSelf && isLastAdmin && (
+            <span className="marca-nota">Você não pode remover sua própria permissão de administrador.</span>
           )}
         </Field>
       </div>
 
-      {!editing && (
+      {pedeSenha && (
         <Field label="Senha inicial">
           <div className="password-field">
             <input className="control" type={revealPassword ? 'text' : 'password'} value={initialPassword}

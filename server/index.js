@@ -50,7 +50,8 @@ const TASK_SELECT = `
          to_char(t.start_date, 'YYYY-MM-DD') AS start,
          to_char(t.end_date,   'YYYY-MM-DD') AS "end",
          COALESCE((
-           SELECT json_agg(json_build_object('id', c.id, 'text', c.text, 'done', c.done) ORDER BY c.position)
+           SELECT json_agg(json_build_object('id', c.id, 'text', c.text, 'done', c.done,
+                                             'state', c.state, 'assigneeId', c.assignee_id) ORDER BY c.position)
            FROM checklist_items c WHERE c.task_id = t.id
          ), '[]'::json) AS checklist,
          COALESCE((
@@ -90,10 +91,11 @@ const PROJECT_SELECT = `
          secretaria,
          origem_recurso AS "origemRecurso",
          -- As colunas guardam os nomes antigos; a API expõe os atuais.
-         -- valor_convenio   → valor estimado (primeira estimativa)
-         -- valor_disponivel → valor orçado   (orçamento fechado)
-         valor_convenio::float8   AS "valorEstimado",
-         valor_disponivel::float8 AS "valorOrcado",
+         valor_estimado::float8   AS "valorEstimado",
+         valor_orcado::float8     AS "valorOrcado",
+         eh_convenio              AS "ehConvenio",
+         convenio_numero          AS "convenioNumero",
+         convenio_valor::float8   AS "convenioValor",
          status,
          tipo,
          responsible_ids AS "responsibleIds",
@@ -180,6 +182,13 @@ const normOrigem = (v) => (ORIGENS_RECURSO.includes(v) ? v : 'federal')
 const normProjStatus = (v) => (PROJ_STATUSES.includes(v) ? v : 'planejamento')
 const normTipo = (v) => (PROJ_TIPOS.includes(v) ? v : 'construcao')
 // Valor do convênio: número >= 0 ou null (não informado).
+// Número do convênio: texto curto e livre, porque o formato varia (030979/2026,
+// CONV.002202.2026, MAPP 6112). Some junto quando a caixa é desmarcada.
+const normConvenioNumero = (v, eh) => {
+  const t = String(v || '').trim()
+  return t ? t.slice(0, 60) : null
+}
+
 const normValor = (v) => {
   if (v === null || v === undefined || v === '') return null
   const n = Number(v)
@@ -202,6 +211,11 @@ const CAN = {
   light: ['admin', 'full', 'view'], // mover no Kanban, marcar checklist, adicionar material
   adminOnly: ['admin'],             // gerenciar permissões, excluir projeto
 }
+
+// Estados de um item de checklist. Nao tem 'progress': item e a menor unidade
+// de trabalho da etapa, e nao se divide em meio-feito. 'done' continua sendo
+// espelhado na coluna `done`, que o resto do sistema le.
+const ESTADOS_ITEM = ['todo', 'review', 'diligence', 'done']
 
 // Papel efetivo de um usuário num projeto: admin global > pessoa incluída no projeto.
 // Quem NÃO foi incluído não tem papel nenhum (null) — não enxerga o projeto.
@@ -320,11 +334,21 @@ async function replaceChildren(client, taskId, checklist = [], memberIds = [], a
   await client.query('DELETE FROM checklist_items WHERE task_id = $1', [taskId])
   await client.query('DELETE FROM task_members WHERE task_id = $1', [taskId])
 
+  // Quem responde por CADA item. Uma atividade com duas pessoas costuma ter
+  // cada uma cuidando de uma parte; sem isto só dá para saber que "alguém do
+  // par" está devendo. Aceita null: ligar o item a alguém não é obrigatório.
+  const podeAssumir = new Set([assigneeId, ...(memberIds || [])].filter(Boolean))
   for (let i = 0; i < checklist.length; i++) {
     const item = checklist[i]
+    // Só vale quem participa da atividade — o seletor mostra só eles, mas o
+    // servidor não confia no que chega.
+    const dono = podeAssumir.has(item.assigneeId) ? item.assigneeId : null
+    // Estado e `done` andam juntos. Item vindo de fora sem estado (modal antigo,
+    // mudanca que vira item) cai no equivalente do que o `done` dizia.
+    const estado = ESTADOS_ITEM.includes(item.state) ? item.state : (item.done ? 'done' : 'todo')
     await client.query(
-      'INSERT INTO checklist_items (id, task_id, text, done, position) VALUES ($1, $2, $3, $4, $5)',
-      [item.id || genId('c'), taskId, item.text, !!item.done, i]
+      'INSERT INTO checklist_items (id, task_id, text, done, position, assignee_id, state) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [item.id || genId('c'), taskId, item.text, estado === 'done', i, dono, estado]
     )
   }
   // membros = lista informada, sem o responsável (ele já é o assignee).
@@ -347,18 +371,24 @@ app.get('/api/health', wrap(async (_req, res) => {
 }))
 
 // Forma pública de um usuário (sem hash de senha).
-const PUBLIC_USER = 'id, name, initials, color, email, sector, job_title AS "jobTitle", is_admin AS "isAdmin", is_active AS "isActive", is_dev AS "isDev"'
+const PUBLIC_USER = 'id, name, initials, color, email, short_name AS "shortName", phone, sector, formation, professional_register AS "professionalRegister", is_admin AS "isAdmin", is_active AS "isActive", is_outsourced AS "isOutsourced", is_dev AS "isDev"'
 // Forma reduzida usada em listas (bootstrap/equipe).
-const LIST_USER = 'id, name, initials, color, email, sector, job_title AS "jobTitle", is_admin AS "isAdmin", is_active AS "isActive", is_dev AS "isDev"'
+const LIST_USER = 'id, name, initials, color, email, short_name AS "shortName", phone, sector, job_title AS "jobTitle", formation, professional_register AS "professionalRegister", is_admin AS "isAdmin", is_active AS "isActive", is_outsourced AS "isOutsourced", is_dev AS "isDev"'
 
 // ----- autenticação (rotas públicas) -----
 app.post('/api/auth/login', wrap(async (req, res) => {
   const { email, password } = req.body
   if (!email || !password) return res.status(400).json({ error: 'Informe email e senha.' })
-  const [row] = await q('SELECT id, name, initials, color, email, is_admin AS "isAdmin", is_active AS "isActive", password_hash FROM users WHERE lower(email) = lower($1)', [email])
-  // Mesma mensagem genérica para senha errada, e-mail inexistente ou conta
-  // inativa — nenhuma delas pode revelar se a conta existe ou está desligada.
-  if (!row || row.isActive === false || !(await verifyPassword(password, row.password_hash))) {
+  const [row] = await q('SELECT id, name, initials, color, email, is_admin AS "isAdmin", is_active AS "isActive", is_outsourced AS "isOutsourced", password_hash FROM users WHERE lower(email) = lower($1)', [email])
+  // Terceirizado não acessa, e a regra é dita AQUI em vez de depender de ele
+  // não ter senha. Ausência de senha é uma ausência: bastaria uma importação
+  // ou um formulário mal preenchido gravar um hash para o acesso reabrir em
+  // silêncio. Com a checagem explícita, o que vale é o vínculo.
+  //
+  // Mesma mensagem genérica para senha errada, e-mail inexistente, conta
+  // inativa ou terceirizado — nenhuma pode revelar se a conta existe.
+  if (!row || row.isActive === false || row.isOutsourced
+      || !row.password_hash || !(await verifyPassword(password, row.password_hash))) {
     return res.status(401).json({ error: 'Email ou senha incorretos.' })
   }
   const { password_hash, ...user } = row
@@ -395,7 +425,12 @@ const PULSE_SQL = `
          (SELECT count(*) FROM users)            AS usuarios_n,
          (SELECT count(*) FROM checklist_items)  AS checklist_n,
          (SELECT count(*) FROM task_members)     AS membros_tarefa_n,
-         (SELECT count(*) FROM project_members)  AS membros_projeto_n
+         (SELECT count(*) FROM project_members)  AS membros_projeto_n,
+         -- Sem isto o aviso de relatorio no Hub envelhecia: o bootstrap so e
+         -- refeito quando o pulso muda, e salvar um relatorio nao mexia em
+         -- nenhuma das contagens acima. O updated_at cobre rascunho e envio.
+         (SELECT count(*) FROM weekly_reports)   AS relatorios_n,
+         (SELECT max(updated_at) FROM weekly_reports)                                       AS relatorios_t
 `
 
 app.get('/api/pulse', wrap(async (_req, res) => {
@@ -420,7 +455,7 @@ app.post('/api/auth/change-password', wrap(async (req, res) => {
   const { currentPassword, newPassword } = req.body
   if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'A nova senha precisa ter ao menos 6 caracteres.' })
   const [row] = await q('SELECT password_hash FROM users WHERE id = $1', [req.userId])
-  if (!row || !(await verifyPassword(currentPassword || '', row.password_hash))) {
+  if (!row || !row.password_hash || !(await verifyPassword(currentPassword || '', row.password_hash))) {
     return res.status(401).json({ error: 'Senha atual incorreta.' })
   }
   await q('UPDATE users SET password_hash = $2 WHERE id = $1', [req.userId, await hashPassword(newPassword)])
@@ -431,23 +466,47 @@ app.post('/api/auth/change-password', wrap(async (req, res) => {
 // Admin recebe tudo; os demais recebem SOMENTE os projetos em que foram
 // incluídos (e as tarefas/sessões/pastas correspondentes). O filtro é aqui,
 // no servidor: esconder no front deixaria os dados trafegarem mesmo assim.
+// As seis listas vão numa CONSULTA SÓ. Medindo contra o Neon, um `SELECT 1`
+// leva ~234 ms: a latência da ida e volta domina, e o trabalho de cada
+// consulta é quase nada (a maior, tasks, gasta ~140 ms além da latência).
+// Eram 7 idas para admin e 8 para os demais (6 listas + o visibleProjectIds,
+// que roda em série antes); passam a ser 2 e 3. O `ids` entra como parâmetro,
+// e `$1 IS NULL` cobre o admin, que não filtra nada.
+//
+// Montado sob demanda, e não numa const no topo: o CHANGE_SELECT é declarado
+// mais abaixo no arquivo, e interpolá-lo aqui na carga do módulo estouraria
+// em temporal dead zone antes do servidor subir.
+let sqlBootstrap = null
+const montarBootstrapSql = () => (sqlBootstrap ??= `
+  SELECT
+    (SELECT COALESCE(json_agg(u), '[]'::json) FROM (SELECT ${LIST_USER} FROM users ORDER BY id) u)                                  AS users,
+    (SELECT COALESCE(json_agg(p), '[]'::json) FROM (${PROJECT_SELECT} WHERE $1::text[] IS NULL OR id = ANY($1) ORDER BY position, id) p)      AS projects,
+    (SELECT COALESCE(json_agg(t), '[]'::json) FROM (${TASK_SELECT} WHERE $1::text[] IS NULL OR t.project_id = ANY($1) ORDER BY t.id) t)       AS tasks,
+    (SELECT COALESCE(json_agg(s), '[]'::json) FROM (${SESSION_SELECT} WHERE $1::text[] IS NULL OR task_id IN (SELECT id FROM tasks WHERE project_id = ANY($1)) ORDER BY start_at) s) AS sessions,
+    (SELECT COALESCE(json_agg(f), '[]'::json) FROM (${FOLDER_SELECT} ORDER BY position, name) f)                                    AS folders,
+    (SELECT COALESCE(json_agg(c), '[]'::json) FROM (${CHANGE_SELECT} WHERE $1::text[] IS NULL OR c.project_id = ANY($1) ORDER BY c.published_at DESC) c) AS changes,
+    -- Em que pe esta o relatorio DESTA pessoa NESTA semana. Vem aqui porque o
+    -- bootstrap ja acontece: o Hub perguntando por conta propria custava uma
+    -- ida extra a cada visita e, com cache, mostrava o aviso depois de enviado.
+    COALESCE((SELECT CASE WHEN sent_at IS NULL THEN 'rascunho' ELSE 'enviado' END
+                FROM weekly_reports WHERE user_id = $2 AND week = $3::date), 'nenhum') AS "relatorioSemana"
+`)
+
 app.get('/api/bootstrap', wrap(async (req, res) => {
   const ids = await visibleProjectIds(req.userId)   // null = admin (sem filtro)
   const all = ids === null
 
-  const [users, projects, tasks, sessions, folders, changes] = await Promise.all([
-    q(`SELECT ${LIST_USER} FROM users ORDER BY id`),
-    all ? q(`${PROJECT_SELECT} ORDER BY position, id`)
-        : q(`${PROJECT_SELECT} WHERE id = ANY($1) ORDER BY position, id`, [ids]),
-    listTasks(ids),
-    listSessions(ids),
-    q(`${FOLDER_SELECT} ORDER BY position, name`),
-    listChanges(ids),
-  ])
+  const [linha] = await q(montarBootstrapSql(), [ids, req.userId, sextaDe()])
+  const tasks = (linha.tasks || []).map(mapTask)
+  const sessions = (linha.sessions || []).map(mapSession)
+  const changes = (linha.changes || []).map(mapChange)
+  const projects = linha.projects || []
+  const folders = linha.folders || []
 
   res.json({
-    users, projects, tasks, sessions, changes,
+    users: linha.users || [], projects, tasks, sessions, changes,
     folders: all ? folders : foldersWithProjects(folders, projects),
+    relatorioSemana: linha.relatorioSemana,
   })
 }))
 
@@ -457,14 +516,20 @@ app.get('/api/users', requireAdmin, wrap(async (_req, res) => {
 }))
 
 app.post('/api/users', requireAdmin, wrap(async (req, res) => {
-  const { name, email, sector = null, jobTitle = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, initialPassword } = req.body || {}
+  const { name, phone, shortName, email, sector = null, jobTitle = null, formation = null, professionalRegister = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, isOutsourced = false, initialPassword } = req.body || {}
   const cleanName = String(name || '').trim()
   const cleanEmail = String(email || '').trim()
-  if (!cleanName || !cleanEmail) return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' })
+  const terceirizado = !!isOutsourced
+  if (!cleanName) return res.status(400).json({ error: 'O nome é obrigatório.' })
+  // E-mail é credencial para quem entra no sistema; para terceirizado é só
+  // contato, e contato pode não existir.
+  if (!terceirizado && !cleanEmail) return res.status(400).json({ error: 'O e-mail é obrigatório.' })
 
   // Verifica se e-mail já existe (case-insensitive, como no login)
-  const [existing] = await q('SELECT id FROM users WHERE lower(email) = lower($1)', [cleanEmail])
-  if (existing) return res.status(409).json({ error: `O e-mail "${cleanEmail}" já está em uso.` })
+  if (cleanEmail) {
+    const [existing] = await q('SELECT id FROM users WHERE lower(email) = lower($1)', [cleanEmail])
+    if (existing) return res.status(409).json({ error: `O e-mail "${cleanEmail}" já está em uso.` })
+  }
 
   const id = genId('u')
   const finalInitials = String(initials || '').trim() || (() => {
@@ -473,22 +538,27 @@ app.post('/api/users', requireAdmin, wrap(async (req, res) => {
   })().toUpperCase()
 
   const passwordToUse = typeof initialPassword === 'string' ? initialPassword.trim() : ''
-  if (!passwordToUse || passwordToUse.length < 6) return res.status(400).json({ error: 'A senha inicial precisa ter ao menos 6 caracteres.' })
-  const passwordHash = await hashPassword(passwordToUse)
+  // Terceirizado nasce sem senha nenhuma — nem uma inutilizável.
+  if (!terceirizado && (!passwordToUse || passwordToUse.length < 6)) {
+    return res.status(400).json({ error: 'A senha inicial precisa ter ao menos 6 caracteres.' })
+  }
+  const passwordHash = terceirizado ? null : await hashPassword(passwordToUse)
   await q(`
-    INSERT INTO users (id, name, initials, color, email, sector, job_title, is_admin, is_active, password_hash, is_dev)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false)
-  `, [id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, sector || null, jobTitle || null, !!isAdmin, isActive !== false, passwordHash])
+    INSERT INTO users (id, name, initials, color, email, phone, short_name, sector, job_title, formation, professional_register, is_admin, is_active, is_outsourced, password_hash, is_dev)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, false)
+  `, [id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail || null, phone || null, shortName || null, sector || null, jobTitle || null, normFormacao(formation), normRegistro(formation, sector, jobTitle, professionalRegister), !!isAdmin, isActive !== false, terceirizado, passwordHash])
 
   const [row] = await q(`SELECT ${LIST_USER} FROM users WHERE id = $1`, [id])
   res.status(201).json(row)
 }))
 
 app.put('/api/users/:id', requireAdmin, wrap(async (req, res) => {
-  const { name, email, sector = null, jobTitle = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, initialPassword } = req.body || {}
+  const { name, phone, shortName, email, sector = null, jobTitle = null, formation = null, professionalRegister = null, initials = '', color = 'var(--proj-blue)', isAdmin = false, isActive = true, isOutsourced = false, initialPassword } = req.body || {}
   const cleanName = String(name || '').trim()
   const cleanEmail = String(email || '').trim()
-  if (!cleanName || !cleanEmail) return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' })
+  const terceirizado = !!isOutsourced
+  if (!cleanName) return res.status(400).json({ error: 'O nome é obrigatório.' })
+  if (!terceirizado && !cleanEmail) return res.status(400).json({ error: 'O e-mail é obrigatório.' })
 
   const [target] = await q('SELECT is_admin AS "isAdmin", is_active AS "isActive" FROM users WHERE id = $1', [req.params.id])
   if (!target) return res.status(404).json({ error: 'Usuário não encontrado.' })
@@ -520,8 +590,10 @@ app.put('/api/users/:id', requireAdmin, wrap(async (req, res) => {
   }
 
   // Verifica se e-mail já existe em outro usuário (case-insensitive, como no login)
-  const [existing] = await q('SELECT id FROM users WHERE lower(email) = lower($1) AND id != $2', [cleanEmail, req.params.id])
-  if (existing) return res.status(409).json({ error: `O e-mail "${cleanEmail}" já está em uso.` })
+  if (cleanEmail) {
+    const [existing] = await q('SELECT id FROM users WHERE lower(email) = lower($1) AND id != $2', [cleanEmail, req.params.id])
+    if (existing) return res.status(409).json({ error: `O e-mail "${cleanEmail}" já está em uso.` })
+  }
 
   const finalInitials = String(initials || '').trim() || (() => {
     const parts = cleanName.split(/\s+/).filter(Boolean)
@@ -532,18 +604,28 @@ app.put('/api/users/:id', requireAdmin, wrap(async (req, res) => {
     return res.status(400).json({ error: 'A senha inicial precisa ter ao menos 6 caracteres.' })
   }
   const passwordHash = typeof initialPassword === 'string' && initialPassword.trim() ? await hashPassword(initialPassword.trim()) : null
+  // Passar alguém para terceirizado apaga a senha que ele tinha. Sem isto o
+  // hash antigo ficaria guardado, esperando o dia em que a marca fosse
+  // removida por engano.
   await q(`
     UPDATE users
     SET name = $2,
         initials = $3,
         color = $4,
         email = $5,
-        sector = $6,
-        job_title = $7,
-        is_admin = $8,
-        is_active = $9${passwordHash ? ', password_hash = $10' : ''}
+        phone = $6,
+        short_name = $7,
+        sector = $8,
+        job_title = $9,
+        formation = $10,
+        professional_register = $11,
+        is_admin = $12,
+        is_active = $13,
+        is_outsourced = $14${terceirizado ? ', password_hash = NULL' : passwordHash ? ', password_hash = $15' : ''}
     WHERE id = $1
-  `, passwordHash ? [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, sector || null, jobTitle || null, !!isAdmin, isActive !== false, passwordHash] : [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail, sector || null, jobTitle || null, !!isAdmin, isActive !== false])
+  `, passwordHash && !terceirizado
+    ? [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail || null, phone || null, shortName || null, sector || null, jobTitle || null, normFormacao(formation), normRegistro(formation, sector, jobTitle, professionalRegister), !!isAdmin, isActive !== false, terceirizado, passwordHash]
+    : [req.params.id, cleanName, finalInitials, color || 'var(--proj-blue)', cleanEmail || null, phone || null, shortName || null, sector || null, jobTitle || null, normFormacao(formation), normRegistro(formation, sector, jobTitle, professionalRegister), !!isAdmin, isActive !== false, terceirizado])
 
   const [row] = await q(`SELECT ${LIST_USER} FROM users WHERE id = $1`, [req.params.id])
   if (!row) return res.status(404).json({ error: 'Usuário não encontrado.' })
@@ -591,6 +673,7 @@ app.post('/api/projects', requireAdmin, wrap(async (req, res) => {
   const {
     name, desc = '', color = 'indigo', folderId = null, start, end, notes = '', resources = [], defaultRole = 'full', members = [],
     prefeitura = '', secretaria = '', origemRecurso, valorEstimado, valorOrcado, status, tipo, responsibleIds = [],
+    ehConvenio = false, convenioNumero = null, convenioValor = null,
   } = req.body
   try {
   const id = genId('p')
@@ -603,12 +686,14 @@ app.post('/api/projects', requireAdmin, wrap(async (req, res) => {
     const clean = normalizeResources(resources)
     await client.query(
       `INSERT INTO projects (id, name, description, color, folder_id, position, start_date, end_date, notes, resources,
-                            prefeitura, secretaria, origem_recurso, valor_convenio, valor_disponivel, status, tipo, responsible_ids, default_role)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
-      [id, name, desc, color, folderId || null, position, start, end, notes, JSON.stringify(clean),
+                            prefeitura, secretaria, origem_recurso, valor_estimado, valor_orcado, status, tipo, responsible_ids, default_role,
+                            eh_convenio, convenio_numero, convenio_valor)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
+      [id, name, desc, color, folderId || null, position, normData(start), normData(end), notes, JSON.stringify(clean),
        String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso),
        normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status), normTipo(tipo),
-       JSON.stringify(normResponsibles(responsibleIds)), normDefaultRole(defaultRole)]
+       JSON.stringify(normResponsibles(responsibleIds)), normDefaultRole(defaultRole),
+       !!ehConvenio, normConvenioNumero(convenioNumero), ehConvenio ? normValor(convenioValor) : null]
     )
     await replaceMembers(client, id, members)
   })
@@ -648,17 +733,23 @@ app.put('/api/projects/:id', gate((req) => req.params.id, CAN.edit), wrap(async 
   const {
     name, desc = '', color, folderId = null, start, end, notes = '', resources = [], defaultRole, members,
     prefeitura = '', secretaria = '', origemRecurso, valorEstimado, valorOrcado, status, tipo, responsibleIds = [],
+    ehConvenio = false, convenioNumero = null, convenioValor = null,
   } = req.body
   const clean = normalizeResources(resources)
   const isAdmin = req.projectRole === 'admin'
   const ok = await tx(async (client) => {
     const r = await client.query(
       `UPDATE projects SET name = $2, description = $3, color = $4, folder_id = $5, start_date = $6, end_date = $7, notes = $8, resources = $9,
-                           prefeitura = $10, secretaria = $11, origem_recurso = $12, valor_convenio = $13, valor_disponivel = $14, status = $15, tipo = $16, responsible_ids = $17,
+                           prefeitura = $10, secretaria = $11, origem_recurso = $12, valor_estimado = $13, valor_orcado = $14, status = $15, tipo = $16, responsible_ids = $17,
+                           eh_convenio = $18, convenio_numero = $19, convenio_valor = $20,
                            updated_at = now()
        WHERE id = $1 RETURNING id`,
-      [req.params.id, name, desc, color, folderId || null, start, end, notes, JSON.stringify(clean),
-       String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso), normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status), normTipo(tipo), JSON.stringify(normResponsibles(responsibleIds))]
+      [req.params.id, name, desc, color, folderId || null, normData(start), normData(end), notes, JSON.stringify(clean),
+       String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso), normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status), normTipo(tipo), JSON.stringify(normResponsibles(responsibleIds)),
+       // Desmarcar "é convênio" leva junto o número e o valor. Sem isso eles
+       // ficariam guardados, invisíveis na tela, e voltariam se alguém
+       // remarcasse a caixa meses depois.
+       !!ehConvenio, normConvenioNumero(convenioNumero), ehConvenio ? normValor(convenioValor) : null]
     )
     if (!r.rows.length) return false
     await pruneOrphanFiles(client, req.params.id, clean) // remove arquivos não referenciados
@@ -846,7 +937,7 @@ app.post('/api/tasks', gate((req) => req.body.projectId, CAN.edit), wrap(async (
     await client.query(
       `INSERT INTO tasks (id, project_id, title, assignee_id, status, priority, start_date, end_date, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [id, projectId, title, assigneeId || null, status, priority, start, end, req.userId]
+      [id, projectId, title, assigneeId || null, status, priority, normData(start), normData(end), req.userId]
     )
     await replaceChildren(client, id, checklist, memberIds, assigneeId)
   })
@@ -861,7 +952,7 @@ app.put('/api/tasks/:id', gate(taskProjectId, CAN.edit), wrap(async (req, res) =
       `UPDATE tasks SET project_id = $2, title = $3, assignee_id = $4, status = $5, priority = $6, start_date = $7, end_date = $8,
               updated_at = now()
        WHERE id = $1 RETURNING id`,
-      [id, projectId, title, assigneeId || null, status, priority, start, end]
+      [id, projectId, title, assigneeId || null, status, priority, normData(start), normData(end)]
     )
     if (!r.rows.length) return false
     await replaceChildren(client, id, checklist, memberIds, assigneeId)
@@ -878,19 +969,109 @@ app.patch('/api/tasks/:id/status', gate(taskProjectId, CAN.light), wrap(async (r
   res.json(await getTask(req.params.id))
 }))
 
-// Marcar/desmarcar itens do checklist — permitido para 'Só exibição'. Só altera
-// o campo "done" de itens já existentes (não cria nem remove itens).
+// Mexer em itens de checklist que já existem (não cria nem remove).
+//
+// Marcar, mover o estado e assumir um item continuam liberados para 'Só
+// exibição': quem faz o serviço registra que fez. Mudar o TEXTO não — isso é
+// redefinir qual é o serviço, e pede Edição total. A permissão só é cobrada
+// quando o texto realmente muda, porque em alguns caminhos o cliente manda o
+// item inteiro de volta sem querer editar nada.
 app.patch('/api/tasks/:id/checklist', gate(taskProjectId, CAN.light), wrap(async (req, res) => {
   const { checklist = [] } = req.body
+  // Quem pode assumir um item: só quem participa da atividade. O seletor no
+  // front já mostra apenas eles, mas o servidor confere de novo.
+  const [dono] = await q('SELECT assignee_id FROM tasks WHERE id = $1', [req.params.id])
+  if (!dono) return res.status(404).json({ error: 'Atividade não encontrada.' })
+  const membros = await q('SELECT user_id FROM task_members WHERE task_id = $1', [req.params.id])
+  const podeAssumir = new Set([dono.assignee_id, ...membros.map(m => m.user_id)].filter(Boolean))
+
+  // Confere a permissão de texto ANTES da transação: barrar no meio dela
+  // significaria desfazer marcações que já teriam sido aplicadas.
+  const comTexto = checklist.filter(i => i && i.id && typeof i.text === 'string' && i.text.trim())
+  if (comTexto.length) {
+    const atuais = await q('SELECT id, text FROM checklist_items WHERE task_id = $1 AND id = ANY($2::text[])',
+      [req.params.id, comTexto.map(i => i.id)])
+    const antes = new Map(atuais.map(r => [r.id, r.text]))
+    const mudou = comTexto.some(i => antes.has(i.id) && antes.get(i.id) !== i.text.trim())
+    if (mudou && !CAN.edit.includes(req.projectRole)) {
+      return res.status(403).json({ error: 'Só quem tem edição total pode mudar o texto de um item.' })
+    }
+  }
+
   await tx(async (client) => {
     for (const item of checklist) {
       if (!item || !item.id) continue
-      await client.query('UPDATE checklist_items SET done = $2 WHERE id = $1 AND task_id = $3', [item.id, !!item.done, req.params.id])
+      // Cada campo só é tocado quando vem no corpo: marcar não desfaz a
+      // atribuição, e atribuir não mexe no que já está marcado.
+      // Estado manda; `done` é o espelho dele. O ramo do 'done' sozinho é o
+      // caminho antigo (marcar/desmarcar), que continua valendo.
+      if ('state' in item && ESTADOS_ITEM.includes(item.state)) {
+        await client.query("UPDATE checklist_items SET state = $2, done = ($2 = 'done') WHERE id = $1 AND task_id = $3",
+          [item.id, item.state, req.params.id])
+      } else if ('done' in item) {
+        await client.query("UPDATE checklist_items SET done = $2, state = CASE WHEN $2 THEN 'done' ELSE 'todo' END WHERE id = $1 AND task_id = $3",
+          [item.id, !!item.done, req.params.id])
+      }
+      if (typeof item.text === 'string' && item.text.trim()) {
+        await client.query('UPDATE checklist_items SET text = $2 WHERE id = $1 AND task_id = $3',
+          [item.id, item.text.trim(), req.params.id])
+      }
+      if ('assigneeId' in item) {
+        const novo = podeAssumir.has(item.assigneeId) ? item.assigneeId : null
+        await client.query('UPDATE checklist_items SET assignee_id = $2 WHERE id = $1 AND task_id = $3', [item.id, novo, req.params.id])
+      }
     }
     await client.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [req.params.id])
+    await ajustarStatusPeloChecklist(client, req.params.id)
   })
   res.json(await getTask(req.params.id))
 }))
+
+// Quando a atividade TEM checklist, o status espelha o checklist:
+//
+//   tudo concluído          → Concluído
+//   algum em diligência     → Em diligência
+//   algum em revisão        → Em revisão
+//   algum concluído         → Em andamento
+//   nenhum                  → A fazer
+//
+// Diligência vence revisão porque é o estado que custa mais caro: revisão é
+// leitura interna, diligência é pendência que veio de fora e trava a entrega.
+// Quem olha a etapa precisa ver a pior notícia, não a média.
+//
+// O cálculo do progresso (src/data/progresso.js) já contava checklist inteiro
+// marcado como concluído, mas a COLUNA status ficava para trás — o Panorama
+// dava a atividade por encerrada enquanto o Kanban ainda a mostrava em "A
+// fazer". Isto faz o status acompanhar de fato.
+//
+// A regra é simétrica de propósito. Uma primeira versão só promovia (e
+// rebaixava de Concluído para Em andamento), para não desfazer um "em
+// andamento" posto à mão. O efeito prático foi pior: desmarcar tudo deixava a
+// etapa em Em andamento, e ela sumia de onde a pessoa ia procurá-la. Espelhar
+// é mais previsível — e só acontece quando alguém mexe no checklist, nunca
+// por conta própria.
+//
+// Fica no servidor, e não no front, para valer venha a marcação de onde vier.
+async function ajustarStatusPeloChecklist(client, taskId) {
+  const { rows: [t] } = await client.query('SELECT status FROM tasks WHERE id = $1', [taskId])
+  if (!t) return
+  const { rows: [c] } = await client.query(
+    `SELECT count(*)::int AS total,
+            count(*) FILTER (WHERE state = 'done')::int       AS feitos,
+            count(*) FILTER (WHERE state = 'review')::int     AS revisao,
+            count(*) FILTER (WHERE state = 'diligence')::int  AS diligencia
+       FROM checklist_items WHERE task_id = $1`,
+    [taskId]
+  )
+  if (!c.total) return                               // sem checklist: nada a inferir
+  const novo = c.feitos === c.total ? 'done'
+    : c.diligencia ? 'diligence'
+    : c.revisao ? 'review'
+    : c.feitos ? 'progress'
+    : 'todo'
+  if (novo === t.status) return
+  await client.query('UPDATE tasks SET status = $2 WHERE id = $1', [taskId, novo])
+}
 
 // Entrar/sair de uma atividade — o usuário gerencia só a SUA participação.
 // Permitido para 'Só exibição'; adicionar/remover outras pessoas exige Edição total.
@@ -909,6 +1090,102 @@ app.post('/api/tasks/:id/membership', gate(taskProjectId, CAN.light), wrap(async
   res.json(await getTask(req.params.id))
 }))
 
+// Criar as etapas que faltam no projeto, de uma vez. Idempotente: só insere o
+// que ainda não existe, então clicar duas vezes não duplica — que é justamente
+// como a equipe acabou com "9 · Diligências" repetida em três projetos.
+//
+// São três idas ao banco: conferir o projeto, inserir, reler o que entrou.
+// Antes eram ~15 — uma consulta para listar os títulos existentes e, dentro de
+// uma transação, um INSERT por etapa. Com o Postgres do outro lado da rede o
+// custo é quase todo de ida e volta, então criar as 11 etapas levava segundos
+// de espera. O filtro do que já existe virou o NOT EXISTS do próprio INSERT, e
+// as 11 linhas entram de uma vez — um único INSERT já é atômico, sem transação.
+// adminOnly, nao CAN.edit: montar o template nao e trabalhar no projeto, e
+// decidir que ele segue o processo das 11 etapas. Quem e 'full' executa as
+// etapas; quem as cria e a coordenacao. Enquanto isto era CAN.edit, qualquer
+// membro criava — e era assim que um projeto ganhava etapa repetida.
+app.post('/api/projects/:id/stages', gate((req) => req.params.id, CAN.adminOnly), wrap(async (req, res) => {
+  const [p] = await q("SELECT to_char(COALESCE(start_date, now()::date), 'YYYY-MM-DD') AS inicio FROM projects WHERE id = $1", [req.params.id])
+  if (!p) return res.status(404).json({ error: 'Projeto não encontrado.' })
+
+  const titulos = ETAPAS_PADRAO.map((nome, i) => `${i} · ${nome}`)
+  const ids = titulos.map(() => genId('t'))
+  const novas = await q(
+    `INSERT INTO tasks (id, project_id, title, status, priority, start_date, end_date, created_by)
+     SELECT e.id, $1, e.title, 'todo', 'medium', $2::date, $2::date + $3::int, $4
+     FROM unnest($5::text[], $6::text[]) AS e(id, title)
+     WHERE NOT EXISTS (SELECT 1 FROM tasks t WHERE t.project_id = $1 AND t.title = e.title)
+     RETURNING id`,
+    [req.params.id, p.inicio, DIAS_PRAZO_ATIVIDADE, req.userId, ids, titulos])
+
+  // Devolve as etapas prontas. Sem isto o cliente só sabia quantas foram e
+  // precisava recarregar o bootstrap inteiro (54 KB) para enxergar 11 linhas.
+  const tasks = novas.length
+    ? (await q(`${TASK_SELECT} WHERE t.id = ANY($1) ORDER BY t.id`, [novas.map(r => r.id)])).map(mapTask)
+    : []
+  res.json({ criadas: novas.length, jaExistiam: ETAPAS_PADRAO.length - novas.length, tasks })
+}))
+
+// Acrescentar um item ao checklist de uma atividade. Exige Edição total: o
+// item é trabalho novo, diferente de MARCAR um item existente (que 'Só
+// exibição' pode fazer, pela rota PATCH).
+// Acrescenta uma OU VARIAS atividades a etapa. O corpo aceita `text` (uma so,
+// como antes) ou `items` — cada um com texto e dono proprio.
+//
+// Em lote de proposito: a tela passou a deixar escrever varias linhas de uma
+// vez, e uma requisicao por linha repetiria o problema que o "criar template"
+// ja teve — com o Postgres do outro lado da rede, o custo e quase todo de ida
+// e volta.
+app.post('/api/tasks/:id/checklist', gate(taskProjectId, CAN.edit), wrap(async (req, res) => {
+  const entrada = Array.isArray(req.body.items) && req.body.items.length
+    ? req.body.items
+    : [{ text: req.body.text, assigneeId: req.body.assigneeId }]
+  const itens = entrada
+    .map(i => ({ text: String(i?.text || '').trim(), assigneeId: i?.assigneeId || null }))
+    .filter(i => i.text)
+    .slice(0, 50)
+  if (!itens.length) return res.status(400).json({ error: 'Escreva o que precisa ser feito.' })
+
+  const [t] = await q('SELECT assignee_id, project_id FROM tasks WHERE id = $1', [req.params.id])
+  if (!t) return res.status(404).json({ error: 'Atividade não encontrada.' })
+
+  // Aqui o dono pode ser QUALQUER pessoa da equipe do projeto, não só quem já
+  // está na etapa: uma etapa recém-criada não tem ninguém, e exigir que a
+  // pessoa entrasse antes deixaria o seletor vazio justo na hora de distribuir
+  // o trabalho. Quem for escolhido entra na etapa (task_members) — sem isso a
+  // atribuição não passaria na validação das outras rotas.
+  const daEquipe = await q(
+    `SELECT user_id FROM project_members WHERE project_id = $1
+     UNION SELECT id FROM users WHERE is_admin`, [t.project_id])
+  const podeAssumir = new Set([t.assignee_id, ...daEquipe.map(m => m.user_id)].filter(Boolean))
+  // Dono inválido vira "sem dono" em vez de derrubar a linha inteira: numa
+  // lista de cinco atividades, perder tudo por causa de um seletor errado
+  // custaria mais que a atividade nascer sem responsável.
+  const comDono = itens.map(i => ({ ...i, assigneeId: podeAssumir.has(i.assigneeId) ? i.assigneeId : null }))
+
+  await tx(async (client) => {
+    const donos = [...new Set(comDono.map(i => i.assigneeId).filter(d => d && d !== t.assignee_id))]
+    for (const d of donos) {
+      await client.query('INSERT INTO task_members (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.params.id, d])
+    }
+    const { rows: [pos] } = await client.query(
+      'SELECT COALESCE(max(position), -1) + 1 AS n FROM checklist_items WHERE task_id = $1', [req.params.id])
+    // As N linhas entram num INSERT só, pelo mesmo motivo do "criar template":
+    // o custo é da ida e volta, não do trabalho de cada uma.
+    await client.query(
+      `INSERT INTO checklist_items (id, task_id, text, done, position, assignee_id, state)
+       SELECT e.id, $1, e.text, false, $2::int + (e.ord::int), e.dono, 'todo'
+         FROM unnest($3::text[], $4::text[], $5::text[], $6::int[]) AS e(id, text, dono, ord)`,
+      [req.params.id, pos.n,
+       comDono.map(() => genId('c')), comDono.map(i => i.text),
+       comDono.map(i => i.assigneeId), comDono.map((_, k) => k)])
+    await client.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [req.params.id])
+    // Item novo numa etapa concluída a devolve para "em andamento".
+    await ajustarStatusPeloChecklist(client, req.params.id)
+  })
+  res.status(201).json(await getTask(req.params.id))
+}))
+
 // Registrar que a pessoa ABRIU a atividade. Não é edição — 'Só exibição'
 // também marca. É o "acessado" que segura a notificação da atividade que a
 // própria pessoa criou para si (ver as notificações em App.jsx).
@@ -921,6 +1198,47 @@ app.post('/api/tasks/:id/view', gate(taskProjectId, CAN.light), wrap(async (req,
   )
   if (!rows.length) return res.status(404).json({ error: 'Atividade não encontrada.' })
   res.json(await getTask(req.params.id))
+}))
+
+// Excluir UMA atividade da etapa, sem abrir o modal e sem reescrever o
+// checklist inteiro. Antes a unica saida era o PUT da etapa, que apaga e
+// reinsere todos os itens — muito peso para remover uma linha.
+app.delete('/api/tasks/:id/checklist/:itemId', gate(taskProjectId, CAN.edit), wrap(async (req, res) => {
+  await tx(async (client) => {
+    await client.query('DELETE FROM checklist_items WHERE id = $1 AND task_id = $2', [req.params.itemId, req.params.id])
+    await client.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [req.params.id])
+    // O status da etapa espelha o checklist: tirar a ultima atividade pendente
+    // pode fechar a etapa, e tirar a ultima de todas devolve o controle manual.
+    await ajustarStatusPeloChecklist(client, req.params.id)
+  })
+  res.json(await getTask(req.params.id))
+}))
+
+// Excluir VARIAS etapas de uma vez. A tela tem selecao em massa, e uma
+// requisicao por etapa custaria uma ida e volta cada — onze etapas, onze
+// esperas. Aqui vai tudo num DELETE so.
+//
+// O gate() padrao nao serve: ele resolve UM projeto a partir da rota. Como os
+// ids podem estar em projetos diferentes, a permissao e conferida por projeto
+// antes de apagar qualquer coisa — e uma etapa sem permissao derruba a
+// operacao inteira, em vez de apagar metade.
+app.post('/api/tasks/bulk-delete', wrap(async (req, res) => {
+  const ids = (Array.isArray(req.body.ids) ? req.body.ids : []).filter(i => typeof i === 'string').slice(0, 100)
+  if (!ids.length) return res.status(400).json({ error: 'Nenhuma etapa selecionada.' })
+
+  const alvos = await q('SELECT id, project_id FROM tasks WHERE id = ANY($1::text[])', [ids])
+  if (!alvos.length) return res.status(404).json({ error: 'Nenhuma etapa encontrada.' })
+
+  const projetos = [...new Set(alvos.map(t => t.project_id))]
+  for (const pid of projetos) {
+    const papel = await effectiveRole(req.userId, pid)
+    if (!CAN.edit.includes(papel)) {
+      return res.status(403).json({ error: 'Você não tem permissão para excluir etapas deste projeto.' })
+    }
+  }
+
+  const apagadas = await q('DELETE FROM tasks WHERE id = ANY($1::text[]) RETURNING id', [alvos.map(t => t.id)])
+  res.json({ excluidas: apagadas.map(r => r.id) })
 }))
 
 app.delete('/api/tasks/:id', gate(taskProjectId, CAN.edit), wrap(async (req, res) => {
@@ -970,10 +1288,36 @@ app.post('/api/sessions/stop', wrap(async (req, res) => {
 // "eu não fui avisado" sem impedir o trabalho de andar.
 // ============================================================
 
-const SETORES = ['engenharia', 'arquitetura', 'orcamento', 'coordenacao', 'direcao', 'estagio']
+// As três áreas da empresa, com o MESMO id que o front grava (SECTORS, em
+// src/data/store.js). As rotas de setor validam contra esta lista, e ela tinha
+// ficado com os slugs antigos: quem escolhia "Engenharia" em Meu setor tinha o
+// campo APAGADO em vez de gravado, porque normSetor devolvia null.
+const SETORES = ['Engenharia', 'Arquitetura', 'TI']
+const FORMACOES = ['sistemas-informacao', 'arquitetura', 'engenharia-civil', 'engenharia-eletrica']
 const CHANGE_KINDS = ['requisicao', 'sugestao']
 const URGENCIES = ['low', 'medium', 'high']
 const normSetor = (v) => (SETORES.includes(v) ? v : null)
+const normFormacao = (v) => (FORMACOES.includes(v) ? v : null)
+// Espelho de conselhoDe() em src/data/store.js: a formação manda, o setor
+// responde por quem ainda não tem formação preenchida, e o cargo é o último
+// recurso. Fica duplicado aqui porque o servidor não importa o front — as
+// listas SETORES e FORMACOES já são duplicadas pelo mesmo motivo.
+const CONSELHO_FORMACAO = { 'arquitetura': 'CAU', 'engenharia-civil': 'CREA', 'engenharia-eletrica': 'CREA' }
+const CONSELHO_SETOR = { 'Engenharia': 'CREA', 'Arquitetura': 'CAU' }
+const CONSELHO_CARGO = { 'arquitetura': 'CAU', 'projetos prediais': 'CREA' }
+const chaveCargo = (v) => String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase()
+// Sistemas de Informação é formação SEM conselho, e isso vence o setor: quem
+// tem esse diploma no setor Engenharia não tem CREA.
+const conselhoDe = (formacao, setor, cargo) => (normFormacao(formacao)
+  ? CONSELHO_FORMACAO[formacao] || null
+  : CONSELHO_SETOR[setor] || CONSELHO_CARGO[chaveCargo(cargo)] || null)
+// O número só faz sentido para quem tem conselho. Guardar um CAU em quem não
+// tem deixa o dado esperando para reaparecer quando a formação mudar.
+const normRegistro = (formacao, setor, cargo, v) => (conselhoDe(formacao, setor, cargo) && v ? String(v).trim() || null : null)
+// Data em branco é ausência de data, não a string "". O Postgres recusa '' como
+// date, e era isso que devolvia 500 para quem salvava um projeto sem prazo: o
+// formulário deixava tentar, e a gravação morria no banco.
+const normData = (v) => { const s = String(v ?? '').trim(); return s || null }
 const normKind = (v) => (CHANGE_KINDS.includes(v) ? v : 'requisicao')
 const normUrgency = (v) => (URGENCIES.includes(v) ? v : 'medium')
 
@@ -1008,6 +1352,7 @@ const CHANGE_SELECT = `
          to_char(c.change_date, 'YYYY-MM-DD') AS "changeDate",
          c.responsible_id  AS "responsibleId",
          c.task_id         AS "taskId",
+         c.checklist_item_id AS "checklistItemId",
          c.affects_budget  AS "affectsBudget",
          c.published_by    AS "publishedBy",
          (extract(epoch FROM c.published_at) * 1000)::bigint AS "publishedAt",
@@ -1059,6 +1404,9 @@ async function abrirCiencia(client, changeId, projectId, autorId, targetSectors 
        FROM project_members pm
        JOIN users u ON u.id = pm.user_id
       WHERE pm.project_id = $1 AND pm.user_id <> $2
+        -- Terceirizado não entra no sistema, então não tem como dar ciência:
+        -- cobrá-lo deixaria uma pendência que ninguém pode encerrar.
+        AND NOT u.is_outsourced
         AND (u.sector = ANY($3::text[]) OR pm.user_id = ANY($4::text[]))`,
       [projectId, autorId, targetSectors, targetUserIds]
   )
@@ -1075,21 +1423,76 @@ async function abrirCiencia(client, changeId, projectId, autorId, targetSectors 
   }
 }
 
-// Cria a atividade da mudança e devolve o id. A urgência vira a prioridade do
-// cartão. Sem destinatário-pessoa, nasce sem responsável — alguém do setor assume.
-async function criarAtividadeDaMudanca(client, { projectId, title, alvos = [], changeDate, urgency }) {
-  const taskId = genId('t')
-  const [responsavel, ...demais] = alvos
-  await client.query(
-    `INSERT INTO tasks (id, project_id, title, assignee_id, status, priority, start_date, end_date)
-     VALUES ($1, $2, $3, $4, 'todo', $5, $6::date, $6::date + $7::int)`,
-    [taskId, projectId, title, responsavel || null, normUrgency(urgency), changeDate, DIAS_PRAZO_ATIVIDADE]
-  )
-  // Destinatários além do primeiro viram membros da atividade.
-  for (const u of demais) {
-    await client.query('INSERT INTO task_members (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [taskId, u])
+// Etapas do processo, na ordem. Espelha ETAPAS_PADRAO de src/data/store.js —
+// mexeu lá, mexa aqui. O título gravado é "<i> · <nome>", padrão que a aba
+// Etapas lê para agrupar as atividades.
+const ETAPAS_PADRAO = [
+  'Contratação direta', 'Levantamento', 'Projetos', 'Orçamento',
+  'Relatório fotográfico', 'ART e documentos', 'Licença ambiental',
+  'Projeto básico', 'Protocolos', 'Diligências', 'Licitação',
+]
+
+// ---------- mudança vira item de checklist dentro de uma etapa ----------
+//
+// Uma mudança quase sempre acontece DENTRO de uma etapa: revisar o projeto
+// elétrico é trabalho da etapa "2 · Projetos", não uma etapa nova. Por isso
+// ela entra como item do checklist da etapa escolhida, em vez de virar mais
+// um cartão solto no quadro.
+//
+// Atividade sem etapa escolhida vai para uma atividade-abrigo do projeto, que
+// fica fora do template numerado e por isso aparece em "Outras atividades".
+const TAREFA_SEM_ETAPA = 'Mudanças sem etapa'
+
+// A urgência entra no PREFIXO porque item de checklist não tem campo de
+// prioridade — sem isto uma requisição urgente viraria uma linha igual às
+// outras, e o sinal de urgência se perderia por completo.
+function tituloDoItem({ kind, urgency, title }) {
+  const tipo = kind === 'sugestao' ? 'Sugestão' : 'Requisição'
+  const urgente = normUrgency(urgency) === 'high' ? ' urgente' : ''
+  return `[${tipo}${urgente}] ${String(title).trim()}`
+}
+
+// A etapa escolhida, ou a atividade-abrigo (criada na primeira necessidade).
+async function hospedeiroDaMudanca(client, projectId, stageTaskId, changeDate) {
+  if (stageTaskId) {
+    // Só aceita etapa do próprio projeto — o seletor já filtra, o servidor confere.
+    const { rows: [t] } = await client.query(
+      'SELECT id FROM tasks WHERE id = $1 AND project_id = $2', [stageTaskId, projectId])
+    if (t) return t.id
   }
-  return taskId
+  const { rows: [existe] } = await client.query(
+    'SELECT id FROM tasks WHERE project_id = $1 AND title = $2 ORDER BY created_at LIMIT 1',
+    [projectId, TAREFA_SEM_ETAPA])
+  if (existe) return existe.id
+  const id = genId('t')
+  await client.query(
+    `INSERT INTO tasks (id, project_id, title, status, priority, start_date, end_date)
+     VALUES ($1, $2, $3, 'todo', 'medium', $4::date, $4::date + $5::int)`,
+    [id, projectId, TAREFA_SEM_ETAPA, changeDate, DIAS_PRAZO_ATIVIDADE])
+  return id
+}
+
+// Cria o item e devolve { taskId, itemId }. O primeiro destinatário-pessoa
+// vira dono do item — e entra como membro da etapa, senão a atribuição não
+// passaria na validação de quem pode assumir.
+async function itemDeChecklistDaMudanca(client, { projectId, stageTaskId, kind, urgency, title, changeDate, alvos = [] }) {
+  const taskId = await hospedeiroDaMudanca(client, projectId, stageTaskId, changeDate)
+  const dono = alvos[0] || null
+  if (dono) {
+    const { rows: [t] } = await client.query('SELECT assignee_id FROM tasks WHERE id = $1', [taskId])
+    if (t.assignee_id !== dono) {
+      await client.query('INSERT INTO task_members (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [taskId, dono])
+    }
+  }
+  const { rows: [pos] } = await client.query(
+    'SELECT COALESCE(max(position), -1) + 1 AS n FROM checklist_items WHERE task_id = $1', [taskId])
+  const itemId = genId('c')
+  await client.query(
+    'INSERT INTO checklist_items (id, task_id, text, done, position, assignee_id) VALUES ($1, $2, $3, false, $4, $5)',
+    [itemId, taskId, tituloDoItem({ kind, urgency, title }), pos.n, dono])
+  // A etapa que recebeu trabalho novo não pode continuar "concluída".
+  await ajustarStatusPeloChecklist(client, taskId)
+  return { taskId, itemId }
 }
 
 // Descobre o projeto de uma mudança (para o gate das rotas /changes/:id).
@@ -1127,6 +1530,7 @@ app.post('/api/projects/:id/changes', gate((req) => req.params.id, CAN.publishCh
     title, description, requester = '', changeDate,
     kind, urgency, targetUserIds = [], targetSectors = [], targetSector = null,
     affectsBudget = false,
+    stageTaskId = null,   // etapa que recebe a mudança; null = "Sem etapa"
   } = req.body
   if (!String(title || '').trim()) return res.status(400).json({ error: 'Informe o que mudou, em uma linha.' })
   if (!String(description || '').trim()) return res.status(400).json({ error: 'Descreva a mudança para quem vai fazer.' })
@@ -1150,24 +1554,31 @@ app.post('/api/projects/:id/changes', gate((req) => req.params.id, CAN.publishCh
 
   const id = genId('mc')
   await tx(async (client) => {
-    // Requisição obriga: já nasce como cartão no quadro. Sugestão é proposta —
-    // vira atividade só quando alguém aceitar.
-    const taskId = tipo === 'requisicao'
-      ? await criarAtividadeDaMudanca(client, {
-          projectId: req.params.id, title: String(title).trim(),
-          alvos, changeDate, urgency,
+    // Requisição obriga: já entra como item do checklist da etapa. Sugestão é
+    // proposta — só vira item quando alguém aceitar.
+    const criado = tipo === 'requisicao'
+      ? await itemDeChecklistDaMudanca(client, {
+          projectId: req.params.id, stageTaskId, kind: tipo,
+          title, urgency, changeDate, alvos,
         })
       : null
+    // Sugestão ainda não vira item — mas a etapa escolhida fica guardada em
+    // task_id para o /decide saber onde pôr o item quando alguém aceitar.
+    const etapaEscolhida = stageTaskId
+      ? (await client.query('SELECT id FROM tasks WHERE id = $1 AND project_id = $2', [stageTaskId, req.params.id])).rows[0]?.id || null
+      : null
+    const taskId = criado?.taskId || etapaEscolhida
+    const itemId = criado?.itemId || null
 
     await client.query(
       `INSERT INTO changes (id, project_id, title, description, origin, change_date,
                             responsible_id, target_sector, target_sectors, target_user_ids, task_id, affects_budget,
                             kind, urgency, emitter_user_id, emitter_sector,
-                            published_by, published_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, now())`,
+                            published_by, published_at, checklist_item_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, now(), $18)`,
       [id, req.params.id, String(title).trim(), String(description).trim(), String(requester || '').trim(),
       changeDate, alvos[0] || null, alvoSetor, JSON.stringify(alvosSetores), JSON.stringify(alvos), taskId, !!affectsBudget,
-       tipo, normUrgency(urgency), emissorPessoa || null, emissorSetor, req.userId]
+       tipo, normUrgency(urgency), emissorPessoa || null, emissorSetor, req.userId, itemId]
     )
     await abrirCiencia(client, id, req.params.id, req.userId, alvosSetores, alvos)
   })
@@ -1185,7 +1596,7 @@ app.put('/api/changes/:id', gate(changeProjectId, CAN.edit), wrap(async (req, re
   if (!String(description || '').trim()) return res.status(400).json({ error: 'Descreva a mudança para quem vai fazer.' })
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(changeDate || ''))) return res.status(400).json({ error: 'Informe a data da mudança.' })
 
-  const [atual] = await q('SELECT project_id, task_id FROM changes WHERE id = $1', [req.params.id])
+  const [atual] = await q('SELECT project_id, task_id, checklist_item_id, kind FROM changes WHERE id = $1', [req.params.id])
   if (!atual) return res.status(404).json({ error: 'Mudança não encontrada.' })
 
   const alvosSetores = normSetores(targetSectors, targetSector)
@@ -1211,14 +1622,23 @@ app.put('/api/changes/:id', gate(changeProjectId, CAN.edit), wrap(async (req, re
       changeDate, alvos[0] || null, alvoSetor, JSON.stringify(alvosSetores), JSON.stringify(alvos), normUrgency(urgency),
        req.userId]
     )
-    if (atual.task_id) {
-      await client.query('UPDATE tasks SET title = $2, assignee_id = $3, priority = $4 WHERE id = $1',
-        [atual.task_id, String(title).trim(), alvos[0] || null, normUrgency(urgency)])
-      // Refaz os membros da atividade a partir dos destinatários extras.
-      await client.query('DELETE FROM task_members WHERE task_id = $1', [atual.task_id])
-      for (const u of alvos.slice(1)) {
-        await client.query('INSERT INTO task_members (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [atual.task_id, u])
+    // Editar a mudança reescreve o ITEM de checklist que ela criou — nunca a
+    // etapa que o hospeda. Antes daqui a mudança tinha atividade própria e
+    // este bloco renomeava essa atividade; agora task_id aponta para a etapa,
+    // e renomeá-la trocaria o nome de "2 · Projetos" pelo texto da mudança.
+    if (atual.checklist_item_id) {
+      await client.query('UPDATE checklist_items SET text = $2 WHERE id = $1',
+        [atual.checklist_item_id, tituloDoItem({ kind: atual.kind, urgency, title })])
+      // O destinatário principal assume o item, e entra na etapa para que a
+      // atribuição seja válida.
+      const dono = alvos[0] || null
+      if (dono && atual.task_id) {
+        const { rows: [t] } = await client.query('SELECT assignee_id FROM tasks WHERE id = $1', [atual.task_id])
+        if (t && t.assignee_id !== dono) {
+          await client.query('INSERT INTO task_members (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [atual.task_id, dono])
+        }
       }
+      await client.query('UPDATE checklist_items SET assignee_id = $2 WHERE id = $1', [atual.checklist_item_id, dono])
     }
     await abrirCiencia(client, req.params.id, atual.project_id, req.userId, alvosSetores, alvos)
   })
@@ -1235,7 +1655,7 @@ app.post('/api/changes/:id/decide', gate(changeProjectId, CAN.light), wrap(async
   if (!aceitar && !motivo) return res.status(400).json({ error: 'Recusar exige um motivo registrado.' })
 
   const [c] = await q(
-    `SELECT project_id, kind, decision, task_id, title, target_user_ids, target_sector, target_sectors, urgency,
+    `SELECT project_id, kind, decision, task_id, checklist_item_id, title, target_user_ids, target_sector, target_sectors, urgency,
             to_char(change_date, 'YYYY-MM-DD') AS change_date
      FROM changes WHERE id = $1`, [req.params.id])
   if (!c) return res.status(404).json({ error: 'Mudança não encontrada.' })
@@ -1251,17 +1671,23 @@ app.post('/api/changes/:id/decide', gate(changeProjectId, CAN.light), wrap(async
 
   await tx(async (client) => {
     let taskId = c.task_id
-    if (aceitar && !taskId) {
-      taskId = await criarAtividadeDaMudanca(client, {
-        projectId: c.project_id, title: c.title, alvos: normAlvos(c.target_user_ids),
-        changeDate: c.change_date, urgency: c.urgency,
+    let itemId = c.checklist_item_id
+    // Aceitar é o que transforma a sugestão em trabalho: só aí ela vira item
+    // do checklist, na etapa escolhida na publicação.
+    if (aceitar && !itemId) {
+      const criado = await itemDeChecklistDaMudanca(client, {
+        projectId: c.project_id, stageTaskId: c.task_id, kind: 'sugestao',
+        title: c.title, urgency: c.urgency, changeDate: c.change_date,
+        alvos: normAlvos(c.target_user_ids),
       })
+      taskId = criado.taskId
+      itemId = criado.itemId
     }
     await client.query(
       `UPDATE changes SET decision = $2, decided_by = $3, decided_at = now(),
-                          decision_reason = $4, task_id = $5
+                          decision_reason = $4, task_id = $5, checklist_item_id = $6
        WHERE id = $1`,
-      [req.params.id, aceitar ? 'aceita' : 'recusada', req.userId, motivo || null, taskId]
+      [req.params.id, aceitar ? 'aceita' : 'recusada', req.userId, motivo || null, taskId, itemId]
     )
   })
   res.json(await getChange(req.params.id))
@@ -1276,7 +1702,7 @@ app.put('/api/users/:id/sector', requireAdmin, wrap(async (req, res) => {
   res.json({ id: req.params.id, sector: setor })
 }))
 
-// A própria pessoa define seu setor — é o vínculo da conta com o cargo que
+// A própria pessoa define seu setor — é o vínculo da conta com o setor que
 // exerce. Sem isso, endereçar uma mudança a um setor não encontra ninguém.
 app.post('/api/auth/sector', wrap(async (req, res) => {
   const setor = normSetor(req.body.sector)
@@ -1293,6 +1719,215 @@ app.post('/api/changes/:id/ack', gate(changeProjectId, CAN.light), wrap(async (r
   )
   if (!rows.length) return res.status(400).json({ error: 'Você não está na lista de quem precisa ver esta mudança.' })
   res.json(await getChange(req.params.id))
+}))
+
+// ---------- sugestoes de item de checklist ----------
+
+// Os textos que a equipe ja usou, agrupados pelo NUMERO da etapa. Medido antes
+// de escrever isto: sao 157 itens para 55 textos distintos, e 102 dos 152 itens
+// do template ja existiam palavra por palavra em outro projeto. A etapa 3 tem
+// sempre os mesmos cinco (3.1 Quantitativos, 3.2 Composicoes, 3.3 Planilha, 3.4
+// BDI, 3.5 Cronograma) — redigitados a cada projeto.
+//
+// Agrupa por etapa porque '3.1 Quantitativos' so faz sentido dentro de
+// Orcamento; o que nao vem de etapa numerada cai em '*' e serve de reserva.
+//
+// So projetos que a pessoa enxerga. Sem esse filtro a caixa de sugestao viraria
+// uma janela para o texto de projetos aos quais ela nao tem acesso.
+const MAX_SUGESTOES = 40
+
+app.get('/api/checklist-suggestions', wrap(async (req, res) => {
+  const visiveis = await visibleProjectIds(req.userId)
+  const linhas = await q(
+    `SELECT COALESCE(substring(t.title from '^([0-9]+) · '), '*') AS etapa,
+            btrim(ci.text) AS texto,
+            count(DISTINCT t.project_id)::int AS projetos
+       FROM checklist_items ci
+       JOIN tasks t ON t.id = ci.task_id
+      WHERE btrim(ci.text) <> ''
+        -- Item nascido de uma mudança publicada carrega o prefixo "[Requisição]"
+        -- e é o registro de um pedido específico, de um projeto específico. Nunca
+        -- serve de sugestão para outro — só sujaria a lista com o improviso de
+        -- alguém no lugar do padrão da casa.
+        AND btrim(ci.text) NOT LIKE '[%'
+        AND ($1::text[] IS NULL OR t.project_id = ANY($1))
+      GROUP BY 1, 2
+      ORDER BY 1, 3 DESC, 2`,
+    [visiveis])
+
+  const porEtapa = {}
+  for (const l of linhas) {
+    const lista = porEtapa[l.etapa] || (porEtapa[l.etapa] = [])
+    if (lista.length < MAX_SUGESTOES) lista.push({ text: l.texto, n: l.projetos })
+  }
+  res.json(porEtapa)
+}))
+
+// ---------- relatorio semanal ----------
+
+// A semana e identificada pela SEXTA que a encerra — e quando a equipe manda.
+// Sabado e domingo pertencem a sexta que passou; quem abre a tela no domingo
+// continua vendo o relatorio da semana que acabou, nao um em branco.
+const DIA_MS = 86400000
+function sextaDe(iso) {
+  const base = /^\d{4}-\d{2}-\d{2}$/.test(String(iso || '')) ? iso : new Date().toISOString().slice(0, 10)
+  const d = new Date(base + 'T00:00:00Z')
+  const dow = d.getUTCDay()  // 0 dom ... 6 sab
+  const delta = dow === 6 ? -1 : dow === 0 ? -2 : 5 - dow
+  return new Date(d.getTime() + delta * DIA_MS).toISOString().slice(0, 10)
+}
+const maisDias = (iso, n) => new Date(new Date(iso + 'T00:00:00Z').getTime() + n * DIA_MS).toISOString().slice(0, 10)
+
+// Sanitizacao do texto rico. Vale ser explicito sobre o porque:
+//
+// 1. XSS — o relatorio de um colaborador e lido pelo admin. Sem limpar aqui,
+//    quem escreve escolhe o que roda na tela de quem le. Limpar so no cliente
+//    nao vale nada: a rota aceita qualquer corpo.
+// 2. Tamanho — um editor tipo Word aceita Ctrl+V de print de tela, e o
+//    navegador cola a imagem como data:base64 DENTRO do HTML. Um print vira
+//    500 KB a 2 MB numa coluna de texto.
+//
+// A regra que resolve os dois: lista fechada de tags e NENHUM atributo. Sem
+// atributo nao ha on*, href javascript: nem src data:. O editor do cliente
+// ainda converte o que e colado para texto puro, mas isto aqui e a garantia.
+const TAGS_OK = ['b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li', 'br', 'p', 'div']
+const LIMITE_TEXTO = 20 * 1024
+
+function limparHtml(bruto, limite = LIMITE_TEXTO) {
+  if (typeof bruto !== 'string' || !bruto) return ''
+  const limpo = bruto
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<\s*(script|style)[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+    // Reescreve cada tag sem nenhum atributo; o que nao esta na lista some.
+    .replace(/<\s*(\/?)\s*([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g, (_, barra, tag) =>
+      TAGS_OK.includes(tag.toLowerCase()) ? '<' + barra + tag.toLowerCase() + '>' : '')
+    // '<' que sobrou nao abria tag nenhuma: e texto que a pessoa digitou.
+    .replace(/</g, '&lt;')
+    .replace(/&lt;(\/?)(b|strong|i|em|u|ul|ol|li|br|p|div)>/g, '<$1$2>')
+  return limpo.length > limite ? limpo.slice(0, limite) : limpo
+}
+
+// Texto visivel, para saber se o relatorio tem conteudo de verdade.
+const semTags = (html) => String(html || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
+
+// Espelha PROJECT_STATUSES de src/data/store.js. E a lista que o servidor
+// aceita gravar: status virou escolha, nao texto livre. Os quatro relatorios
+// ja enviados tinham status escrito a mao, e os quatro diziam "Em andamento" —
+// com uma grafia diferente cada vez, o que nao da para contar nem agrupar.
+const STATUS_PROJETO = ['planejamento', 'andamento', 'revisao', 'pendente', 'diligencia', 'paralisado', 'concluido']
+
+const mapRelatorio = (r) => ({
+  id: r.id,
+  userId: r.user_id,
+  week: r.week instanceof Date ? r.week.toISOString().slice(0, 10) : String(r.week).slice(0, 10),
+  projectIds: r.project_ids || [],
+  developed: r.developed || '',
+  works: r.works || {},
+  statuses: r.statuses || {},
+  sentAt: r.sent_at,
+  updatedAt: r.updated_at,
+})
+
+const COLUNAS_REL = 'id, user_id, week, project_ids, developed, works, statuses, sent_at, updated_at'
+
+// Duas listas, e a diferenca entre elas importa:
+//
+// `disponiveis` sao todos os projetos da pessoa — so para ela poder escolher.
+// `projectIds` sao os da SEMANA: onde ela cronometrou tempo ou onde a atividade
+// sob sua responsabilidade mudou. So estes vem pre-marcados.
+//
+// Marcar tudo o que a pessoa tem seria pior que a pagina em branco: Alvaro esta
+// em 26 projetos, e o relatorio dele sairia listando os 26. O modelo em uso
+// lista dois — os que ele tocou.
+async function sugerirDaSemana(userId, semana) {
+  const de = maisDias(semana, -4)   // segunda
+  const ate = maisDias(semana, 3)   // domingo seguinte (exclusivo)
+  const [projetos, atividades] = await Promise.all([
+    q(`SELECT DISTINCT p.id
+         FROM projects p
+         LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = $1
+         LEFT JOIN tasks t ON t.project_id = p.id AND t.assignee_id = $1
+        WHERE pm.user_id IS NOT NULL OR t.id IS NOT NULL`, [userId]),
+    q(`SELECT DISTINCT t.title, t.project_id, t.status::text AS status
+         FROM tasks t
+         LEFT JOIN time_sessions s ON s.task_id = t.id AND s.user_id = $1
+              AND s.start_at >= $2::date AND s.start_at < $3::date
+        WHERE s.id IS NOT NULL
+           OR (t.assignee_id = $1 AND t.updated_at >= $2::date AND t.updated_at < $3::date)
+        ORDER BY t.title`, [userId, de, ate]),
+  ])
+  const daSemana = [...new Set(atividades.map(a => a.project_id))]
+  return {
+    projectIds: daSemana,
+    disponiveis: projetos.map(r => r.id),
+    atividades: atividades.map(a => ({ title: a.title, projectId: a.project_id, status: a.status })),
+  }
+}
+
+// O relatorio da propria pessoa. Sem registro ainda, devolve null e a sugestao:
+// a tela monta o rascunho, o banco so recebe linha quando alguem salva.
+app.get('/api/weekly-reports/me', wrap(async (req, res) => {
+  const semana = sextaDe(req.query.week)
+  const [r] = await q(`SELECT ${COLUNAS_REL} FROM weekly_reports WHERE user_id = $1 AND week = $2::date`, [req.userId, semana])
+  res.json({ week: semana, report: r ? mapRelatorio(r) : null, sugestao: await sugerirDaSemana(req.userId, semana) })
+}))
+
+// Salva rascunho ou envia. Mesma linha nos dois casos — `send` so carimba a
+// hora. Reenviar depois de corrigir e permitido: o carimbo e atualizado.
+app.put('/api/weekly-reports/me', wrap(async (req, res) => {
+  const semana = sextaDe(req.body.week)
+  const enviar = !!req.body.send
+  const projectIds = (Array.isArray(req.body.projectIds) ? req.body.projectIds : [])
+    .filter(id => typeof id === 'string').slice(0, 30)
+
+  // Texto e status so dos projetos declarados: sem isto, tirar um projeto do
+  // relatorio deixaria o texto dele guardado para sempre, invisivel na tela e
+  // no PDF, e reaparecendo se o projeto voltasse.
+  const works = {}
+  const statuses = {}
+  const brutoTexto = req.body.works && typeof req.body.works === 'object' ? req.body.works : {}
+  const brutoStatus = req.body.statuses && typeof req.body.statuses === 'object' ? req.body.statuses : {}
+  for (const id of projectIds) {
+    const limpo = limparHtml(brutoTexto[id])
+    if (semTags(limpo)) works[id] = limpo
+    if (STATUS_PROJETO.includes(brutoStatus[id])) statuses[id] = brutoStatus[id]
+  }
+
+  if (enviar && !projectIds.length) return res.status(400).json({ error: 'Escolha ao menos um projeto antes de enviar.' })
+  if (enviar && !Object.keys(works).length) return res.status(400).json({ error: 'Escreva o que foi feito em pelo menos um projeto.' })
+
+  const [r] = await q(
+    // `developed` nao aparece no UPDATE de proposito: a tela nova nao tem mais
+    // esse campo, e incluir aqui apagaria em silencio o texto de um relatorio
+    // antigo na primeira vez que alguem o reabrisse.
+    `INSERT INTO weekly_reports (id, user_id, week, project_ids, works, statuses, sent_at, updated_at)
+     VALUES ($1, $2, $3::date, $4::text[], $5::jsonb, $6::jsonb, CASE WHEN $7 THEN now() ELSE NULL END, now())
+     ON CONFLICT (user_id, week) DO UPDATE SET
+       project_ids = EXCLUDED.project_ids,
+       works       = EXCLUDED.works,
+       statuses    = EXCLUDED.statuses,
+       sent_at     = CASE WHEN $7 THEN now() ELSE weekly_reports.sent_at END,
+       updated_at  = now()
+     RETURNING ${COLUNAS_REL}`,
+    [genId('wr'), req.userId, semana, projectIds, JSON.stringify(works), JSON.stringify(statuses), enviar])
+  res.json(mapRelatorio(r))
+}))
+
+// Painel do admin: o que foi enviado naquela semana, e quem falta.
+// Rascunho de outra pessoa nao aparece — relatorio so existe depois de enviado.
+app.get('/api/weekly-reports', requireAdmin, wrap(async (req, res) => {
+  const semana = sextaDe(req.query.week)
+  const [enviados, pessoas] = await Promise.all([
+    q(`SELECT ${COLUNAS_REL} FROM weekly_reports WHERE week = $1::date AND sent_at IS NOT NULL ORDER BY sent_at`, [semana]),
+    // Terceirizado não acessa o sistema, então não tem como enviar relatório.
+    q('SELECT id FROM users WHERE is_active AND NOT is_dev AND NOT is_outsourced ORDER BY id'),
+  ])
+  const entregou = new Set(enviados.map(r => r.user_id))
+  res.json({
+    week: semana,
+    reports: enviados.map(mapRelatorio),
+    faltando: pessoas.map(p => p.id).filter(id => !entregou.has(id)),
+  })
 }))
 
 // ---------- middleware de erro ----------
@@ -1344,9 +1979,44 @@ async function ensureSchema() {
   // Origem do recurso: federal | estadual | municipal | emenda | outro.
   await q("ALTER TABLE projects ADD COLUMN IF NOT EXISTS origem_recurso text NOT NULL DEFAULT 'federal'")
   // Valor ESTIMADO do projeto, em reais (coluna com o nome antigo). NULL = não informado.
-  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS valor_convenio numeric(14,2)')
+  // Os nomes originais mentiam sobre o conteudo: `valor_convenio` guardava o
+  // valor ESTIMADO e `valor_disponivel`, o ORCADO. Com a entrada do convenio de
+  // verdade isso virou armadilha — havia `valor_convenio` e `convenio_valor`
+  // lado a lado, significando coisas diferentes, e escrever na errada
+  // sobrescreveria o valor estimado de todo projeto em silencio.
+  //
+  // O rename vem ANTES do ADD COLUMN abaixo de proposito: invertido, o ADD
+  // recriaria a coluna velha vazia logo depois de ela ser renomeada.
+  await q(`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_name = 'projects' AND column_name = 'valor_convenio')
+         AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_name = 'projects' AND column_name = 'valor_estimado')
+      THEN ALTER TABLE projects RENAME COLUMN valor_convenio TO valor_estimado;
+      END IF;
+      IF EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_name = 'projects' AND column_name = 'valor_disponivel')
+         AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_name = 'projects' AND column_name = 'valor_orcado')
+      THEN ALTER TABLE projects RENAME COLUMN valor_disponivel TO valor_orcado;
+      END IF;
+    END $$`)
+
+  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS valor_estimado numeric(14,2)')
   // Valor ORÇADO do projeto, em reais (coluna com o nome antigo). NULL = não informado.
-  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS valor_disponivel numeric(14,2)')
+  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS valor_orcado numeric(14,2)')
+
+  // ----- convenio -----
+  // O numero do convenio nao tinha onde morar, e por isso 10 projetos o
+  // carregam dentro do NOME ("..._CONV. 030979/2026", "..._MAPP 6112") — o que
+  // alonga o nome, impede filtrar por ele e convida ao erro de digitacao.
+  //
+  // `convenio_valor` e o valor do convenio, e nada mais: o antigo homonimo
+  // `valor_convenio`, que na verdade guardava o estimado, foi renomeado acima.
+  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS eh_convenio boolean NOT NULL DEFAULT false')
+  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS convenio_numero text')
+  await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS convenio_valor numeric(14,2)')
   // Status do projeto: mesma lista de PROJ_STATUSES, em ordem de criticidade
   // (planejamento | andamento | revisao | pendente | diligencia | paralisado | concluido).
   // A coluna é text livre, então status novos não pedem migração: basta entrar
@@ -1395,6 +2065,9 @@ async function ensureSchema() {
   await q('ALTER TABLE changes ADD COLUMN IF NOT EXISTS decided_by text REFERENCES users(id) ON DELETE SET NULL')
   await q('ALTER TABLE changes ADD COLUMN IF NOT EXISTS decided_at timestamptz')
   await q('ALTER TABLE changes ADD COLUMN IF NOT EXISTS decision_reason text')
+  // O item de checklist que a mudança criou dentro da etapa. task_id passa a
+  // apontar para a ETAPA hospedeira, não para uma atividade própria.
+  await q('ALTER TABLE changes ADD COLUMN IF NOT EXISTS checklist_item_id text REFERENCES checklist_items(id) ON DELETE SET NULL')
   // Uma linha por (mudança, pessoa). confirmed_at NULL = ainda não deu ciência.
   await q(`
     CREATE TABLE IF NOT EXISTS change_acks (
@@ -1413,6 +2086,11 @@ async function ensureSchema() {
   await q('ALTER TABLE projects ADD COLUMN IF NOT EXISTS updated_at timestamptz')
   await q('UPDATE projects SET updated_at = created_at WHERE updated_at IS NULL')
   await q('ALTER TABLE projects ALTER COLUMN updated_at SET DEFAULT now()')
+
+  // Responsável por CADA item do checklist. Uma atividade com duas pessoas
+  // costuma ter cada uma cuidando de uma parte; sem isto só dá para saber que
+  // "alguém do par" está devendo. NULL = item sem dono, que é permitido.
+  await q('ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS assignee_id text REFERENCES users(id) ON DELETE SET NULL')
 
   // ----- atividade: autoria, último toque e leitura -----
   // Quem criou a atividade. NULL nas linhas antigas (não dá para descobrir
@@ -1438,9 +2116,31 @@ async function ensureSchema() {
   // Setor da pessoa (engenharia, arquitetura…). É o que faz "destinatário:
   // Engenharia" resolver para gente de verdade na hora de cobrar ciência.
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS sector text')
-  // Cargo e situação ativa/inativa da pessoa.
+  // Cargo, formação, telefone, nome curto e situação ativa/inativa da pessoa.
+  //
+  // Cargo e formação são campos diferentes e os dois ficam: o cargo é o que a
+  // pessoa faz ("Projetos Prediais", "Estagiário de TI") e a formação é o
+  // diploma, que é de onde sai o conselho. O cadastro real tem 'Coordenação' e
+  // 'Orçamentista' como cargo — nenhum é diploma, e nenhum caberia na lista de
+  // formações sem inventar o dado.
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title text')
+  await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS formation text')
+  // Só o que dá para traduzir sem adivinhar: "Arquitetura" é o único cargo que
+  // nomeia um diploma. Projetos Prediais pode ser civil ou elétrica e
+  // Coordenação não diz nada — esses ficam em branco, e enquanto estiverem em
+  // branco o conselho continua vindo do setor, como vinha antes.
+  await q("UPDATE users SET formation = 'arquitetura' WHERE formation IS NULL AND job_title ILIKE 'arquitetura'")
+  await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS phone text')
+  await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS short_name text')
+  // Número do registro profissional (CREA ou CAU, conforme a formação — ver
+  // FORMACAO_CONSELHO em data/store.js). Só o número; a sigla não é gravada
+  // porque é sempre derivada da formação, nunca escolhida à parte.
+  await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS professional_register text')
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true')
+  // Se a pessoa é terceirizada (Sim/Não na ficha) — não confundir com o setor.
+  await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_outsourced boolean NOT NULL DEFAULT false')
+  // Terceirizado não tem login, então a conta pode ficar sem senha.
+  await q('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL')
 
   // ----- permissões -----
   await q('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin boolean NOT NULL DEFAULT false')
@@ -1454,6 +2154,156 @@ async function ensureSchema() {
       PRIMARY KEY (project_id, user_id)
     )
   `)
+
+  // ----- relatorio semanal -----
+  // Uma linha por pessoa por semana, atualizada no lugar: o rascunho e o
+  // enviado sao o MESMO registro. Salvar automatico criando linha nova faria
+  // um relatorio virar duzentas.
+  //
+  // So texto. O PDF nunca e gravado: ele se regenera daqui em milissegundos, e
+  // guardar ~80 KB por relatorio custaria uns 40 MB/ano — mais de quatro vezes
+  // o banco inteiro de hoje, para armazenar o que ja esta em `developed`.
+  await q(`
+    CREATE TABLE IF NOT EXISTS weekly_reports (
+      id          text PRIMARY KEY,
+      user_id     text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      week        date NOT NULL,
+      project_ids text[] NOT NULL DEFAULT '{}',
+      developed   text NOT NULL DEFAULT '',
+      statuses    jsonb NOT NULL DEFAULT '{}'::jsonb,
+      sent_at     timestamptz,
+      updated_at  timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (user_id, week)
+    )
+  `)
+  await q('CREATE INDEX IF NOT EXISTS weekly_reports_week_idx ON weekly_reports (week)')
+
+  // O que foi feito passou a ser POR PROJETO: um texto unico para a semana
+  // obrigava a pessoa a repetir o nome do projeto dentro da frase para se fazer
+  // entender. `developed` (texto unico) fica para os relatorios ja enviados —
+  // eles continuam sendo lidos e impressos como foram escritos.
+  await q("ALTER TABLE weekly_reports ADD COLUMN IF NOT EXISTS works jsonb NOT NULL DEFAULT '{}'::jsonb")
+
+  // ----- revisao e diligencia -----
+  // ADD VALUE num enum do Postgres e de mao unica: valor de enum NAO pode ser
+  // removido depois. Por isso os dois entram com o nome definitivo e na ordem
+  // do fluxo — a ordem declarada aqui e a que qualquer ORDER BY status usa.
+  await q("ALTER TYPE task_status ADD VALUE IF NOT EXISTS 'review' AFTER 'progress'")
+  await q("ALTER TYPE task_status ADD VALUE IF NOT EXISTS 'diligence' AFTER 'review'")
+
+  // O item do checklist deixa de ser so marcado/desmarcado. `done` continua
+  // existindo e em dia (done = state 'done') porque quem le progresso, o
+  // indicador dos cartoes e os relatorios olham esse campo — nenhum deles
+  // precisa aprender os estados novos para continuar certo.
+  await q("ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS state text NOT NULL DEFAULT 'todo'")
+
+  // ----- terceirizado -----
+  // Quem e terceirizado nao entra no sistema: nao tem senha, e o e-mail, quando
+  // existe, e contato e nao credencial. Por isso as duas colunas deixam de ser
+  // obrigatorias. Guardamos NULL e nunca string vazia: a checagem de e-mail
+  // repetido compara lower(email), e dois '' colidiriam entre si.
+  await q('ALTER TABLE users ALTER COLUMN email DROP NOT NULL')
+
+  // ----- prazo deixa de ser obrigatorio -----
+  // Projeto e etapa passam a poder nascer sem prazo: o cadastro aceita o que a
+  // pessoa tem na mao e cobra o resto pelo aviso de pendencia. As colunas eram
+  // NOT NULL enquanto o formulario ja deixava salvar em branco — a gravacao
+  // morria no banco, com 500 na cara de quem tentava.
+  await q('ALTER TABLE projects ALTER COLUMN start_date DROP NOT NULL')
+  await q('ALTER TABLE projects ALTER COLUMN end_date DROP NOT NULL')
+  await q('ALTER TABLE tasks ALTER COLUMN start_date DROP NOT NULL')
+  await q('ALTER TABLE tasks ALTER COLUMN end_date DROP NOT NULL')
+  await q('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL')
+
+  // ----- setor passa a ser so a AREA -----
+  // Setor é ÁREA, e a empresa tem três: Engenharia, Arquitetura e TI. A coluna
+  // acumulou gerações de valor — cargos que eram setor (Orçamento, Coordenação,
+  // Direção, Estágio), a lista em slug do início do app ('engenharia',
+  // 'tecnologia-informacao') e a segunda lista em slug que chegou junto com a
+  // formação ('projetos-prediais', 'projetos-eletricos').
+  //
+  // Qualquer valor fora das três atuais é setor inválido: o campo abre vazio no
+  // cadastro e o conselho some — a mesma falha que os usuários apontaram.
+  //
+  // Estágio depende do cargo: o estagiário fica na área em que trabalha, e
+  // "Estagiário" é o cargo dele. A busca por TI é por palavra inteira porque
+  // '%TI%' casa com "OrçamenTIsta", que é engenharia.
+  const estagios = await q(`
+    UPDATE users SET sector = CASE
+      WHEN job_title ILIKE '%arquitet%' THEN 'Arquitetura'
+      WHEN job_title ~* '(^|[^a-zà-ú])ti([^a-zà-ú]|$)' THEN 'TI'
+      ELSE 'Engenharia' END
+    WHERE lower(sector) IN ('estagio', 'estágio')
+    RETURNING id`)
+
+  // O resto sai por equivalência. A comparação é em minúsculas e aceita as duas
+  // grafias de cada nome, com e sem acento, porque a coluna tem as duas.
+  //
+  // Vem DEPOIS do estágio de propósito: a tabela também traduz "Estágio", para
+  // dar conta dos destinatários de mudança (que não têm cargo para consultar),
+  // e se rodasse primeiro atropelaria a regra por cargo acima.
+  const setoresAntigos = await q(`
+    UPDATE users u SET sector = m.novo
+      FROM (VALUES
+      ('engenharia',               'Engenharia'),
+      ('orcamento',                'Engenharia'),
+      ('orçamento',                'Engenharia'),
+      ('coordenacao',              'Engenharia'),
+      ('coordenação',              'Engenharia'),
+      ('coordenacão',              'Engenharia'),
+      ('direcao',                  'Engenharia'),
+      ('direção',                  'Engenharia'),
+      ('direcão',                  'Engenharia'),
+      ('estagio',                  'Engenharia'),
+      ('estágio',                  'Engenharia'),
+      ('projetos-prediais',        'Engenharia'),
+      ('projetos prediais',        'Engenharia'),
+      ('projetos-eletricos',       'Engenharia'),
+      ('projetos elétricos',       'Engenharia'),
+      ('arquitetura',              'Arquitetura'),
+      ('ti',                       'TI'),
+      ('tecnologia-informacao',    'TI'),
+      ('tecnologia da informação', 'TI')
+      ) AS m(antigo, novo)
+     WHERE lower(u.sector) = m.antigo AND u.sector IS DISTINCT FROM m.novo
+    RETURNING u.id`)
+
+  if (setoresAntigos.length || estagios.length) {
+    console.log(`[promav] setor normalizado para area em ${setoresAntigos.length + estagios.length} cadastro(s)`)
+  }
+
+  // As mudanças endereçadas a um setor antigo deixariam de encontrar alguém — o
+  // destinatário fica gravado pelo nome do setor, não por id de tabela.
+  await q(`
+    UPDATE changes c SET target_sectors = novo.lista
+      FROM (
+        SELECT ch.id, jsonb_agg(DISTINCT COALESCE(m.novo, s)) AS lista
+          FROM changes ch, jsonb_array_elements_text(COALESCE(ch.target_sectors, '[]'::jsonb)) s
+          LEFT JOIN (VALUES
+      ('engenharia',               'Engenharia'),
+      ('orcamento',                'Engenharia'),
+      ('orçamento',                'Engenharia'),
+      ('coordenacao',              'Engenharia'),
+      ('coordenação',              'Engenharia'),
+      ('coordenacão',              'Engenharia'),
+      ('direcao',                  'Engenharia'),
+      ('direção',                  'Engenharia'),
+      ('direcão',                  'Engenharia'),
+      ('estagio',                  'Engenharia'),
+      ('estágio',                  'Engenharia'),
+      ('projetos-prediais',        'Engenharia'),
+      ('projetos prediais',        'Engenharia'),
+      ('projetos-eletricos',       'Engenharia'),
+      ('projetos elétricos',       'Engenharia'),
+      ('arquitetura',              'Arquitetura'),
+      ('ti',                       'TI'),
+      ('tecnologia-informacao',    'TI'),
+      ('tecnologia da informação', 'TI')
+          ) AS m(antigo, novo) ON lower(s) = m.antigo
+         GROUP BY ch.id
+      ) novo
+     WHERE c.id = novo.id AND c.target_sectors IS DISTINCT FROM novo.lista`)
+  await q("UPDATE checklist_items SET state = 'done' WHERE done AND state = 'todo'")
 
   // Equipe de desenvolvimento do app: contas que mantêm o sistema, não gente
   // que toca obra. Ficam fora da equipe dos projetos (e da responsabilidade),

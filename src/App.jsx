@@ -1,7 +1,7 @@
 import React from 'react'
 import { Sidebar, TopBar } from './components/Chrome/Chrome.jsx'
 import { Toast } from './components/primitives/primitives.jsx'
-import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal, KmzModal, PeopleModal } from './components/Modals/Modals.jsx'
+import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal,KmzModal, PeopleModal, PersonCard, StageItemModal, StageActivitiesModal } from './components/Modals/Modals.jsx'
 import { Hub } from './screens/Hub/Hub.jsx'
 import { ProjectList, ProjectDetail } from './screens/Projects/Projects.jsx'
 import { Kanban } from './screens/Kanban/Kanban.jsx'
@@ -9,14 +9,20 @@ import { TaskListView } from './screens/List/List.jsx'
 import { Gantt } from './screens/Gantt/Gantt.jsx'
 import { Reports } from './screens/Reports/Reports.jsx'
 import { TeamReport } from './screens/TeamReport/TeamReport.jsx'
-import { People } from './screens/People/People.jsx'
+import { MyWeeklyReport, AdminWeeklyReports } from './screens/WeeklyReport/WeeklyReport.jsx'
 import { Login } from './screens/Login/Login.jsx'
 import { api } from './data/api.js'
-import { effectiveProjectRole, canEditProject, NOTIF_KIND_MAP } from './data/store.js'
+import { effectiveProjectRole, canEditProject, NOTIF_KIND_MAP, etapasDoProjeto } from './data/store.js'
 import { tocarAviso, destravarSom, avisarNoNavegador, pedirPermissao, permissaoNotificacao, suportaNotificacao } from './data/avisos.js'
 // Promav app — root: dados vêm do backend (Express + Neon) via src/data/api.js.
 
-const TITLES = { hub: 'Visão geral', projects: 'Projetos', list: 'Lista', kanban: 'Kanban', gantt: 'Gantt', people: 'Profissionais', reports: 'Relatórios', team: 'Equipe' }
+// Profissionais carrega sob demanda: o AG Grid que ela usa responde por ~1,2 MB
+// do bundle, e a tela é só de administrador. Sem isto, todo mundo baixa a
+// biblioteca no primeiro acesso mesmo sem nunca abrir a tela.
+// O módulo tem export nomeado, daí o mapeamento para default que o lazy exige.
+const People = React.lazy(() => import('./screens/People/People.jsx').then(m => ({ default: m.People })))
+
+const TITLES ={ hub: 'Visão geral', projects: 'Projetos', list: 'Lista', kanban: 'Kanban', gantt: 'Gantt', people: 'Profissionais', reports: 'Relatórios', team: 'Equipe', myreport: 'Meu relatório', weeklyreports: 'Relatórios individuais' }
 
 // "Meu setor" (a pessoa escolhendo o próprio setor no menu da conta) está
 // pausado: entra numa próxima leva, junto do resto da gestão de setores.
@@ -44,6 +50,12 @@ export default function App() {
   const [changes, setChanges] = React.useState([])
   const [route, setRoute] = React.useState({ view: 'hub' })
   const [projectSearch, setProjectSearch] = React.useState('')
+  // Em que pé está o relatório desta semana: 'nenhum', 'rascunho' ou 'enviado'.
+  // Vem do bootstrap, então acompanha sozinho quando a pessoa salva ou envia.
+  const [relatorioSemana, setRelatorioSemana] = React.useState('enviado')
+  // Pasta aberta na lista de projetos. Fica aqui, e não dentro do ProjectList,
+  // porque aquela tela desmonta ao abrir um projeto.
+  const [pastaAberta, setPastaAberta] = React.useState(null)
   const [filterProject, setFilterProject] = React.useState(null)
   const [mine, setMine] = React.useState(false)
   const [modal, setModal] = React.useState(null)
@@ -57,9 +69,28 @@ export default function App() {
 
   const currentUserId = authUser?.id || null
 
-  React.useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t) }, [])
+  // O relógio só precisa correr de segundo em segundo quando há cronômetro
+  // rodando — é a única coisa que muda a cada segundo. Sem essa guarda, o
+  // `now` no topo da árvore re-renderizava o app inteiro 86.400 vezes por dia
+  // para exibir um número parado. Parado, um tique a cada 30s basta: serve só
+  // para a virada do dia no total de hoje.
+  const cronometroAtivo = sessions.some(s => !s.end)
+  React.useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), cronometroAtivo ? 1000 : 30000)
+    return () => clearInterval(t)
+  }, [cronometroAtivo])
 
-  const flash = (msg) => { setToast(msg); clearTimeout(flash._t); flash._t = setTimeout(() => setToast(null), 2400) }
+  // Sucesso some sozinho; erro fica até a pessoa fechar. São 27 das 60
+  // mensagens do app, e 2,4 segundos não bastam para ler uma falha e ainda
+  // decidir o que fazer com ela — ainda mais quando chegava com a mesma cara
+  // de confirmação. Quem escreve a mensagem não precisa lembrar do tipo: é o
+  // falhou() que se usa no catch.
+  const flash = (msg, tipo = 'ok') => {
+    clearTimeout(flash._t)
+    setToast({ msg, tipo })
+    if (tipo !== 'erro') flash._t = setTimeout(() => setToast(null), 2400)
+  }
+  const falhou = (msg) => flash(msg, 'erro')
 
   // Busca todos os dados do backend (após autenticar).
   const loadData = React.useCallback(async () => {
@@ -68,6 +99,7 @@ export default function App() {
       const data = await api.bootstrap()
       setUsers(data.users); setProjects(data.projects); setTasks(data.tasks); setSessions(data.sessions); setFolders(data.folders || [])
       setChanges(data.changes || [])
+      setRelatorioSemana(data.relatorioSemana || 'nenhum')
       setDataReady(true)
     } catch (err) { setLoadError(err.message) }
   }, [])
@@ -151,11 +183,11 @@ export default function App() {
       setSessions(await api.startTimer(currentUserId, taskId))
       const t = tasks.find(x => x.id === taskId)
       flash(`Cronômetro iniciado${t ? ': ' + t.title : ''}.`)
-    } catch (e) { flash('Erro ao iniciar cronômetro.') }
+    } catch (e) { falhou('Erro ao iniciar cronômetro.') }
   }
   const stopTimer = async () => {
     try { setSessions(await api.stopTimer(currentUserId)); flash('Cronômetro parado.') }
-    catch (e) { flash('Erro ao parar cronômetro.') }
+    catch (e) { falhou('Erro ao parar cronômetro.') }
   }
 
   const navigate = (r) => {
@@ -177,7 +209,7 @@ export default function App() {
       setAuthUser(u => u ? { ...u, sector } : u)
       setUsers(us => us.map(u => u.id === currentUserId ? { ...u, sector } : u))
       setModal(null); flash('Setor atualizado.')
-    } catch (e) { flash(e.message || 'Erro ao salvar o setor.') }
+    } catch (e) { falhou(e.message || 'Erro ao salvar o setor.') }
   }
 
   // Setor da pessoa — define quem é cobrado quando a mudança vai para um setor.
@@ -186,7 +218,7 @@ export default function App() {
       await api.setUserSector(user.id, sector)
       setUsers(us => us.map(u => u.id === user.id ? { ...u, sector } : u))
       flash('Setor atualizado.')
-    } catch (e) { flash(e.message || 'Erro ao definir o setor.') }
+    } catch (e) { falhou(e.message || 'Erro ao definir o setor.') }
   }
 
   // ----- mudanças do projeto (orientações) -----
@@ -203,7 +235,7 @@ export default function App() {
       if (!data.id) await loadData() // traz a atividade recém-criada
       setModal(null)
       flash(data.id ? 'Mudança atualizada — a equipe precisa confirmar de novo.' : 'Mudança publicada e equipe avisada.')
-    } catch (e) { flash(e.message || 'Erro ao salvar a mudança.') }
+    } catch (e) { falhou(e.message || 'Erro ao salvar a mudança.') }
   }
 
   // Aceitar cria a atividade; por isso recarrega tudo depois de aceitar.
@@ -218,7 +250,7 @@ export default function App() {
       setChanges(cs => cs.map(c => c.id === saved.id ? saved : c))
       if (accept) await loadData()
       flash(accept ? 'Sugestão aceita — atividade criada no quadro.' : 'Sugestão recusada.')
-    } catch (e) { flash(e.message || 'Erro ao decidir a sugestão.') }
+    } catch (e) { falhou(e.message || 'Erro ao decidir a sugestão.') }
   }
 
   const ackChange = async (change) => {
@@ -226,13 +258,17 @@ export default function App() {
       const saved = await api.ackChange(change.id)
       setChanges(cs => cs.map(c => c.id === saved.id ? saved : c))
       flash('Ciência confirmada.')
-    } catch (e) { flash(e.message || 'Erro ao confirmar.') }
+    } catch (e) { falhou(e.message || 'Erro ao confirmar.') }
   }
 
   // ----- projects -----
   const openNewProject = (folderId) => setModal({ type: 'project', defaultFolderId: typeof folderId === 'string' ? folderId : null })
-  const openNewPerson = () => setModal({ type: 'person' })
-  const openEditPerson = (user) => setModal({ type: 'person', user })
+  // Ver e editar são coisas diferentes: clicar numa pessoa abre a ficha, e
+  // editar é um botão dentro dela. Antes o clique caía direto no formulário,
+  // e quem só queria um telefone corria o risco de salvar sem querer.
+  const openNewPerson = () => setModal({ type: 'personEdit' })
+  const openPerson = (user) => setModal({ type: 'person', user })
+  const openEditPerson = (user) => setModal({ type: 'personEdit', user })
   const openProjectFromPerson = (projectId) => { setModal(null); setRoute({ view: 'projects', projectId }) }
   // `tab` escolhe a aba com que o modal abre: a Ficha técnica manda para
   // 'tipo' quando a pessoa quer lançar a execução dos trechos do mapa.
@@ -243,7 +279,7 @@ export default function App() {
     try {
       const saved = await api.updateProject(project.id, { ...project, name: name.trim() })
       setProjects(ps => ps.map(p => p.id === saved.id ? saved : p)); flash('Projeto renomeado.')
-    } catch (e) { flash(e.message || 'Erro ao renomear projeto.') }
+    } catch (e) { falhou(e.message || 'Erro ao renomear projeto.') }
   }
   const saveProject = async (data) => {
     // O .kmz escolhido no modal não vai no corpo JSON do projeto: é um arquivo,
@@ -270,19 +306,24 @@ export default function App() {
       const payload = {
         name: data.name.trim(),
         email: data.email.trim(),
+        phone: data.phone?.trim() || null,
+        shortName: data.shortName?.trim() || null,
         sector: data.sector || null,
         jobTitle: data.jobTitle?.trim() || null,
+        formation: data.formation || null,
+        professionalRegister: data.professionalRegister?.trim() || null,
         initials: data.initials || '',
         color: data.color || 'var(--proj-blue)',
         isAdmin: !!data.isAdmin,
         isActive: data.isActive !== false,
+        isOutsourced: !!data.isOutsourced,
         initialPassword: data.initialPassword || undefined,
       }
       const saved = data.id ? await api.updateUser(data.id, payload) : await api.createUser(payload)
       setUsers(us => data.id ? us.map(u => u.id === saved.id ? saved : u) : [saved, ...us])
       setModal(null)
       flash(data.id ? 'Profissional atualizado.' : 'Profissional criado.')
-    } catch (e) { flash(e.message || 'Erro ao salvar profissional.') }
+    } catch (e) { falhou(e.message || 'Erro ao salvar profissional.') }
   }
   const askDeletePerson = (user) => setModal({
     type: 'confirm', title: 'Excluir profissional?',
@@ -292,7 +333,7 @@ export default function App() {
         await api.deleteUser(user.id)
         setUsers(us => us.filter(u => u.id !== user.id))
         setModal(null); flash('Profissional excluído.')
-      } catch (e) { flash(e.message || 'Erro ao excluir profissional.') }
+      } catch (e) { falhou(e.message || 'Erro ao excluir profissional.') }
     },
   })
   const askDeleteProject = (project) => setModal({
@@ -304,7 +345,7 @@ export default function App() {
         setProjects(ps => ps.filter(p => p.id !== project.id))
         setTasks(ts => ts.filter(t => t.projectId !== project.id))
         setModal(null); setRoute({ view: 'projects' }); flash('Projeto excluído.')
-      } catch (e) { flash('Erro ao excluir projeto.') }
+      } catch (e) { falhou('Erro ao excluir projeto.') }
     },
   })
 
@@ -321,14 +362,14 @@ export default function App() {
         : await api.addResource(project.id, payload)
       setProjects(ps => ps.map(p => p.id === saved.id ? saved : p))
       setModal(null); flash('Material adicionado.')
-    } catch (e) { flash(e.message || 'Erro ao adicionar material.') }
+    } catch (e) { falhou(e.message || 'Erro ao adicionar material.') }
   }
 
   // Copia o link de um recurso (documento/link) para a área de transferência.
   const copyResourceLink = async (resource) => {
     const url = resource.fileId ? api.fileUrl(resource.fileId) : resource.url
     try { await navigator.clipboard.writeText(url); flash('Link copiado.') }
-    catch (e) { flash('Não foi possível copiar o link.') }
+    catch (e) { falhou('Não foi possível copiar o link.') }
   }
   // Remove um documento/link do projeto (endpoint dedicado; exige Edição total).
   const askDeleteResource = (project, resource) => setModal({
@@ -339,7 +380,7 @@ export default function App() {
         const saved = await api.deleteResource(project.id, resource.id)
         setProjects(ps => ps.map(p => p.id === saved.id ? saved : p))
         setModal(null); flash('Item removido.')
-      } catch (e) { flash(e.message || 'Erro ao remover item.') }
+      } catch (e) { falhou(e.message || 'Erro ao remover item.') }
     },
   })
 
@@ -351,7 +392,7 @@ export default function App() {
     try {
       const saved = await api.createFolder(name.trim(), parent)
       setFolders(fs => [...fs, saved]); flash(parent ? 'Subpasta criada.' : 'Pasta criada.')
-    } catch (e) { flash(e.message || 'Erro ao criar pasta.') }
+    } catch (e) { falhou(e.message || 'Erro ao criar pasta.') }
   }
   const renameFolder = async (folder) => {
     const name = window.prompt('Novo nome da pasta:', folder.name)
@@ -359,7 +400,7 @@ export default function App() {
     try {
       const saved = await api.renameFolder(folder.id, name.trim())
       setFolders(fs => fs.map(f => f.id === saved.id ? saved : f)); flash('Pasta renomeada.')
-    } catch (e) { flash(e.message || 'Erro ao renomear pasta.') }
+    } catch (e) { falhou(e.message || 'Erro ao renomear pasta.') }
   }
   const askDeleteFolder = (folder) => setModal({
     type: 'confirm', title: 'Excluir pasta?',
@@ -382,7 +423,7 @@ export default function App() {
           return fs.filter(f => !removed.has(f.id))
         })
         setModal(null); flash('Pasta excluída.')
-      } catch (e) { flash(e.message || 'Erro ao excluir pasta.') }
+      } catch (e) { falhou(e.message || 'Erro ao excluir pasta.') }
     },
   })
 
@@ -400,7 +441,7 @@ export default function App() {
       return pos < 0 ? f : { ...f, parentId: parent, position: pos }
     }))
     try { await api.reorderFolders(parent, order) }
-    catch (e) { flash(e.message || 'Erro ao mover pasta.'); loadData() }
+    catch (e) { falhou(e.message || 'Erro ao mover pasta.'); loadData() }
   }
   const moveProject = async (draggedId, newFolderId, beforeId) => {
     const folder = newFolderId || null
@@ -414,11 +455,20 @@ export default function App() {
       return pos < 0 ? p : { ...p, folderId: folder, position: pos }
     }))
     try { await api.reorderProjects(folder, order) }
-    catch (e) { flash(e.message || 'Erro ao mover projeto.'); loadData() }
+    catch (e) { falhou(e.message || 'Erro ao mover projeto.'); loadData() }
   }
 
   // ----- tasks -----
   const openNewTask = (projectId, status) => setModal({ type: 'task', defaultProjectId: projectId, defaultStatus: status })
+  // Pela aba Etapas, o padrão é criar uma etapa do template; a caixa no topo do
+  // modal é que troca para avulsa. Nas outras telas segue avulsa, que é o que
+  // elas sempre criaram.
+  const openNewStage = (projectId) => setModal({ type: 'task', defaultProjectId: projectId, comoEtapa: true })
+
+  // Pelo cronômetro abre só a lista de atividades. Guarda o id, não a etapa:
+  // mudar o estado de uma atividade reescreve a etapa em `tasks`, e uma cópia
+  // presa aqui mostraria o estado antigo até fechar e abrir de novo.
+  const openStageActivities = (task) => setModal({ type: 'atividades', taskId: task.id })
   // Abrir a atividade conta como acesso: é o que adia a notificação daquilo
   // que a própria pessoa criou para si. Falha aqui não pode travar o modal —
   // o registro de leitura é secundário em relação a ver a atividade.
@@ -438,8 +488,50 @@ export default function App() {
         setTasks(ts => [...ts, saved]); flash('Atividade criada.')
       }
       setModal(null)
-    } catch (e) { flash('Erro ao salvar atividade.') }
+    } catch (e) { falhou('Erro ao salvar atividade.') }
   }
+  // Excluir etapa — uma pela lixeira da linha, ou várias pela seleção em massa.
+  //
+  // A pergunta muda conforme haja atividades dentro. Avisar que "as atividades
+  // também serão excluídas" numa etapa vazia assusta à toa; e não avisar numa
+  // cheia esconde o que o clique realmente faz.
+  const askDeleteStages = (etapas, aoConcluir) => {
+    const alvos = etapas.flatMap(e => e.tasks)
+    const ids = alvos.map(t => t.id)
+    const nAtividades = alvos.reduce((n, t) => n + (t.checklist || []).length, 0)
+    const uma = etapas.length === 1
+    const alvo = uma ? `a etapa "${etapas[0].n} · ${etapas[0].nome}"` : `estas ${etapas.length} etapas`
+    setModal({
+      type: 'confirm',
+      title: uma ? 'Excluir etapa?' : `Excluir ${etapas.length} etapas?`,
+      message: nAtividades
+        ? `Você quer excluir ${alvo} e suas ${nAtividades} atividade${nAtividades === 1 ? '' : 's'}?`
+        : `Você quer excluir ${alvo}?`,
+      onConfirm: async () => {
+        try {
+          await api.bulkDeleteTasks(ids)
+          setTasks(ts => ts.filter(t => !ids.includes(t.id)))
+          setModal(null)
+          aoConcluir?.()
+          flash(uma ? 'Etapa excluída.' : `${etapas.length} etapas excluídas.`)
+        } catch (e) { falhou(e.message || 'Erro ao excluir a etapa.') }
+      },
+    })
+  }
+
+  // Excluir UMA atividade de dentro da etapa, pela lixeira da linha.
+  const askDeleteChecklistItem = (task, item) => setModal({
+    type: 'confirm', title: 'Excluir atividade?',
+    message: `Você quer excluir "${item.text}" desta etapa?`,
+    onConfirm: async () => {
+      try {
+        const saved = await api.deleteChecklistItem(task.id, item.id)
+        setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
+        setModal(null); flash('Atividade excluída.')
+      } catch (e) { falhou(e.message || 'Erro ao excluir a atividade.') }
+    },
+  })
+
   const askDeleteTask = (task) => setModal({
     type: 'confirm', title: 'Excluir atividade?',
     message: `"${task.title}" será removida permanentemente.`,
@@ -447,7 +539,7 @@ export default function App() {
       try {
         await api.deleteTask(task.id)
         setTasks(ts => ts.filter(t => t.id !== task.id)); setModal(null); flash('Atividade excluída.')
-      } catch (e) { flash('Erro ao excluir atividade.') }
+      } catch (e) { falhou('Erro ao excluir atividade.') }
     },
   })
   const moveTask = async (id, status) => {
@@ -458,7 +550,7 @@ export default function App() {
       const saved = await api.moveTask(id, status)
       setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
       flash(`Atividade movida para ${labels[status]}.`)
-    } catch (e) { setTasks(prev); flash('Erro ao mover atividade.') }
+    } catch (e) { setTasks(prev); falhou('Erro ao mover atividade.') }
   }
   // Entrar/sair de uma atividade (só a própria participação). Disponível para 'Só exibição'.
   const toggleMyMembership = async (task, join) => {
@@ -469,16 +561,92 @@ export default function App() {
       const saved = await api.toggleMembership(task.id, join)
       setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
       flash(join ? 'Você entrou na atividade.' : 'Você saiu da atividade.')
-    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); flash(e.message || 'Erro ao atualizar participação.') }
+    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao atualizar participação.') }
   }
   // Marca/desmarca um item de checklist (otimista). Disponível também para 'Só exibição'.
   const toggleChecklistItem = async (task, itemId) => {
-    const next = (task.checklist || []).map(i => i.id === itemId ? { ...i, done: !i.done } : i)
+    const atual = (task.checklist || []).find(i => i.id === itemId)
+    const feito = !(atual?.state ? atual.state === 'done' : atual?.done)
+    const next = (task.checklist || []).map(i => i.id === itemId
+      ? { ...i, done: feito, state: feito ? 'done' : 'todo' } : i)
     setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
     try {
-      const saved = await api.toggleChecklist(task.id, next)
+      const saved = await api.patchChecklistItem(task.id, { id: itemId, done: feito })
       setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
-    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); flash(e.message || 'Erro ao atualizar checklist.') }
+    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao atualizar checklist.') }
+  }
+
+  // Move o item entre pendente / em revisão / em diligência / concluído.
+  // Liberado para 'Só exibição' pelo mesmo motivo do marcar: quem faz o
+  // serviço registra em que pé ele está. O status da ETAPA volta já
+  // recalculado pelo servidor — é ele que espelha o pior estado dos itens.
+  const setChecklistState = async (task, itemId, state) => {
+    const next = (task.checklist || []).map(i => i.id === itemId
+      ? { ...i, state, done: state === 'done' } : i)
+    setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
+    try {
+      const saved = await api.patchChecklistItem(task.id, { id: itemId, state })
+      setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
+    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao mudar o estado do item.') }
+  }
+
+  // Corrige o texto de um item no lugar. Antes era apagar e recriar, o que
+  // jogava fora o dono do item, a posição dele na lista e o que já estava
+  // marcado — um erro de digitação custava os três.
+  const editChecklistItem = async (task, itemId, text) => {
+    const limpo = String(text || '').trim()
+    const atual = (task.checklist || []).find(i => i.id === itemId)
+    if (!limpo || !atual || limpo === atual.text) return
+    const next = (task.checklist || []).map(i => i.id === itemId ? { ...i, text: limpo } : i)
+    setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
+    try {
+      const saved = await api.patchChecklistItem(task.id, { id: itemId, text: limpo })
+      setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
+    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao editar o item.') }
+  }
+
+  // "Nova atividade" na aba Etapas: escolhe a etapa e o trabalho entra como
+  // item do checklist dela, em vez de nascer como atividade solta em "Outras".
+  const openStageItem = (projectId, stageTaskId = null) =>
+    setModal({ type: 'stageItem', projectId, stageTaskId })
+
+  // Várias atividades de uma vez, numa ida só ao servidor — a tela deixa
+  // escrever uma lista, e um pedido por linha repetiria o custo de rede que o
+  // "criar template" já teve.
+  const addStageItems = async (taskId, items) => {
+    try {
+      const saved = await api.addChecklistItems(taskId, items)
+      setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
+      setModal(null)
+      flash(items.length === 1 ? 'Atividade adicionada à etapa.' : `${items.length} atividades adicionadas à etapa.`)
+    } catch (e) { falhou(e.message || 'Erro ao adicionar as atividades.') }
+  }
+
+  // Cria de uma vez as etapas do processo que faltam no projeto. É idempotente
+  // no servidor — clicar duas vezes não duplica.
+  //
+  // A rota devolve as etapas já montadas, então elas entram direto no estado.
+  // Antes vinha só a contagem e era preciso um loadData() atrás, ou seja, o
+  // bootstrap inteiro de novo — a parte mais demorada do clique, e a única que
+  // crescia junto com o resto do banco.
+  const createStages = async (projectId) => {
+    try {
+      const r = await api.createStages(projectId)
+      if (r.tasks?.length) setTasks(ts => [...ts, ...r.tasks])
+      else await loadData() // nada novo: releitura barata que reconcilia o estado
+      flash(r.criadas ? `${r.criadas} etapa${r.criadas === 1 ? '' : 's'} criada${r.criadas === 1 ? '' : 's'}.` : 'O projeto já tem todas as etapas.')
+    } catch (e) { falhou(e.message || 'Erro ao criar as etapas.') }
+  }
+
+  // Liga um item do checklist a alguém da atividade (ou a ninguém, com null).
+  // Usa a mesma rota do marcar: o servidor só toca no campo que veio no corpo.
+  const assignChecklistItem = async (task, itemId, userId) => {
+    const next = (task.checklist || []).map(i => i.id === itemId ? { ...i, assigneeId: userId } : i)
+    setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
+    try {
+      const saved = await api.patchChecklistItem(task.id, { id: itemId, assigneeId: userId })
+      setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
+    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao atribuir o item.') }
   }
 
   const [readNewsIds, setReadNewsIds] = React.useState([])
@@ -661,7 +829,7 @@ export default function App() {
           text: `${project.name} • ${task.status === 'done' ? 'concluída' : task.status === 'progress' ? 'em andamento' : 'a fazer'}`,
           time: 'Hoje',
           priority: 4,
-          target: { view: 'projects', projectId: project.id, tab: 'atividades', focusId: `task-${task.id}` },
+          target: { view: 'projects', projectId: project.id, tab: 'etapas', focusId: `task-${task.id}` },
         })
       }
 
@@ -764,13 +932,13 @@ export default function App() {
   // ignora o pedido.
   const alternarNavegador = async () => {
     if (avisos.navegador) { setAvisos(a => ({ ...a, navegador: false })); return }
-    if (!suportaNotificacao()) { flash('Este navegador não suporta notificações do sistema.'); return }
+    if (!suportaNotificacao()) { falhou('Este navegador não suporta notificações do sistema.'); return }
     const permissao = await pedirPermissao()
     if (permissao === 'granted') {
       setAvisos(a => ({ ...a, navegador: true }))
       flash('Avisos do navegador ativados.')
     } else if (permissao === 'denied') {
-      flash('Permissão negada. Libere as notificações nas configurações do navegador.')
+      falhou('Permissão negada. Libere as notificações nas configurações do navegador.')
     }
   }
   const markAllNewsAsRead = () => setReadNewsIds(prev => Array.from(new Set([...prev, ...visibleNotifications.map(item => item.id)])))
@@ -805,7 +973,10 @@ export default function App() {
   }
 
   const isAdmin = !!authUser?.isAdmin
-  const effectiveRoute = route.view === 'people' && !isAdmin ? { view: 'hub' } : route
+  // Telas de admin acessadas por quem não é admin caem na visão geral. A rota
+  // pode chegar por link antigo ou por quem perdeu o papel desde que entrou.
+  const soAdmin = route.view === 'people' || route.view === 'weeklyreports'
+  const effectiveRoute = soAdmin && !isAdmin ? { view: 'hub' } : route
   const currentProject = effectiveRoute.projectId ? projects.find(p => p.id === effectiveRoute.projectId) : null
   const normalizedSearch = projectSearch.trim().toLocaleLowerCase('pt-BR')
   const searchedProjects = normalizedSearch
@@ -818,20 +989,30 @@ export default function App() {
 
   let screen
   if (effectiveRoute.view === 'hub') {
-    screen = <Hub projects={projects} recentProjects={searchedProjects} tasks={tasks} onNavigate={navigate} sessions={sessions} currentUserId={currentUserId} now={now} />
+    screen = <Hub projects={projects} recentProjects={searchedProjects} tasks={tasks} changes={changes}
+      onNavigate={navigate} sessions={sessions} currentUserId={currentUserId} authUser={authUser}
+      relatorioSemana={relatorioSemana} now={now} />
   } else if (effectiveRoute.view === 'projects' && currentProject) {
     screen = <ProjectDetail project={currentProject} tasks={tasks} users={users} changes={changes}
       sessions={sessions} currentUserId={currentUserId} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
       canEdit={canEditCurrent} role={currentRole}
       initialTab={route.tab} focusId={route.focusId} focusNonce={route.focusNonce}
-      onBack={() => setRoute({ view: 'projects' })} onEdit={openEditProject}
+      // Voltar leva à pasta DO PROJETO, não à última que estava aberta nem à
+      // raiz: quem chegou aqui pela barra lateral ou pela busca nunca navegou
+      // por pasta nenhuma, e ainda assim é ali que ele quer continuar.
+      onBack={() => { setPastaAberta(currentProject.folderId || null); setRoute({ view: 'projects' }) }}
+      onEdit={openEditProject}
       onNewTask={openNewTask} onEditTask={openEditTask} onDeleteTask={askDeleteTask}
-      onToggleChecklist={toggleChecklistItem}
+      onAssignChecklist={assignChecklistItem} onMoveTask={moveTask}
+      onSetChecklistState={setChecklistState} onEditChecklistItem={editChecklistItem}
+      onExcluirChecklistItem={askDeleteChecklistItem} onDeleteStages={askDeleteStages} onNewStage={openNewStage}
+      onNewStageItem={openStageItem} onCreateStages={createStages}
       onCopyResource={copyResourceLink} onDeleteResource={(resource) => askDeleteResource(currentProject, resource)}
       onAddResource={openAddResource}
       onNewChange={openNewChange} onEditChange={openEditChange} onAckChange={ackChange} onDecideChange={decideChange} />
   } else if (effectiveRoute.view === 'projects') {
     screen = <ProjectList projects={searchedProjects} tasks={tasks} folders={folders} authUser={authUser} canCreate={isAdmin}
+      openId={pastaAberta} onOpenFolder={setPastaAberta}
       onOpen={(id) => setRoute({ view: 'projects', projectId: id })}
       onEdit={openEditProject} onDelete={askDeleteProject} onNew={openNewProject} onMoveProject={moveProject} onMoveFolder={moveFolder} onNewSubfolder={createFolder} onDeleteFolder={askDeleteFolder} />
   } else if (effectiveRoute.view === 'list') {
@@ -847,11 +1028,15 @@ export default function App() {
     screen = <Gantt tasks={tasks} projects={projects} filterProject={filterProject} onFilterProject={setFilterProject} />
   } else if (effectiveRoute.view === 'people' && isAdmin) {
     screen = <People users={users} projects={projects} tasks={tasks} currentUserId={currentUserId}
-      onNewPerson={openNewPerson} onEditPerson={openEditPerson} onDeletePerson={askDeletePerson} />
+      onNewPerson={openNewPerson} onOpenPerson={openPerson} onEditPerson={openEditPerson} onDeletePerson={askDeletePerson} />
   } else if (effectiveRoute.view === 'reports') {
     screen = <Reports projects={projects} tasks={tasks} users={users} />
   } else if (effectiveRoute.view === 'team') {
     screen = <TeamReport users={users} tasks={tasks} projects={projects} sessions={sessions} now={now} isAdmin={isAdmin} onSetSector={setUserSector} />
+  } else if (effectiveRoute.view === 'myreport') {
+    screen = <MyWeeklyReport authUser={authUser} projects={projects} onFlash={flash} onFail={falhou} />
+  } else if (effectiveRoute.view === 'weeklyreports' && isAdmin) {
+    screen = <AdminWeeklyReports users={users} projects={projects} onFail={falhou} />
   }
 
   return (
@@ -873,27 +1058,44 @@ export default function App() {
           onMySector={MY_SECTOR_ENABLED ? () => setModal({ type: 'mysector' }) : undefined}
           onLogout={handleLogout} onNewProject={openNewProject}
           tasks={tasks} projects={projects} sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
+          onOpenTask={openStageActivities}
           searchQuery={projectSearch} onSearchChange={setProjectSearch}
           notifications={visibleNotifications} unreadCount={unreadNotifications.length}
           readNewsIds={new Set(readNewsIds)} onMarkRead={markNewsAsRead} onMarkAllRead={markAllNewsAsRead}
           onOpenNotification={openNotification}
           onDismiss={askDismissNotification} onDismissAll={askDismissAllNotifications}
           avisos={avisos} onToggleSom={alternarSom} onToggleNavegador={alternarNavegador} />
-        <div className="content">{screen}</div>
+        {/* O Suspense cobre a tela carregada sob demanda (Profissionais). As
+            demais são síncronas e passam direto. */}
+        <div className="content">
+          <React.Suspense fallback={
+            <div className="page" style={{ display: 'grid', placeItems: 'center', minHeight: 240, color: 'var(--fg-3)' }}>Carregando…</div>
+          }>
+            {screen}
+          </React.Suspense>
+        </div>
       </div>
 
       {modal?.type === 'task' && (
-        <TaskModal task={modal.task} projects={projects} users={users} currentUserId={currentUserId}
-          defaultProjectId={modal.defaultProjectId} defaultStatus={modal.defaultStatus}
+        <TaskModal task={modal.task} projects={projects} tasks={tasks} users={users} currentUserId={currentUserId}
+          defaultProjectId={modal.defaultProjectId} defaultStatus={modal.defaultStatus} comoEtapa={modal.comoEtapa}
           canEdit={modal.task ? canEditProject(effectiveProjectRole(projects.find(p => p.id === modal.task.projectId), authUser)) : isAdmin}
           onToggleChecklist={toggleChecklistItem} onToggleMembership={toggleMyMembership}
           onSave={saveTask} onClose={() => setModal(null)} />
       )}
+      {modal?.type === 'atividades' && (() => {
+        const etapa = tasks.find(t => t.id === modal.taskId)
+        return etapa ? (
+          <StageActivitiesModal task={etapa} project={projects.find(p => p.id === etapa.projectId)}
+            users={users} onSetState={setChecklistState}
+            onAbrirEtapa={(t) => openEditTask(t)} onClose={() => setModal(null)} />
+        ) : null
+      })()}
       {modal?.type === 'mysector' && (
         <MySectorModal current={authUser?.sector} onSubmit={saveMySector} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'change' && (
-        <ChangeModal change={modal.change} projectId={modal.projectId} users={users}
+        <ChangeModal change={modal.change} projectId={modal.projectId} users={users} tasks={tasks}
           members={projects.find(p => p.id === modal.projectId)?.members || []}
           onSave={saveChange} onClose={() => setModal(null)} />
       )}
@@ -902,7 +1104,11 @@ export default function App() {
           initialTab={modal.tab} onSave={saveProject} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'person' && (
-        <PeopleModal user={modal.user} currentUserId={currentUserId} projects={projects} tasks={tasks} changes={changes}
+        <PersonCard user={modal.user} projects={projects} tasks={tasks}
+          onEdit={openEditPerson} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'personEdit' && (
+        <PeopleModal user={modal.user} currentUserId={currentUserId} users={users} projects={projects} tasks={tasks} changes={changes}
           onOpenProject={openProjectFromPerson} onSave={saveUser} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'resource' && modal.resType === 'doc' && (
@@ -917,13 +1123,22 @@ export default function App() {
       {modal?.type === 'resource' && modal.resType === 'kmz' && (
         <KmzModal onSave={saveResource} onClose={() => setModal(null)} />
       )}
+      {modal?.type === 'stageItem' && (
+        <StageItemModal
+          etapas={etapasDoProjeto(tasks, modal.projectId)}
+          users={users}
+          members={projects.find(p => p.id === modal.projectId)?.members || []}
+          defaultStageId={modal.stageTaskId}
+          onSave={addStageItems}
+          onClose={() => setModal(null)} />
+      )}
       {modal?.type === 'confirm' && (
         <ConfirmDialog title={modal.title} message={modal.message} onConfirm={modal.onConfirm} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'password' && (
         <ChangePasswordModal onSubmit={changePassword} onClose={() => setModal(null)} />
       )}
-      {toast && <Toast message={toast} />}
+      <Toast aviso={toast} onClose={() => setToast(null)} />
     </div>
   )
 }

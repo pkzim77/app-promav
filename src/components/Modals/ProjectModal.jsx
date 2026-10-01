@@ -1,7 +1,7 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
-import { Modal, Field, SegControl } from '../primitives/primitives.jsx'
-import { PROJECT_HEX, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, PROJECT_TYPES, TIPOS_COM_KMZ, PREFEITURAS, SECRETARIAS, canonizar, parseBRL, formatBytes } from '../../data/store.js'
+import { Modal, Field, SelecaoMultipla, PopupPendencias, SegControl } from '../primitives/primitives.jsx'
+import { PROJECT_HEX, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, PROJECT_TYPES, TIPOS_COM_KMZ, PREFEITURAS, SECRETARIAS, canonizar, parseBRL, pendenciasDoProjeto, formatBytes } from '../../data/store.js'
 import { dateError } from './shared/formHelpers.js'
 import { MoneyInput } from './shared/MoneyInput.jsx'
 import { FilePicker } from './ResourceModals.jsx'
@@ -22,20 +22,22 @@ const KmzSegmentsEditor = React.lazy(() =>
 // demais veem o papel como texto (o backend também ignora alterações de
 // permissão de não-admins) mas ainda podem marcar os responsáveis, porque
 // PUT /api/projects/:id aceita responsibleIds de quem tem Edição total.
-function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, onChangeResponsibles, isAdmin, error }) {
-  const [selectedUserId, setSelectedUserId] = React.useState('')
+function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, onChangeResponsibles, isAdmin }) {
   const roleOf = (userId) => members.find(x => x.userId === userId)?.role || 'none'
   const setRole = (userId, value) => {
     const others = members.filter(x => x.userId !== userId)
     onChangeMembers(value === 'none' ? others : [...others, { userId, role: value }])
   }
-  const addMember = () => {
-    if (!selectedUserId) return
+  // Marcar põe a pessoa na equipe; desmarcar tira, junto com a
+  // responsabilidade — o mesmo efeito do X da linha. Antes era um <select> e um
+  // botão "Adicionar" por pessoa: montar uma equipe de cinco custava quinze
+  // interações para o mesmo resultado.
+  const alternarMembro = (userId) => {
+    if (roleOf(userId) !== 'none') return removeMember(userId)
     // Administrador entra como Edição total: ele tem acesso irrestrito de
     // qualquer forma, e gravar 'view' mostraria na tela um limite que não existe.
-    const u = users.find(x => x.id === selectedUserId)
-    onChangeMembers([...members, { userId: selectedUserId, role: u?.isAdmin ? 'full' : 'view' }])
-    setSelectedUserId('')
+    const u = users.find(x => x.id === userId)
+    onChangeMembers([...members, { userId, role: u?.isAdmin ? 'full' : 'view' }])
   }
   // Tirar alguém do projeto também o tira da responsabilidade: um responsável
   // sem acesso apareceria no Panorama sem conseguir abrir o projeto.
@@ -54,8 +56,9 @@ function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, on
   // A equipe de desenvolvimento (users.is_dev) não entra em projeto: mantém o
   // sistema, não toca obra. Fora ela, qualquer pessoa pode ser adicionada e
   // marcada como responsável — administradores inclusive.
-  const elegiveis = users.filter(u => !u.isDev)
-  const availableUsers = elegiveis.filter(u => roleOf(u.id) === 'none')
+  // Ordem alfabética na lista suspensa: com dez nomes em ordem de cadastro,
+  // achar alguém já é uma varredura.
+  const elegiveis = users.filter(u => !u.isDev).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
   const teamUsers = elegiveis.filter(u => roleOf(u.id) !== 'none')
   // Administrador vê todo projeto por definição, então não conta como alguém a
   // quem este cadastro deu acesso — a frase do rodapé fala dos demais.
@@ -69,13 +72,17 @@ function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, on
       </label>
       {isAdmin && (
         <div className="perm-add">
-          <select className="control" value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)}>
-            <option value="">Selecionar pessoa</option>
-            {availableUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-          <button type="button" className="btn btn-secondary btn-sm" disabled={!selectedUserId} onClick={addMember}>
-            <Icon name="plus" size={15} stroke={2.2} />Adicionar
-          </button>
+          <SelecaoMultipla
+            itens={elegiveis.map(u => ({
+              id: u.id,
+              nome: u.name,
+              marcado: roleOf(u.id) !== 'none',
+              antes: <span className="av" style={{ width: 22, height: 22, background: u.color, fontSize: 9 }}>{u.initials}</span>,
+              etiqueta: u.isAdmin ? 'admin' : null,
+            }))}
+            onAlternar={alternarMembro}
+            ariaLabel="Pessoas da equipe do projeto"
+            rotulo={(n) => n ? `${n} pessoa${n === 1 ? '' : 's'} na equipe` : 'Escolha quem participa do projeto'} />
         </div>
       )}
       <div className="perm-head">
@@ -125,7 +132,6 @@ function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, on
         })}
       </div>
       {!teamUsers.length && <div className="perm-empty">Nenhum participante adicionado.</div>}
-      {error && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{error}</span>}
       <div className="perm-default-label" style={{ marginTop: 10 }}>
         {comAcesso === 0
           ? 'Ninguém além dos administradores vê este projeto.'
@@ -160,6 +166,9 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const moneyText = (v) => (v != null ? Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '')
   const [estimadoText, setEstimadoText] = React.useState(moneyText(project?.valorEstimado))
   const [orcadoText, setOrcadoText] = React.useState(moneyText(project?.valorOrcado))
+  const [ehConvenio, setEhConvenio] = React.useState(!!project?.ehConvenio)
+  const [convenioNumero, setConvenioNumero] = React.useState(project?.convenioNumero || '')
+  const [convenioValorText, setConvenioValorText] = React.useState(moneyText(project?.convenioValor))
   const [projStatus, setProjStatus] = React.useState(project?.status || 'planejamento')
   const [tipo, setTipo] = React.useState(project?.tipo || 'construcao')
   const [touched, setTouched] = React.useState(false)
@@ -187,19 +196,37 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   // certo, sem mexer nos outros — o KmzSegmentsEditor devolve o recurso já
   // atualizado, então é só substituir pelo id.
   const updateResource = (atualizado) => setResources(rs => rs.map(r => r.id === atualizado.id ? atualizado : r))
+  const [avisado, setAvisado] = React.useState(false)
 
   const dErr = dateError(start, end)
   const nameErr = touched && !name.trim() ? 'Informe um nome.' : null
-  const prefErr = touched && !prefeitura.trim() ? 'Informe a prefeitura.' : null
-  const respErr = touched && responsibleIds.length === 0 ? 'Selecione ao menos um profissional responsável.' : null
+
+  // Prefeitura e responsável deixaram de travar o cadastro: viraram pendência,
+  // como o resto. Sem isso, o projeto que chega sem esses dados não entrava no
+  // sistema — e passava a existir só no papel de alguém.
+  const rascunho = {
+    prefeitura, secretaria, responsibleIds, start, end, origemRecurso, ehConvenio,
+    valorEstimado: parseBRL(estimadoText), valorOrcado: parseBRL(orcadoText),
+    convenioNumero, convenioValor: parseBRL(convenioValorText),
+  }
+  const pendencias = pendenciasDoProjeto(rascunho)
   const badMoney = (t) => !!t.trim() && parseBRL(t) === null
   const estimadoErr = touched && badMoney(estimadoText) ? 'Valor inválido. Ex.: 250000,00' : null
   const orcadoErr = touched && badMoney(orcadoText) ? 'Valor inválido. Ex.: 250000,00' : null
 
+  // O que falta é dito ANTES de gravar, num popup por cima do formulário, com o
+  // caminho seguindo em frente ali mesmo. Gravar e avisar depois entregaria o
+  // aviso quando já não dá para desistir; travar de vez é o que esta mudança
+  // veio desfazer.
   const save = () => {
     setTouched(true)
-    if (!name.trim() || !prefeitura.trim() || dErr) { setTab('geral'); return }
+    if (!name.trim() || dErr) { setTab('geral'); return }
     if (badMoney(estimadoText) || badMoney(orcadoText)) { setTab('geral'); return }
+    if (pendencias.length) { setAvisado(true); return }
+    gravar()
+  }
+
+  const gravar = () => {
     onSave({
       ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start, end, notes: notes.trim(), resources, members,
       prefeitura: prefeitura.trim(), secretaria: secretaria.trim(), responsibleIds,
@@ -207,6 +234,8 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
       // Só vai o .kmz de um tipo de obra que tem traçado — se o usuário trocou
       // o tipo depois de escolher o arquivo, ele é descartado.
       kmzUpload: aceitaKmz && kmzFile ? { file: kmzFile, label: kmzLabel.trim() } : null,
+      ehConvenio, convenioNumero: ehConvenio ? convenioNumero.trim() : null,
+      convenioValor: ehConvenio ? parseBRL(convenioValorText) : null,
     })
   }
 
@@ -216,6 +245,12 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
         <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
         <button className="btn btn-primary" onClick={save}>{editing ? 'Salvar alterações' : 'Criar projeto'}</button>
       </>}>
+      {avisado && (
+        <PopupPendencias itens={pendencias} onCancelar={() => setAvisado(false)}
+          onSalvar={() => { setAvisado(false); gravar() }}
+          rotulo={editing ? 'Salvar mesmo assim' : 'Criar mesmo assim'}
+          acao={'Dá para ' + (editing ? 'salvar' : 'criar') + ' assim e completar depois. Enquanto faltar, um aviso fica ao lado do nome do projeto.'} />
+      )}
       <div className="proj-tabs">
         <button type="button" className={'proj-tab' + (tab === 'geral' ? ' on' : '')} onClick={() => setTab('geral')}>
           <Icon name="file" size={15} />Geral
@@ -291,7 +326,6 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
             <option value="">Selecione a prefeitura</option>
             {opcoesCom(PREFEITURAS, prefeitura).map(p => <option key={p} value={p}>{p}</option>)}
           </select>
-          {prefErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{prefErr}</span>}
         </Field>
         <Field label="Secretaria">
           <select className="control" value={secretaria ?? ''} onChange={e => setSecretaria(e.target.value)}>
@@ -303,19 +337,10 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
 
       <PermissionsEditor users={users} members={members} responsibleIds={responsibleIds}
         onChangeMembers={setMembers} onChangeResponsibles={setResponsibleIds}
-        isAdmin={isAdmin} error={respErr} />
+        isAdmin={isAdmin} />
 
-      <div className="field-row">
-        <Field label="Valor estimado">
-          <MoneyInput value={estimadoText?? ''} onChange={setEstimadoText} placeholder="0,00" />
-          {estimadoErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{estimadoErr}</span>}
-        </Field>
-        <Field label="Valor orçado">
-          <MoneyInput value={orcadoText?? ''} onChange={setOrcadoText} placeholder="0,00" />
-          {orcadoErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{orcadoErr}</span>}
-        </Field>
-      </div>
-
+      {/* A origem vem ANTES dos valores: é ela que diz de onde vem o dinheiro,
+          e o convênio — quando existe — é o que dá nome e tamanho a ele. */}
       <div className="field-row">
         <Field label="Origem do recurso">
           <select className="control" value={origemRecurso?? ''} onChange={e => setOrigemRecurso(e.target.value)}>
@@ -326,6 +351,45 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
           <select className="control" value={projStatus?? ''} onChange={e => setProjStatus(e.target.value)}>
             {PROJECT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
+        </Field>
+      </div>
+
+      <Field label="Convênio">
+        <label className="marca">
+          <input type="checkbox" checked={ehConvenio} onChange={e => setEhConvenio(e.target.checked)} />
+          O recurso vem de um convênio
+        </label>
+        {/* Os campos só existem quando a caixa está marcada. Deixá-los visíveis
+            e vazios em todo projeto era mais um par de caixas a ignorar. */}
+        {!ehConvenio && (
+          <span className="marca-nota">
+            Hoje o número do convênio é escrito dentro do nome do projeto, o que
+            alonga o nome e impede filtrar por ele.
+          </span>
+        )}
+      </Field>
+
+      {ehConvenio && (
+        <div className="field-row">
+          <Field label="Número do convênio">
+            <input className="control" value={convenioNumero}
+              placeholder="Ex.: 030979/2026 ou MAPP 6112"
+              onChange={e => setConvenioNumero(e.target.value)} />
+          </Field>
+          <Field label="Valor do convênio">
+            <MoneyInput value={convenioValorText?? ''} onChange={setConvenioValorText} placeholder="0,00" />
+          </Field>
+        </div>
+      )}
+
+      <div className="field-row">
+        <Field label="Valor estimado">
+          <MoneyInput value={estimadoText?? ''} onChange={setEstimadoText} placeholder="0,00" />
+          {estimadoErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{estimadoErr}</span>}
+        </Field>
+        <Field label="Valor orçado">
+          <MoneyInput value={orcadoText?? ''} onChange={setOrcadoText} placeholder="0,00" />
+          {orcadoErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{orcadoErr}</span>}
         </Field>
       </div>
 

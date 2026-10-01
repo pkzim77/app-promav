@@ -10,7 +10,10 @@ export { DocumentModal, LinkModal, ImageModal, KmzModal } from './ResourceModals
 // demanda (React.lazy) na Ficha técnica. Reexportar aqui o tornaria alcançável
 // estaticamente e jogaria o Leaflet de volta no bundle principal.
 export { ProjectModal } from './ProjectModal.jsx'
+export { PeopleModal } from './PeopleModal.jsx'
+export { PersonCard } from './PersonCard.jsx'
+export { StageItemModal } from './StageItemModal.jsx'
+export { StageActivitiesModal } from './StageActivitiesModal.jsx'
 export { ChangeModal } from './ChangeModal.jsx'
 export { MySectorModal, ChangePasswordModal } from './AccountModals.jsx'
 export { ConfirmDialog } from './ConfirmDialog.jsx'
-export { PeopleModal } from './PeopleModal.jsx'

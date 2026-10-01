@@ -286,13 +286,48 @@
 
 .ds-person { display: inline-flex; align-items: center; gap: 9px; padding: 5px 14px 5px 5px; border: 1px solid var(--border); border-radius: var(--r-full); font-size: 13.5px; font-weight: 600; color: var(--fg-2); }
 
+/* ---------- ficha do responsável (Panorama) ---------- */
+
+.ds-com-ficha { position: relative; cursor: default; }
+
+.ds-com-ficha:hover, .ds-com-ficha:focus-visible { border-color: var(--border-strong); background: var(--surface); outline: none; }
+
+/* Abre para baixo, não para cima: o bloco fica na metade de cima da tela e,
+   subindo, a ficha sairia pela borda do navegador. */
+.ds-ficha { position: absolute; z-index: 30; top: calc(100% + 8px); left: 0; width: max-content; max-width: min(300px, 86vw); display: flex; flex-direction: column; gap: 7px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-md); text-align: left; font-weight: 400; opacity: 0; visibility: hidden; transform: translateY(-4px); transition: opacity var(--dur), transform var(--dur), visibility var(--dur); }
+
+.ds-com-ficha:hover .ds-ficha, .ds-com-ficha:focus-visible .ds-ficha { opacity: 1; visibility: visible; transform: none; }
+
+.ds-ficha-topo { display: flex; align-items: center; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+.ds-ficha-id { display: flex; flex-direction: column; min-width: 0; }
+
+.ds-ficha-id b { font-size: 13.5px; font-weight: 700; color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.ds-ficha-id i { font-style: normal; font-size: 11.5px; color: var(--fg-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.ds-ficha-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; font-size: 12.5px; }
+
+.ds-ficha-linha > span { color: var(--fg-3); flex-shrink: 0; }
+
+.ds-ficha-linha > b { font-weight: 600; color: var(--fg-1); text-align: right; }
+
+/* Cargo e setor em branco no cadastro. Escrito, não omitido: campo vazio some
+   da tela e a lacuna nunca é resolvida. */
+.ds-ficha-linha > b.vazio { font-weight: 500; font-style: italic; color: var(--fg-4); }
+
+/* Sem cursor não há hover: no celular a ficha abre ao tocar (o foco entra). */
+@media (hover: none) {
+  .ds-com-ficha:focus .ds-ficha { opacity: 1; visibility: visible; transform: none; }
+}
+
 @media (max-width: 720px) {
   .cover-hero { gap: 22px; }
   .cover-hero-side { padding-left: 0; border-left: 0; border-top: 1px solid var(--border); padding-top: 18px; width: 100%; align-items: flex-start; }
   .cover-money { text-align: left; }
 }
 
-/* ---------- Ficha técnica (aba de trabalho da equipe) ---------- */
+/* ---------- Aba Arquivos (documentos, links e imagens) ---------- */
 
 .proj-tech { display: flex; flex-direction: column; gap: 16px; }
 
@@ -481,4 +516,273 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
 
 @media (prefers-reduced-motion: reduce) {
   .is-focused { animation: none; }
+}
+
+/* ---------- Aba Etapas ---------- */
+
+.proj-etapas { display: flex; flex-direction: column; gap: 16px; }
+
+.et-resumo { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+
+.et-resumo-topo { display: flex; align-items: flex-start; gap: 16px; }
+
+.et-resumo-lab { font-size: 13px; font-weight: 600; color: var(--fg-2); }
+
+.et-resumo-sub { font-size: 12.5px; color: var(--fg-3); margin-top: 3px; }
+
+.et-resumo-sub b { color: var(--fg-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.et-resumo-pct { margin-left: auto; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1; }
+
+/* Sólido conta no percentual; hachurado é o que está em curso e não conta. */
+.et-barra { height: 10px; border-radius: var(--r-full); background: var(--bg-muted); overflow: hidden; display: flex; }
+
+.et-barra i { display: block; height: 100%; }
+
+.et-barra .feito, .sw.feito { background: var(--status-done); }
+
+.et-barra .curso, .sw.curso { background-color: var(--status-progress-soft); background-image: repeating-linear-gradient(135deg, var(--status-progress) 0 3px, transparent 3px 7px); }
+
+.et-legenda { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12.5px; color: var(--fg-3); }
+
+.et-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+
+.et-legenda .sw { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+.et-legenda .sw.falta { background: var(--bg-muted); border: 1px solid var(--border-strong); }
+
+.et-barra-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+.et-barra-acoes .et-nova { margin-left: auto; }
+
+/* O filtro é um chip que abre menu. `.msel` já dá o position: relative que a
+   lista usa para se ancorar; o que muda aqui é a largura — a lista do msel
+   cola nas duas bordas do botão, e este é estreito demais para caber
+   "Em andamento (11)" em cada linha. */
+.et-filtro-botao { cursor: pointer; }
+
+.et-filtro-lista { right: auto; min-width: 232px; }
+
+/* O menu é feito de botões, e botão não herda alinhamento de texto. */
+.et-filtro-lista .msel-item { width: 100%; text-align: left; background: none; border: 0; font-family: inherit; }
+
+.et-filtro-lista .msel-item.on { background: var(--brand-soft); }
+
+.et-filtro-seta { margin-left: 2px; opacity: .7; }
+
+/* Entra no modo de exclusão, não exclui: o vermelho só no hover. Em repouso
+   ele divide a barra com o filtro e não é o assunto da tela. */
+.et-excluir-varias:hover { color: var(--danger); background: var(--danger-soft); }
+
+/* flex-shrink: 0 porque .proj-etapas é um flex column — sem isto a lista pode
+   ser espremida a quase nada quando o contêiner tem altura restrita. */
+.et-lista { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface); flex-shrink: 0; }
+
+.et-item { display: block; }
+
+/* O estado pinta a linha inteira: fundo tingido a 8% da cor do status e faixa
+   na cor cheia à esquerda. A faixa carrega a leitura à distância sem escurecer
+   a área de texto, onde o contraste é limitado. */
+.et-item { border-bottom: 1px solid var(--border); border-left: 4px solid var(--border-strong); background: #F6F4F2; }
+
+.et-item:last-child { border-bottom: 0; }
+
+.et-item.et-done { background: #EDF8F3; border-left-color: var(--status-done); }
+
+.et-item.et-prog { background: #EEF5FF; border-left-color: var(--status-progress); }
+
+/* flex, e não grid: <button> como contêiner de grid tem histórico de colapsar
+   a altura em alguns navegadores (o box anônimo interno do botão). Com flex o
+   comportamento é o mesmo visualmente e não depende disso.
+   O min-height garante a altura mesmo se o contêiner interno for ignorado. */
+/* O cabeçalho virou linha com três controles: caixa de seleção, o botão que
+   abre a etapa e a lixeira. Só o do meio estica. */
+.et-cab-linha { display: flex; align-items: center; }
+
+.et-marca { display: flex; align-items: center; padding: 0 0 0 14px; cursor: pointer; }
+
+.et-marca input { width: 17px; height: 17px; accent-color: var(--brand); cursor: pointer; }
+
+.et-item.et-marcada { background: var(--brand-soft); }
+
+/* A lixeira só aparece na linha sob o cursor: uma coluna delas sempre visível
+   convida ao clique errado num gesto que apaga etapa e atividades juntas. */
+.et-lixo { flex-shrink: 0; margin-right: 10px; opacity: 0; transition: opacity var(--dur); }
+
+.et-item:hover .et-lixo, .et-lixo:focus-visible { opacity: 1; }
+
+.et-lixo:hover { color: var(--danger); background: var(--danger-soft); }
+
+@media (hover: none) { .et-lixo { opacity: 1; } }
+
+/* Barra da seleção em massa. */
+.et-selecao { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px 16px; margin-bottom: 14px; border-radius: var(--r-md); background: var(--brand-soft); font-size: 13.5px; color: var(--fg-2); }
+
+.et-selecao strong { color: var(--fg-1); }
+
+.et-selecao-acoes { display: flex; gap: 8px; }
+
+.et-ck-lixo { flex-shrink: 0; padding: 5px; opacity: 0; transition: opacity var(--dur); }
+
+.et-ck li:hover .et-ck-lixo, .et-ck-lixo:focus-visible { opacity: 1; }
+
+.et-ck-lixo:hover { color: var(--danger); background: var(--danger-soft); }
+
+@media (hover: none) { .et-ck-lixo { opacity: 1; } }
+
+.et-cab { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 60px; padding: 13px 18px 13px 14px; background: none; text-align: left; font-family: inherit; }
+
+.et-cab > .et-num { flex-shrink: 0; }
+
+.et-cab > .et-linha { flex: 1; min-width: 0; }
+
+.et-cab:hover .et-nome { text-decoration: underline; text-underline-offset: 3px; }
+
+.et-num { width: 34px; height: 34px; border-radius: var(--r-md); display: grid; place-items: center; font-family: var(--font-mono); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; background: var(--bg-muted); color: var(--fg-3); border: 1.5px solid transparent; }
+
+.et-item.et-done .et-num { background: var(--status-done-soft); color: var(--status-done); border-color: var(--status-done); }
+
+.et-item.et-prog .et-num { background: var(--status-progress-soft); color: var(--status-progress); border-color: var(--status-progress); }
+
+.et-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 34px; }
+
+.et-seta { color: var(--fg-4); transition: transform var(--dur); flex-shrink: 0; }
+
+.et-cab[aria-expanded="true"] .et-seta, .et-avulsas[open] > summary .et-seta { transform: rotate(90deg); }
+
+.et-nome { font-size: 14.5px; font-weight: 600; color: var(--fg-1); }
+
+.et-item.et-todo .et-nome { color: var(--fg-2); font-weight: 500; }
+
+.et-selo { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: var(--r-full); font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; background: var(--status-todo-soft); color: var(--status-todo); }
+
+.et-selo.et-done { background: var(--status-done-soft); color: var(--status-done); }
+
+.et-selo.et-prog { background: var(--status-progress-soft); color: var(--status-progress); }
+
+.et-selo-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+.et-conta { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--fg-3); padding: 2px 9px; border-radius: var(--r-full); background: var(--surface); border: 1px solid var(--border); }
+
+.et-dup { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 8px; border-radius: var(--r-full); background: var(--danger-soft); color: var(--danger); }
+
+.et-corpo { padding: 0 18px 14px 62px; display: flex; flex-direction: column; gap: 12px; }
+
+.et-aviso { display: flex; gap: 9px; align-items: flex-start; font-size: 12.5px; margin: 0; padding: 9px 12px; border-radius: var(--r-sm); background: var(--danger-soft); border: 1px solid var(--danger); color: var(--fg-2); }
+
+.et-aviso svg { color: var(--danger); flex-shrink: 0; margin-top: 2px; }
+
+.et-task { display: flex; flex-direction: column; gap: 10px; }
+
+.et-task + .et-task { padding-top: 12px; border-top: 1px dashed var(--border-strong); }
+
+.et-task-tit { font-size: 13px; font-weight: 600; color: var(--fg-2); font-family: var(--font-mono); display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+
+.et-vazio { margin: 0; font-size: 13px; color: var(--fg-3); }
+
+.et-vazio-filtro { font-size: 13.5px; color: var(--fg-3); padding: 18px 4px; margin: 0; }
+
+.et-ck { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+
+.et-ck li { border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); }
+
+.et-ck-texto { padding: 8px 0; font-size: 13.5px; color: var(--fg-2); }
+
+
+.et-ck-editar { flex: 1; min-width: 0; padding: 5px 9px; font-size: 13.5px; }
+
+/* O lápis só aparece no item sob o cursor: um por linha, sempre visível,
+   viraria uma coluna de ícones competindo com o texto. */
+.et-ck-lapis { flex-shrink: 0; padding: 5px; opacity: 0; transition: opacity var(--dur); }
+
+.et-ck li:hover .et-ck-lapis, .et-ck-lapis:focus-visible { opacity: 1; }
+
+/* Sem cursor não há hover, e o lápis ficaria inalcançável no celular. */
+@media (hover: none) { .et-ck-lapis { opacity: 1; } }
+
+.et-ck li.ok .et-ck-texto { color: var(--fg-3); text-decoration: line-through; text-decoration-color: var(--border-strong); }
+
+.et-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
+
+.et-quem { font-size: 12.5px; color: var(--fg-3); }
+
+.et-botoes { margin-left: auto; display: flex; align-items: center; gap: 7px; }
+
+/* Trocar o estado sem abrir a atividade. O seletor em si é o .seg do kit — o
+   mesmo do TaskModal —, então aqui fica só a linha que o rotula. */
+.et-status { display: flex; align-items: center; gap: 10px; }
+
+.et-status-lab { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--fg-3); flex-shrink: 0; }
+
+.et-status .seg { flex: 1; min-width: 0; }
+
+.et-avulsas { border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-subtle); }
+
+.et-avulsas > summary { list-style: none; cursor: pointer; padding: 13px 16px; font-size: 13px; font-weight: 700; color: var(--fg-2); display: flex; align-items: center; gap: 9px; }
+
+.et-avulsas > summary::-webkit-details-marker { display: none; }
+
+.et-avulsas-corpo { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+
+@media (max-width: 620px) {
+  .et-cab { padding: 12px 14px; gap: 10px; min-height: 54px; }
+  .et-corpo { padding-left: 14px; padding-right: 14px; }
+  .et-botoes { margin-left: 0; }
+  .et-resumo-pct { margin-left: 0; }
+}
+
+/* Responsável por item do checklist. Com um só responsável na atividade o
+   nome aparece fixo (é dedução, não escolha); com mais de um vira seletor. */
+.et-ck li { display: flex; align-items: center; gap: 10px; padding: 0 10px 0 11px; }
+
+.et-ck-texto { flex: 1; min-width: 0; }
+
+.et-ck-dono { flex-shrink: 0; font-family: inherit; font-size: 12px; font-weight: 600; color: var(--fg-2); background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--r-full); padding: 4px 10px; max-width: 150px; cursor: pointer; }
+
+.et-ck-dono:hover { border-color: var(--border-strong); }
+
+.et-ck-dono:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
+
+.et-ck-dono-fixo { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--fg-3); }
+
+/* Duas ações: a principal põe o trabalho dentro de uma etapa; a secundária
+   cria atividade fora do template, que é o caso raro. */
+.et-nova { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Cabeçalho do projeto (compacto) ----------
+   O layout anterior gastava ~500px antes da primeira linha de conteúdo. Aqui
+   o "voltar" divide a linha com o título, e as etiquetas do nome ficam numa
+   faixa fina embaixo, junto das datas. */
+
+.proj-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+
+.proj-head-voltar { flex-shrink: 0; width: 32px; padding: 0; margin-left: -8px; justify-content: center; color: var(--fg-3); }
+
+.proj-head-voltar:hover { color: var(--fg-1); }
+
+.proj-head-cor { width: 12px; height: 32px; border-radius: var(--r-sm); flex-shrink: 0; }
+
+.proj-head-nome { flex: 1; min-width: 0; }
+
+.proj-head-nome h1 { font: var(--text-h2); margin: 0; letter-spacing: var(--tracking-tight); overflow-wrap: anywhere; }
+
+.proj-head-desc { font-size: 13.5px; color: var(--fg-3); margin: 2px 0 0; }
+
+.proj-head-editar { flex-shrink: 0; }
+
+.proj-head-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 18px; padding-left: 36px; font-size: 12.5px; color: var(--fg-3); }
+
+.proj-head-cod { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; padding: 2px 8px; border-radius: var(--r-sm); background: var(--bg-muted); color: var(--fg-2); cursor: help; }
+
+.proj-head-tipo { font-weight: 700; letter-spacing: 0.04em; padding: 2px 8px; border-radius: var(--r-sm); background: var(--brand-soft); color: var(--accent-strong); }
+
+.proj-head-compl { color: var(--fg-3); }
+
+.proj-head-compl::before { content: '·'; margin-right: 8px; color: var(--fg-4); }
+
+.proj-head-datas { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+
+@media (max-width: 620px) {
+  .proj-head-meta { padding-left: 0; }
+  .proj-head-datas { margin-left: 0; width: 100%; }
 }

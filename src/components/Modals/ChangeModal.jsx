@@ -1,7 +1,7 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field, SegControl } from '../primitives/primitives.jsx'
-import { SECTORS, CHANGE_KINDS, URGENCIES, paraAtribuir } from '../../data/store.js'
+import { SECTORS, CHANGE_KINDS, URGENCIES, paraAtribuir, etapasDoProjeto } from '../../data/store.js'
 
 // Emissor e destinatário são polimórficos: pessoa OU setor. O <select> codifica
 // como "u:<id>" ou "s:<setor>" e o valor é desmontado ao salvar.
@@ -28,9 +28,9 @@ function LadoSelect({ value, onChange, equipe, incluirVazio, rotuloVazio }) {
 }
 
 // Publicar ou editar uma MUDANÇA do projeto (a "orientação"). O mesmo modal
-// serve aos dois casos; só a criação pergunta se altera orçamento ou prazo,
-// porque essa resposta congela na publicação.
-export function ChangeModal({ change, projectId, users = [], members = [], onSave, onClose }) {
+// serve aos dois casos; só a criação pergunta se altera orçamento ou prazo e
+// em que etapa a mudança entra, porque as duas respostas congelam na publicação.
+export function ChangeModal({ change, projectId, users = [], members = [], tasks = [], onSave, onClose }) {
   const editing = !!change
   const [title, setTitle] = React.useState(change?.title || '')
   const [changeDate, setChangeDate] = React.useState(change?.changeDate || new Date().toISOString().slice(0, 10))
@@ -38,6 +38,10 @@ export function ChangeModal({ change, projectId, users = [], members = [], onSav
   const [requester, setRequester] = React.useState(change?.requester || '')
   const [kind, setKind] = React.useState(change?.kind || 'requisicao')
   const [urgency, setUrgency] = React.useState(change?.urgency || 'medium')
+  // Etapa que recebe a mudança. Só na publicação: mover de etapa depois
+  // exigiria mover o item de checklist, e isso ainda não existe.
+  const etapas = React.useMemo(() => etapasDoProjeto(tasks, projectId), [tasks, projectId])
+  const [etapa, setEtapa] = React.useState('')
   const [affectsBudget, setAffectsBudget] = React.useState(!!change?.affectsBudget)
   const [touched, setTouched] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -112,7 +116,7 @@ export function ChangeModal({ change, projectId, users = [], members = [], onSav
         title: title.trim(), description: description.trim(), requester: requester.trim(),
         changeDate, urgency,
         targetUserIds: destPessoas, targetSectors: destSetores, targetSector: destSetores[0] || null,
-        ...(editing ? {} : { kind, affectsBudget }),
+        ...(editing ? {} : { kind, affectsBudget, stageTaskId: etapa || null }),
       })
     } finally { setSaving(false) }
   }
@@ -156,6 +160,20 @@ export function ChangeModal({ change, projectId, users = [], members = [], onSav
           <SegControl options={URGENCIES} value={urgency} onChange={setUrgency} />
         </Field>
       </div>
+
+      {!editing && (
+        <Field label="Etapa">
+          <select className="control" value={etapa} onChange={e => setEtapa(e.target.value)}>
+            <option value="">Sem etapa</option>
+            {etapas.map(e => <option key={e.id} value={e.id}>{e.label}</option>)}
+          </select>
+          <span className="peso-hint">
+            {etapa
+              ? 'Entra como item do checklist desta etapa.'
+              : 'Sem etapa, entra em "Outras atividades" — na aba Etapas do projeto.'}
+          </span>
+        </Field>
+      )}
 
       {/* Não há campo de emissor: quem publica é o emissor, e isso aparece no
           cartão depois de publicado ("De … Para …"). */}
