@@ -44,7 +44,7 @@ function PrecisaDeVoce({ atrasadas, ciencias, relatorio, projetoDe, onNavigate }
           </div>
           <ul className="pend-lista">
             {atrasadas.slice(0, 5).map(t => {
-              const dias = dayDiff(t.end, hoje)
+              const dias = dayDiff(t.end, hoje) ?? 0
               return (
                 <li key={t.id}>
                   <button className="pend-item"

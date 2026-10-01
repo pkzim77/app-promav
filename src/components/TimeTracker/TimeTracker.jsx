@@ -1,7 +1,7 @@
 import './TimeTracker.css'
 import React from 'react'
 import { Icon } from '../Icon.jsx'
-import { PROJECT_COLORS } from '../../data/store.js'
+import { PROJECT_COLORS, PROJECT_STATUS_MAP } from '../../data/store.js'
 // Cronômetro por atividade — cada sessão é vinculada a uma tarefa (taskId).
 
 export function fmtClock(ms) {
@@ -51,7 +51,25 @@ export function TaskTimerButton({ task, sessions, currentUserId, now, onStart, o
   )
 }
 
-export function TimeClock({ currentUser, tasks, projects, sessions, now, onStart, onStop }) {
+// O que a etapa não diz sozinha: de quem é o projeto e como ele está. Onze
+// projetos têm uma etapa chamada "2 · Projetos", e na lista do cronômetro elas
+// ficavam indistinguíveis.
+//
+// Vai no title nativo, e não numa ficha desenhada: a lista rola dentro de um
+// popover com overflow escondido, e qualquer caixa posicionada aqui seria
+// cortada na primeira linha.
+function resumoDoProjeto(p) {
+  if (!p) return 'Atividade fora de qualquer projeto'
+  const partes = [p.name]
+  if (p.prefeitura) partes.push(p.prefeitura)
+  if (p.secretaria) partes.push(p.secretaria)
+  const estado = PROJECT_STATUS_MAP[p.status]?.label
+  if (estado) partes.push(estado)
+  if (p.end) partes.push('prazo ' + p.end.split('-').reverse().join('/'))
+  return partes.join(' · ')
+}
+
+export function TimeClock({ currentUser, tasks, projects, sessions, now, onStart, onStop, onOpenTask }) {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef(null)
   React.useEffect(() => {
@@ -115,15 +133,29 @@ export function TimeClock({ currentUser, tasks, projects, sessions, now, onStart
             {myTasks.map(t => {
               const isActive = active && active.taskId === t.id
               const total = taskTimeFor(sessions, t.id, currentUser.id, now)
+              const proj = projOf(t.projectId)
               return (
-                <button key={t.id} className={'ponto-task' + (isActive ? ' on' : '')} onClick={() => isActive ? onStop() : onStart(t.id)}>
-                  <span className="dot" style={{ background: PROJECT_COLORS[projOf(t.projectId)?.color] }} />
-                  <span className="ponto-task-title">{t.title}</span>
+                <div key={t.id} className={'ponto-task' + (isActive ? ' on' : '')}>
+                  {/* A linha abre a etapa; o play fica num botão à parte. São dois
+                      gestos diferentes de verdade — um começa a contar tempo, o
+                      outro mostra o que há para fazer — e a linha era um <button>
+                      com outro dentro, que não é HTML válido. */}
+                  <button type="button" className="ponto-task-abrir" title={resumoDoProjeto(proj)}
+                    onClick={() => { onOpenTask?.(t); setOpen(false) }}>
+                    <span className="dot" style={{ background: PROJECT_COLORS[proj?.color] }} />
+                    <span className="ponto-task-txt">
+                      <span className="ponto-task-title">{t.title}</span>
+                      <span className="ponto-task-proj">{proj?.name || 'Sem projeto'}</span>
+                    </span>
+                  </button>
                   {total > 0 && <span className="ponto-task-total">{fmtDur(total)}</span>}
-                  <span className={'timerbtn' + (isActive ? ' running' : '')}>
+                  <button type="button" className={'timerbtn' + (isActive ? ' running' : '')}
+                    title={isActive ? 'Parar o cronômetro' : 'Iniciar o cronômetro nesta etapa'}
+                    aria-label={(isActive ? 'Parar o cronômetro em ' : 'Iniciar o cronômetro em ') + t.title}
+                    onClick={() => isActive ? onStop() : onStart(t.id)}>
                     <Icon name={isActive ? 'stop' : 'play'} size={13} stroke={2.4} />
-                  </span>
-                </button>
+                  </button>
+                </div>
               )
             })}
           </div>

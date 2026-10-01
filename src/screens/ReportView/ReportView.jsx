@@ -99,7 +99,10 @@ export function ReportView({ report, projects, users, onBack }) {
             {g.list.map(t => {
               const cs = checklistStats(t)
               const pct = taskProgress(t)
-              const overdue = t.status !== 'done' && parseDate(t.end) < parseDate(todayISO())
+              // Sem prazo não há atraso. Antes, `parseDate(null) < hoje` virava
+              // `null < data`, que em JavaScript é 0 < timestamp — ou seja,
+              // TUDO sem prazo aparecia como atrasado.
+              const overdue = t.status !== 'done' && !!t.end && parseDate(t.end) < parseDate(todayISO())
               return (
                 <div key={t.id} className="report-task">
                   <div className="report-task-top">

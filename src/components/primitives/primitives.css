@@ -53,6 +53,18 @@
 
 .ck-mini.full svg { color: var(--success); }
 
+/* ---------- pendências ---------- */
+
+.pend-aviso { display: inline-flex; align-items: center; color: #A8680A; flex-shrink: 0; }
+
+.pend-painel { margin: 0 0 16px; padding: 12px 14px; border-radius: var(--r-md); background: #FDF2E2; border: 1px solid #F3D8A8; }
+
+.pend-painel > strong { display: flex; align-items: center; gap: 7px; font-size: 13.5px; color: #8A5407; }
+
+.pend-painel > ul { margin: 7px 0 0; padding-left: 26px; font-size: 13px; color: var(--fg-2); line-height: 1.7; }
+
+.pend-painel > p { margin: 9px 0 0; font-size: 12.5px; color: var(--fg-3); }
+
 /* ---------- Toast ---------- */
 
 /* A região existe mesmo sem aviso na tela (ver Toast). Vazia ela não tem

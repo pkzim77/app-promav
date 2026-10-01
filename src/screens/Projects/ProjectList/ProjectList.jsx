@@ -1,7 +1,7 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
-import { ProgressBar } from '../../../components/primitives/primitives.jsx'
-import { PROJECT_COLORS, SEM_ATIVIDADES, projectProgress, tasksByProject, fmtShort, effectiveProjectRole, canEditProject } from '../../../data/store.js'
+import { ProgressBar, AvisoPendencias } from '../../../components/primitives/primitives.jsx'
+import { PROJECT_COLORS, SEM_ATIVIDADES, projectProgress, tasksByProject, fmtShort, effectiveProjectRole, canEditProject, pendenciasDoProjeto } from '../../../data/store.js'
 import { EmptyState } from '../shared/EmptyState.jsx'
 
 function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete, draggable, dragging, dropHint, onDragStart, onDragEnd, onDragOver, onDrop }) {
@@ -22,7 +22,12 @@ function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete, d
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
         <span style={{ width: 34, height: 34, borderRadius: 'var(--r-md)', background: color, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ font: 'var(--text-h4)', color: 'var(--fg-1)', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden', overflowWrap: 'anywhere' }}>{project.name}</div>
+          <div style={{ font: 'var(--text-h4)', color: 'var(--fg-1)', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden', overflowWrap: 'anywhere' }}>
+            {project.name}
+            {/* O projeto pode ser criado incompleto; o que falta fica dito aqui,
+                senão ninguém descobre sem abrir o cadastro um por um. */}
+            {' '}<AvisoPendencias itens={pendenciasDoProjeto(project)} />
+          </div>
           <p style={{ fontSize: 13, color: 'var(--fg-3)', margin: '3px 0 0', lineHeight: 1.45, display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 3, overflow: 'hidden', overflowWrap: 'anywhere' }}>{project.desc}</p>
         </div>
         {(canEdit || canDelete) && (
@@ -33,7 +38,10 @@ function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete, d
         )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--fg-3)', marginBottom: 14 }}>
-        <Icon name="calendar" size={14} />{fmtShort(project.start)} — {fmtShort(project.end)}
+        <Icon name="calendar" size={14} />
+        {project.start || project.end
+          ? <>{fmtShort(project.start)} — {fmtShort(project.end)}</>
+          : 'Sem prazo definido'}
       </div>
       <div style={{ marginTop: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>

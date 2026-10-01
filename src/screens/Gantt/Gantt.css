@@ -39,3 +39,7 @@
 .gantt-group .gantt-rowlabel { font-weight: 700; }
 
 .gantt-today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--brand); opacity: .55; z-index: 3; }
+
+/* Etapa sem prazo: a linha existe, a barra não. Dizer que falta é melhor do
+   que deixar o trilho vazio, que lê como defeito do desenho. */
+.gantt-sem-prazo { position: absolute; left: 4px; top: 50%; transform: translateY(-50%); font-size: 11.5px; font-style: italic; color: var(--fg-4); white-space: nowrap; }

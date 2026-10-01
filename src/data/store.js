@@ -194,6 +194,42 @@ export function dataDoCodigo(codigo) {
   return `${codigo.slice(2, 4)}/${codigo.slice(0, 2)}`
 }
 
+// ---------- informações pendentes ----------
+// O cadastro pode ser salvo incompleto. Quem abre um projeto às vezes só tem o
+// nome e a prefeitura na mão, e travar o formulário até o resto aparecer
+// empurrava a equipe de volta para o papel — o dado acabava existindo fora do
+// sistema, que é pior do que existir pela metade dentro dele.
+//
+// O que falta não some: vira uma lista na hora de salvar e um aviso ao lado do
+// nome, até alguém preencher. A regra mora AQUI porque o modal e a lista
+// precisam concordar sobre o que está pendente; em dois lugares, elas
+// divergiriam no primeiro campo novo.
+//
+// O nome fica de fora de propósito: sem ele o registro não tem como ser
+// encontrado na tela, então continua sendo exigência, não pendência.
+export function pendenciasDoProjeto(p = {}) {
+  const faltando = []
+  if (!String(p.prefeitura || '').trim()) faltando.push('Prefeitura')
+  if (!String(p.secretaria || '').trim()) faltando.push('Secretaria')
+  if (!(p.responsibleIds || []).length) faltando.push('Profissional responsável')
+  if (!p.start || !p.end) faltando.push('Prazo (início e entrega)')
+  if (!p.origemRecurso) faltando.push('Origem do recurso')
+  if (p.valorEstimado == null) faltando.push('Valor estimado')
+  if (p.ehConvenio && !String(p.convenioNumero || '').trim()) faltando.push('Número do convênio')
+  if (p.ehConvenio && p.convenioValor == null) faltando.push('Valor do convênio')
+  return faltando
+}
+
+// Numa etapa, o que falta é sempre o mesmo: quem faz, até quando, e o que
+// exatamente há para fazer.
+export function pendenciasDaEtapa(t = {}) {
+  const faltando = []
+  if (!t.assigneeId) faltando.push('Responsável')
+  if (!t.end) faltando.push('Prazo de entrega')
+  if (!(t.checklist || []).length) faltando.push('Atividades')
+  return faltando
+}
+
 // ---------- etapas do processo ----------
 // O caminho que todo projeto percorre, do levantamento à licitação. A equipe
 // já vinha recriando esta lista à mão em cada projeto — o que gerou etapas
@@ -478,12 +514,33 @@ export function taskMembers(task) {
 
 // ---------- date helpers ----------
 export const MONTHS_PT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
-export function parseDate(s) { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d) }
-export function fmtShort(s) { const d = parseDate(s); return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}` }
-export function fmtMed(s) { const d = parseDate(s); return `${d.getDate()} de ${MONTHS_PT[d.getMonth()]}` }
-export function fmtFull(s) { const d = parseDate(s); return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` }
-export function dayDiff(a, b) { return Math.round((parseDate(b) - parseDate(a)) / 86400000) }
-export function addDays(s, n) { const d = parseDate(s); d.setDate(d.getDate()+n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
+// Prazo passou a ser opcional no cadastro (ver pendenciasDoProjeto), e com isso
+// toda data pode chegar vazia. Antes qualquer uma destas funções recebendo null
+// derrubava a tela inteira num `null.split` — uma informação que falta não pode
+// custar a página.
+//
+// Sem data: parseDate devolve null, os formatadores devolvem travessão e as
+// contas devolvem null, que é diferente de zero e obriga quem chama a decidir.
+export const SEM_DATA = '—'
+export function parseDate(s) {
+  if (!s) return null
+  const [y,m,d] = String(s).split('-').map(Number)
+  if (!y || !m || !d) return null
+  return new Date(y, m-1, d)
+}
+export function fmtShort(s) { const d = parseDate(s); return d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}` : SEM_DATA }
+export function fmtMed(s) { const d = parseDate(s); return d ? `${d.getDate()} de ${MONTHS_PT[d.getMonth()]}` : SEM_DATA }
+export function fmtFull(s) { const d = parseDate(s); return d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : SEM_DATA }
+export function dayDiff(a, b) {
+  const x = parseDate(a), y = parseDate(b)
+  return x && y ? Math.round((y - x) / 86400000) : null
+}
+export function addDays(s, n) {
+  const d = parseDate(s)
+  if (!d) return null
+  d.setDate(d.getDate()+n)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
 // Data de hoje. Era fixa ('2026-05-26') na época do protótipo — com dados reais
 // isso congelava a linha "hoje" do Gantt, o marcador de atraso e o cronograma.
 export function todayISO() {

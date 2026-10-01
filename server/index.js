@@ -649,7 +649,7 @@ app.post('/api/projects', requireAdmin, wrap(async (req, res) => {
                             prefeitura, secretaria, origem_recurso, valor_estimado, valor_orcado, status, responsible_ids, default_role,
                             eh_convenio, convenio_numero, convenio_valor)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
-      [id, name, desc, color, folderId || null, position, start, end, notes, JSON.stringify(clean),
+      [id, name, desc, color, folderId || null, position, normData(start), normData(end), notes, JSON.stringify(clean),
        String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso),
        normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status),
        JSON.stringify(normResponsibles(responsibleIds)), normDefaultRole(defaultRole),
@@ -704,7 +704,7 @@ app.put('/api/projects/:id', gate((req) => req.params.id, CAN.edit), wrap(async 
                            eh_convenio = $17, convenio_numero = $18, convenio_valor = $19,
                            updated_at = now()
        WHERE id = $1 RETURNING id`,
-      [req.params.id, name, desc, color, folderId || null, start, end, notes, JSON.stringify(clean),
+      [req.params.id, name, desc, color, folderId || null, normData(start), normData(end), notes, JSON.stringify(clean),
        String(prefeitura || '').trim(), String(secretaria || '').trim(), normOrigem(origemRecurso), normValor(valorEstimado), normValor(valorOrcado), normProjStatus(status), JSON.stringify(normResponsibles(responsibleIds)),
        // Desmarcar "é convênio" leva junto o número e o valor. Sem isso eles
        // ficariam guardados, invisíveis na tela, e voltariam se alguém
@@ -897,7 +897,7 @@ app.post('/api/tasks', gate((req) => req.body.projectId, CAN.edit), wrap(async (
     await client.query(
       `INSERT INTO tasks (id, project_id, title, assignee_id, status, priority, start_date, end_date, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [id, projectId, title, assigneeId || null, status, priority, start, end, req.userId]
+      [id, projectId, title, assigneeId || null, status, priority, normData(start), normData(end), req.userId]
     )
     await replaceChildren(client, id, checklist, memberIds, assigneeId)
   })
@@ -912,7 +912,7 @@ app.put('/api/tasks/:id', gate(taskProjectId, CAN.edit), wrap(async (req, res) =
       `UPDATE tasks SET project_id = $2, title = $3, assignee_id = $4, status = $5, priority = $6, start_date = $7, end_date = $8,
               updated_at = now()
        WHERE id = $1 RETURNING id`,
-      [id, projectId, title, assigneeId || null, status, priority, start, end]
+      [id, projectId, title, assigneeId || null, status, priority, normData(start), normData(end)]
     )
     if (!r.rows.length) return false
     await replaceChildren(client, id, checklist, memberIds, assigneeId)
@@ -1274,6 +1274,10 @@ const conselhoDe = (formacao, setor, cargo) => (normFormacao(formacao)
 // O número só faz sentido para quem tem conselho. Guardar um CAU em quem não
 // tem deixa o dado esperando para reaparecer quando a formação mudar.
 const normRegistro = (formacao, setor, cargo, v) => (conselhoDe(formacao, setor, cargo) && v ? String(v).trim() || null : null)
+// Data em branco é ausência de data, não a string "". O Postgres recusa '' como
+// date, e era isso que devolvia 500 para quem salvava um projeto sem prazo: o
+// formulário deixava tentar, e a gravação morria no banco.
+const normData = (v) => { const s = String(v ?? '').trim(); return s || null }
 const normKind = (v) => (CHANGE_KINDS.includes(v) ? v : 'requisicao')
 const normUrgency = (v) => (URGENCIES.includes(v) ? v : 'medium')
 
@@ -2156,6 +2160,16 @@ async function ensureSchema() {
   // obrigatorias. Guardamos NULL e nunca string vazia: a checagem de e-mail
   // repetido compara lower(email), e dois '' colidiriam entre si.
   await q('ALTER TABLE users ALTER COLUMN email DROP NOT NULL')
+
+  // ----- prazo deixa de ser obrigatorio -----
+  // Projeto e etapa passam a poder nascer sem prazo: o cadastro aceita o que a
+  // pessoa tem na mao e cobra o resto pelo aviso de pendencia. As colunas eram
+  // NOT NULL enquanto o formulario ja deixava salvar em branco — a gravacao
+  // morria no banco, com 500 na cara de quem tentava.
+  await q('ALTER TABLE projects ALTER COLUMN start_date DROP NOT NULL')
+  await q('ALTER TABLE projects ALTER COLUMN end_date DROP NOT NULL')
+  await q('ALTER TABLE tasks ALTER COLUMN start_date DROP NOT NULL')
+  await q('ALTER TABLE tasks ALTER COLUMN end_date DROP NOT NULL')
   await q('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL')
 
   // ----- setor passa a ser so a AREA -----

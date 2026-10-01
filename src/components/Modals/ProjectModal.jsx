@@ -1,7 +1,7 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
-import { Modal, Field, SelecaoMultipla } from '../primitives/primitives.jsx'
-import { PROJECT_HEX, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, PREFEITURAS, SECRETARIAS, canonizar, parseBRL } from '../../data/store.js'
+import { Modal, Field, SelecaoMultipla, PopupPendencias } from '../primitives/primitives.jsx'
+import { PROJECT_HEX, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, PREFEITURAS, SECRETARIAS, canonizar, parseBRL, pendenciasDoProjeto } from '../../data/store.js'
 import { dateError } from './shared/formHelpers.js'
 import { MoneyInput } from './shared/MoneyInput.jsx'
 import { ResourceEditor } from './ResourceModals.jsx'
@@ -14,7 +14,7 @@ import { ResourceEditor } from './ResourceModals.jsx'
 // demais veem o papel como texto (o backend também ignora alterações de
 // permissão de não-admins) mas ainda podem marcar os responsáveis, porque
 // PUT /api/projects/:id aceita responsibleIds de quem tem Edição total.
-function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, onChangeResponsibles, isAdmin, error }) {
+function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, onChangeResponsibles, isAdmin }) {
   const roleOf = (userId) => members.find(x => x.userId === userId)?.role || 'none'
   const setRole = (userId, value) => {
     const others = members.filter(x => x.userId !== userId)
@@ -124,7 +124,6 @@ function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, on
         })}
       </div>
       {!teamUsers.length && <div className="perm-empty">Nenhum participante adicionado.</div>}
-      {error && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{error}</span>}
       <div className="perm-default-label" style={{ marginTop: 10 }}>
         {comAcesso === 0
           ? 'Ninguém além dos administradores vê este projeto.'
@@ -164,19 +163,37 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const [convenioValorText, setConvenioValorText] = React.useState(moneyText(project?.convenioValor))
   const [projStatus, setProjStatus] = React.useState(project?.status || 'planejamento')
   const [touched, setTouched] = React.useState(false)
+  const [avisado, setAvisado] = React.useState(false)
 
   const dErr = dateError(start, end)
   const nameErr = touched && !name.trim() ? 'Informe um nome.' : null
-  const prefErr = touched && !prefeitura.trim() ? 'Informe a prefeitura.' : null
-  const respErr = touched && responsibleIds.length === 0 ? 'Selecione ao menos um profissional responsável.' : null
+
+  // Prefeitura e responsável deixaram de travar o cadastro: viraram pendência,
+  // como o resto. Sem isso, o projeto que chega sem esses dados não entrava no
+  // sistema — e passava a existir só no papel de alguém.
+  const rascunho = {
+    prefeitura, secretaria, responsibleIds, start, end, origemRecurso, ehConvenio,
+    valorEstimado: parseBRL(estimadoText), valorOrcado: parseBRL(orcadoText),
+    convenioNumero, convenioValor: parseBRL(convenioValorText),
+  }
+  const pendencias = pendenciasDoProjeto(rascunho)
   const badMoney = (t) => !!t.trim() && parseBRL(t) === null
   const estimadoErr = touched && badMoney(estimadoText) ? 'Valor inválido. Ex.: 250000,00' : null
   const orcadoErr = touched && badMoney(orcadoText) ? 'Valor inválido. Ex.: 250000,00' : null
 
+  // O que falta é dito ANTES de gravar, num popup por cima do formulário, com o
+  // caminho seguindo em frente ali mesmo. Gravar e avisar depois entregaria o
+  // aviso quando já não dá para desistir; travar de vez é o que esta mudança
+  // veio desfazer.
   const save = () => {
     setTouched(true)
-    if (!name.trim() || !prefeitura.trim() || dErr) return
+    if (!name.trim() || dErr) return
     if (badMoney(estimadoText) || badMoney(orcadoText)) return
+    if (pendencias.length) { setAvisado(true); return }
+    gravar()
+  }
+
+  const gravar = () => {
     onSave({
       ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start, end, notes: notes.trim(), resources, members,
       prefeitura: prefeitura.trim(), secretaria: secretaria.trim(), responsibleIds,
@@ -192,6 +209,12 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
         <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
         <button className="btn btn-primary" onClick={save}>{editing ? 'Salvar alterações' : 'Criar projeto'}</button>
       </>}>
+      {avisado && (
+        <PopupPendencias itens={pendencias} onCancelar={() => setAvisado(false)}
+          onSalvar={() => { setAvisado(false); gravar() }}
+          rotulo={editing ? 'Salvar mesmo assim' : 'Criar mesmo assim'}
+          acao={'Dá para ' + (editing ? 'salvar' : 'criar') + ' assim e completar depois. Enquanto faltar, um aviso fica ao lado do nome do projeto.'} />
+      )}
       <Field label="Nome do projeto">
         <input className="control" value={name?? ''} autoFocus placeholder="Ex.: Rebrand 2026" onChange={e => setName(e.target.value)} />
         {nameErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{nameErr}</span>}
@@ -206,7 +229,6 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
             <option value="">Selecione a prefeitura</option>
             {opcoesCom(PREFEITURAS, prefeitura).map(p => <option key={p} value={p}>{p}</option>)}
           </select>
-          {prefErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{prefErr}</span>}
         </Field>
         <Field label="Secretaria">
           <select className="control" value={secretaria ?? ''} onChange={e => setSecretaria(e.target.value)}>
@@ -218,7 +240,7 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
 
       <PermissionsEditor users={users} members={members} responsibleIds={responsibleIds}
         onChangeMembers={setMembers} onChangeResponsibles={setResponsibleIds}
-        isAdmin={isAdmin} error={respErr} />
+        isAdmin={isAdmin} />
 
       {/* A origem vem ANTES dos valores: é ela que diz de onde vem o dinheiro,
           e o convênio — quando existe — é o que dá nome e tamanho a ele. */}

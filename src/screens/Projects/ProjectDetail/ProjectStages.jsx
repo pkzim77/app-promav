@@ -1,8 +1,8 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
-import { AvatarStack, SegControl, SemResponsavel } from '../../../components/primitives/primitives.jsx'
+import { AvatarStack, SegControl, SemResponsavel, AvisoPendencias } from '../../../components/primitives/primitives.jsx'
 import { TaskTimerButton } from '../../../components/TimeTracker/TimeTracker.jsx'
-import { STATUSES, STATUS_MAP, CHECK_STATES, estadoDoItem, calcularProgresso, checklistStats, taskMembers } from '../../../data/store.js'
+import { STATUSES, STATUS_MAP, CHECK_STATES, estadoDoItem, calcularProgresso, checklistStats, taskMembers, pendenciasDaEtapa } from '../../../data/store.js'
 import { EmptyState } from '../shared/EmptyState.jsx'
 
 // Etapas — substitui a antiga aba Atividades. As duas mostravam a MESMA tabela
@@ -192,7 +192,7 @@ function CorpoDaTask({ task, users, sessions, currentUserId, now, canEdit, mostr
         </div>
       )}
       {semChecklist
-        ? <p className="et-vazio">{avulsa ? 'Esta atividade não tem checklist.' : 'Esta etapa não tem checklist.'}</p>
+        ? <p className="et-vazio">{avulsa ? 'Esta atividade não tem sub-atividades.' : 'Esta etapa não tem atividades.'}</p>
         : <Checklist task={task} responsaveis={membros} canEdit={canEdit} onAssign={onAssignChecklist}
             onSetState={onSetChecklistState} onEditItem={onEditChecklistItem}
             onExcluirItem={onExcluirChecklistItem} />}
@@ -244,6 +244,14 @@ function Etapa({ etapa, aberta, onToggleAberta, selecionando, selecionada, onSel
           <span className="et-linha">
             <Icon name="chevronRight" size={14} className="et-seta" />
             <span className="et-nome">{etapa.nome}</span>
+            {/* A etapa pode nascer sem responsável, sem prazo ou sem atividades.
+                O aviso é o que impede isso de virar esquecimento: a etapa existe,
+                mas ninguém sabe de quem é nem para quando. */}
+            <AvisoPendencias itens={pendenciasDaEtapa({
+              assigneeId: etapa.tasks.some(t => t.assigneeId) || null,
+              end: etapa.tasks.find(t => t.end)?.end || null,
+              checklist: etapa.tasks.flatMap(t => t.checklist || []),
+            })} oque="Falta nesta etapa" />
             <SeloEtapa status={etapa.status} />
             {etapa.total > 0 && <span className="et-conta">{etapa.feitos}/{etapa.total}</span>}
             {duplicada && <span className="et-dup">{etapa.tasks.length}× duplicada</span>}
@@ -355,20 +363,19 @@ function FiltroEstado({ valor, contagem, onEscolher }) {
   )
 }
 
-// "Minhas" é sobre ATIVIDADE, não sobre estar na equipe: numa etapa de oito
-// atividades onde nenhuma é sua, não há o que você fazer ali. A exceção é a
-// etapa sem checklist — não tem atividade para carregar o nome de ninguém, e
-// aí vale quem responde pela etapa.
-const etapaDaPessoa = (etapa, userId) => !!userId && etapa.tasks.some(t => {
-  const itens = t.checklist || []
-  return itens.length
-    ? itens.some(i => i.assigneeId === userId)
-    : taskMembers(t).includes(userId)
-})
+// "Minhas" é tudo em que a pessoa está: atividade no nome dela OU a etapa no
+// nome dela. A primeira versão exigia atividade marcada, e escondia a etapa que
+// é sua mas cujas atividades ainda não foram distribuídas — que é justamente
+// quando você precisa vê-la.
+//
+// Status não entra: etapa concluída também é sua, e some da lista quem escolhe
+// o estado no filtro ao lado, não este botão.
+const etapaDaPessoa = (etapa, userId) => !!userId && etapa.tasks.some(t =>
+  taskMembers(t).includes(userId) || (t.checklist || []).some(i => i.assigneeId === userId))
 
 export function ProjectStages({ project, tasks, users, sessions, currentUserId, now, canEdit = true, isAdmin = false,
                                onAssignChecklist, onSetChecklistState, onEditChecklistItem, onExcluirChecklistItem,
-                               onMoveTask, onNewTask, onNewStageItem, onCreateStages,
+                               onMoveTask, onNewTask, onNewStageItem, onNewStage, onCreateStages,
                                onEditTask, onDeleteTask, onDeleteStages, onStartTimer, onStopTimer }) {
   const doProjeto = React.useMemo(() => tasks.filter(t => t.projectId === project.id), [tasks, project.id])
   const { etapas, avulsas } = React.useMemo(() => agruparEtapas(doProjeto), [doProjeto])
@@ -492,7 +499,7 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
             action={
               <div className="et-nova">
                 <BotaoCriarTemplate projectId={project.id} onCreateStages={onCreateStages} />
-                <button className="btn btn-ghost" onClick={() => onNewTask(project.id)}>Atividade avulsa</button>
+                <button className="btn btn-ghost" onClick={() => onNewStage(project.id)}>Criar etapa</button>
               </div>
             } />
         ) : (
@@ -574,9 +581,12 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
             <button className="btn btn-primary btn-sm" onClick={() => onNewStageItem(project.id)}>
               <Icon name="plus" size={16} stroke={2.2} />Nova atividade
             </button>
-            <button className="btn btn-ghost btn-sm" onClick={() => onNewTask(project.id)}
-              title="Cria uma atividade fora do template de etapas">
-              Atividade avulsa
+            {/* Cria uma etapa do template. A caixa no topo do modal é que troca
+                para atividade avulsa — o caminho existe, mas deixou de ser o
+                rótulo do botão: etapa é o que se cria aqui todo dia. */}
+            <button className="btn btn-ghost btn-sm" onClick={() => onNewStage(project.id)}
+              title="Cria uma etapa do processo neste projeto">
+              <Icon name="flag" size={15} />Criar etapa
             </button>
           </div>
         )}

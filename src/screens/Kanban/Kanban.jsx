@@ -29,7 +29,9 @@ function KanbanCard({ task, project, users, sessions, currentUserId, now, onStar
         <PriorityTag priority={task.priority} />
         <div className="right">
           <ChecklistMini task={task} />
-          <span className="kc-date">{fmtShort(task.start)}–{fmtShort(task.end)}</span>
+          {(task.start || task.end) && (
+            <span className="kc-date">{fmtShort(task.start)}–{fmtShort(task.end)}</span>
+          )}
           {members.length ? <AvatarStack users={members} size={24} max={3} /> : <SemResponsavel compacto />}
         </div>
       </div>

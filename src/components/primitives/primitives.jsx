@@ -110,6 +110,12 @@ export function ChecklistMini({ task }) {
 // caía no <body>, então o próximo Tab recomeçava do canto da página.
 const FOCAVEIS = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
+// Modais empilhados (o aviso de pendências abre por cima do formulário): só o
+// de cima responde ao teclado. Sem isto, um Esc fecharia os dois de uma vez, e
+// as duas armadilhas de Tab disputariam o foco — a de baixo puxaria o cursor de
+// volta para o formulário enquanto o aviso está na frente.
+const pilhaDeModais = []
+
 export function Modal({ title, onClose, children, footer, className = '' }) {
   const caixa = React.useRef(null)
   const tituloId = React.useId()
@@ -135,6 +141,7 @@ export function Modal({ title, onClose, children, footer, className = '' }) {
     if (!caixa.current.contains(document.activeElement)) caixa.current.focus()
 
     const aoTeclar = (e) => {
+      if (pilhaDeModais[pilhaDeModais.length - 1] !== caixaNo) return
       if (e.key === 'Escape') { fechar.current(); return }
       if (e.key !== 'Tab') return
       // offsetParent descarta o que está escondido (campo de aba fechada, por
@@ -149,9 +156,12 @@ export function Modal({ title, onClose, children, footer, className = '' }) {
       else if (e.shiftKey && atual === primeiro) { e.preventDefault(); ultimo.focus() }
     }
 
+    pilhaDeModais.push(caixaNo)
     window.addEventListener('keydown', aoTeclar)
     return () => {
       window.removeEventListener('keydown', aoTeclar)
+      const posicao = pilhaDeModais.indexOf(caixaNo)
+      if (posicao >= 0) pilhaDeModais.splice(posicao, 1)
 
       // O StrictMode roda efeito → limpeza → efeito de novo no mesmo instante,
       // com o modal ainda na tela. Devolver o foco ali tiraria o cursor do
@@ -296,6 +306,51 @@ export function SelecaoMultipla({ itens, onAlternar, rotulo, buscaAcima = 8, ari
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// Triângulo ao lado do nome: o registro existe, mas com buracos. O que falta
+// vai no title e no aria-label — um ícone que só diz "algo está errado" obriga
+// a abrir o cadastro para descobrir o quê.
+export function AvisoPendencias({ itens = [], oque = 'Informações pendentes' }) {
+  if (!itens.length) return null
+  const texto = oque + ': ' + itens.join(', ')
+  return (
+    <span className="pend-aviso" title={texto} aria-label={texto} role="img">
+      <Icon name="alert" size={14} />
+    </span>
+  )
+}
+
+// O aviso ao tentar salvar: um popup por cima do formulário. Inline, ele nascia
+// no topo de um formulário rolado e passava despercebido — a pessoa clicava de
+// novo sem entender por que não salvou.
+//
+// O caminho segue em frente aqui mesmo, no "salvar mesmo assim": voltar ao
+// formulário para clicar no botão outra vez seria pedir o mesmo clique duas
+// vezes.
+export function PopupPendencias({ itens = [], onCancelar, onSalvar, rotulo, acao }) {
+  return (
+    <Modal title="Informações pendentes" onClose={onCancelar}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onCancelar}>Voltar e completar</button>
+        <button className="btn btn-primary" onClick={onSalvar}>{rotulo}</button>
+      </>}>
+      <PainelPendencias itens={itens} acao={acao} />
+    </Modal>
+  )
+}
+
+// A lista em si. Vive separada do popup porque é ela que descreve o que falta —
+// o popup só a coloca na frente de quem precisa ler.
+export function PainelPendencias({ itens = [], acao }) {
+  if (!itens.length) return null
+  return (
+    <div className="pend-painel" role="status">
+      <strong><Icon name="alert" size={15} />Informações pendentes</strong>
+      <ul>{itens.map(i => <li key={i}>{i}</li>)}</ul>
+      <p>{acao}</p>
     </div>
   )
 }
