@@ -1,7 +1,7 @@
 import './TimeTracker.css'
 import React from 'react'
 import { Icon } from '../Icon.jsx'
-import { PROJECT_COLORS, PROJECT_STATUS_MAP } from '../../data/store.js'
+import { PROJECT_COLORS, PROJECT_STATUS_MAP, estadoDoItem } from '../../data/store.js'
 // Cronômetro por atividade — cada sessão é vinculada a uma tarefa (taskId).
 
 export function fmtClock(ms) {
@@ -91,8 +91,17 @@ export function TimeClock({ currentUser, tasks, projects, sessions, now, onStart
   const todayTasks = Object.keys(byTask).map(tid => ({ task: tasks.find(t => t.id === tid), ms: byTask[tid] }))
     .filter(x => x.task).sort((a, b) => b.ms - a.ms)
 
-  // atividades do usuário disponíveis para iniciar (responsável ou membro, não concluídas)
-  const myTasks = tasks.filter(t => (t.assigneeId === currentUser.id || (t.memberIds || []).includes(currentUser.id)) && t.status !== 'done')
+  // O que entra na lista: etapa com atividade SUA ainda por fazer.
+  //
+  // Antes bastava ser responsável ou participante da etapa, e isso enchia a
+  // lista de quem coordena — a conta da coordenação está como responsável de 40
+  // etapas abertas, e o cronômetro virava um catálogo do escritório. Cronometrar
+  // é sobre o que você vai fazer agora, e isso está na atividade, não no
+  // cabeçalho da etapa.
+  //
+  // Atividade já concluída não conta: não há tempo a marcar nela.
+  const myTasks = tasks.filter(t => t.status !== 'done'
+    && (t.checklist || []).some(i => i.assigneeId === currentUser.id && estadoDoItem(i) !== 'done'))
 
   return (
     <div className="userselect" ref={ref}>
@@ -129,7 +138,12 @@ export function TimeClock({ currentUser, tasks, projects, sessions, now, onStart
 
           <div className="menu-label">Iniciar nas minhas atividades</div>
           <div className="ponto-list">
-            {myTasks.length === 0 && <div className="ponto-empty">Você não tem atividades em aberto. Escolha uma atividade em Projetos ou no Kanban.</div>}
+            {myTasks.length === 0 && (
+              <div className="ponto-empty">
+                Nenhuma atividade no seu nome. Na aba Etapas de um projeto, escolha o
+                responsável de cada atividade — é por ele que esta lista se guia.
+              </div>
+            )}
             {myTasks.map(t => {
               const isActive = active && active.taskId === t.id
               const total = taskTimeFor(sessions, t.id, currentUser.id, now)
