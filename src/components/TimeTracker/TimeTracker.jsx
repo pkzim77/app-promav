@@ -91,7 +91,7 @@ export function TimeClock({ currentUser, tasks, projects, sessions, now, onStart
   const todayTasks = Object.keys(byTask).map(tid => ({ task: tasks.find(t => t.id === tid), ms: byTask[tid] }))
     .filter(x => x.task).sort((a, b) => b.ms - a.ms)
 
-  // O que entra na lista: etapa com atividade SUA ainda por fazer.
+  // O que entra na lista: etapa com atividade sua ainda por fazer.
   //
   // Antes bastava ser responsável ou participante da etapa, e isso enchia a
   // lista de quem coordena — a conta da coordenação está como responsável de 40
@@ -99,9 +99,17 @@ export function TimeClock({ currentUser, tasks, projects, sessions, now, onStart
   // é sobre o que você vai fazer agora, e isso está na atividade, não no
   // cabeçalho da etapa.
   //
-  // Atividade já concluída não conta: não há tempo a marcar nela.
-  const myTasks = tasks.filter(t => t.status !== 'done'
-    && (t.checklist || []).some(i => i.assigneeId === currentUser.id && estadoDoItem(i) !== 'done'))
+  // Atividade SEM dono, porém, é de quem responde pela etapa: ela existe, está
+  // por fazer, e sem esta regra sumiria do cronômetro de todo mundo até alguém
+  // distribuí-la. Com dono, vale o dono — mesmo sendo outra pessoa na sua etapa.
+  //
+  // Atividade concluída não conta de jeito nenhum: não há tempo a marcar nela.
+  const myTasks = tasks.filter(t => {
+    if (t.status === 'done') return false
+    const porFazer = (t.checklist || []).filter(i => estadoDoItem(i) !== 'done')
+    return porFazer.some(i => i.assigneeId === currentUser.id)
+      || (t.assigneeId === currentUser.id && porFazer.some(i => !i.assigneeId))
+  })
 
   return (
     <div className="userselect" ref={ref}>
@@ -140,8 +148,8 @@ export function TimeClock({ currentUser, tasks, projects, sessions, now, onStart
           <div className="ponto-list">
             {myTasks.length === 0 && (
               <div className="ponto-empty">
-                Nenhuma atividade no seu nome. Na aba Etapas de um projeto, escolha o
-                responsável de cada atividade — é por ele que esta lista se guia.
+                Nenhuma atividade sua por fazer. Entram aqui as atividades no seu nome e
+                as que ainda não têm dono nas etapas pelas quais você responde.
               </div>
             )}
             {myTasks.map(t => {
