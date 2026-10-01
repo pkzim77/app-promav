@@ -1,7 +1,7 @@
 import React from 'react'
 import { Sidebar, TopBar } from './components/Chrome/Chrome.jsx'
 import { Toast } from './components/primitives/primitives.jsx'
-import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal, PeopleModal, PersonCard, StageItemModal, StageActivitiesModal } from './components/Modals/Modals.jsx'
+import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal,KmzModal, PeopleModal, PersonCard, StageItemModal, StageActivitiesModal } from './components/Modals/Modals.jsx'
 import { Hub } from './screens/Hub/Hub.jsx'
 import { ProjectList, ProjectDetail } from './screens/Projects/Projects.jsx'
 import { Kanban } from './screens/Kanban/Kanban.jsx'
@@ -270,7 +270,9 @@ export default function App() {
   const openPerson = (user) => setModal({ type: 'person', user })
   const openEditPerson = (user) => setModal({ type: 'personEdit', user })
   const openProjectFromPerson = (projectId) => { setModal(null); setRoute({ view: 'projects', projectId }) }
-  const openEditProject = (project) => setModal({ type: 'project', project })
+  // `tab` escolhe a aba com que o modal abre: a Ficha técnica manda para
+  // 'tipo' quando a pessoa quer lançar a execução dos trechos do mapa.
+  const openEditProject = (project, tab = 'geral') => setModal({ type: 'project', project, tab })
   const renameProject = async (project) => {
     const name = window.prompt('Novo nome do projeto:', project.name)
     if (name == null || !name.trim() || name.trim() === project.name) return
@@ -280,16 +282,24 @@ export default function App() {
     } catch (e) { falhou(e.message || 'Erro ao renomear projeto.') }
   }
   const saveProject = async (data) => {
+    // O .kmz escolhido no modal não vai no corpo JSON do projeto: é um arquivo,
+    // e sobe num segundo passo — depois de salvar, porque um projeto novo só
+    // ganha id ao ser criado. Se o upload falhar, o resto do cadastro já está
+    // gravado e o usuário só precisa reanexar o arquivo.
+    const { kmzUpload, ...payload } = data
     try {
-      if (data.id) {
-        const saved = await api.updateProject(data.id, data)
-        setProjects(ps => ps.map(p => p.id === saved.id ? saved : p)); flash('Projeto atualizado.')
-      } else {
-        const saved = await api.createProject(data)
-        setProjects(ps => [...ps, saved]); flash('Projeto criado.')
-      }
+      let saved = payload.id ? await api.updateProject(payload.id, payload) : await api.createProject(payload)
+      setProjects(ps => payload.id ? ps.map(p => p.id === saved.id ? saved : p) : [...ps, saved])
+      const msg = payload.id ? 'Projeto atualizado.' : 'Projeto criado.'
       setModal(null)
-    } catch (e) { falhou(e.message || 'Erro ao salvar projeto.') }
+      if (kmzUpload?.file) {
+        try {
+          saved = await api.uploadFile(saved.id, kmzUpload.file, 'kmz', kmzUpload.label || '')
+          setProjects(ps => ps.map(p => p.id === saved.id ? saved : p))
+          flash(`${msg} .kmz anexado.`)
+        } catch (e) { flash(`${msg} Mas o .kmz não foi enviado: ${e.message || 'erro no envio'}`) }
+      } else flash(msg)
+    } catch (e) { flash(e.message || 'Erro ao salvar projeto.') }
   }
   const saveUser = async (data) => {
     try {
@@ -1090,7 +1100,8 @@ export default function App() {
           onSave={saveChange} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'project' && (
-        <ProjectModal project={modal.project} users={users} folders={folders} defaultFolderId={modal.defaultFolderId} isAdmin={isAdmin} onSave={saveProject} onClose={() => setModal(null)} />
+        <ProjectModal project={modal.project} users={users} folders={folders} defaultFolderId={modal.defaultFolderId} isAdmin={isAdmin}
+          initialTab={modal.tab} onSave={saveProject} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'person' && (
         <PersonCard user={modal.user} projects={projects} tasks={tasks}
@@ -1108,6 +1119,9 @@ export default function App() {
       )}
       {modal?.type === 'resource' && modal.resType === 'image' && (
         <ImageModal onSave={saveResource} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'resource' && modal.resType === 'kmz' && (
+        <KmzModal onSave={saveResource} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'stageItem' && (
         <StageItemModal

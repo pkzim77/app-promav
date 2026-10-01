@@ -5,7 +5,10 @@ import './Modals.css'
 // fica em shared/.
 
 export { TaskModal } from './TaskModal.jsx'
-export { DocumentModal, LinkModal, ImageModal } from './ResourceModals.jsx'
+export { DocumentModal, LinkModal, ImageModal, KmzModal } from './ResourceModals.jsx'
+// KmzViewerModal fica FORA deste índice de propósito: ele é importado sob
+// demanda (React.lazy) na Ficha técnica. Reexportar aqui o tornaria alcançável
+// estaticamente e jogaria o Leaflet de volta no bundle principal.
 export { ProjectModal } from './ProjectModal.jsx'
 export { PeopleModal } from './PeopleModal.jsx'
 export { PersonCard } from './PersonCard.jsx'

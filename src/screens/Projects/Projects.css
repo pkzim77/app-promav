@@ -94,7 +94,7 @@
 
 /* ---------- Documents + links columns (detail screen) ---------- */
 
-.res-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.res-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
 
 .res-col { padding: 16px 18px; }
 
@@ -113,6 +113,12 @@
 .doc-row { display: flex; align-items: center; gap: 11px; padding: 9px 8px; border-radius: var(--r-md); transition: background var(--dur); }
 
 .doc-row:hover { background: var(--bg-subtle); }
+
+/* Linha de mapa: abre o visualizador em vez de navegar, então precisa parecer
+   clicável mesmo não sendo um <a>. */
+.doc-row-action { cursor: pointer; }
+
+.doc-row-action:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 
 .doc-ic { width: 34px; height: 34px; flex-shrink: 0; border-radius: var(--r-sm); background: var(--brand-soft); color: var(--brand); display: flex; align-items: center; justify-content: center; }
 
@@ -325,8 +331,42 @@
 
 .proj-tech { display: flex; flex-direction: column; gap: 16px; }
 
+.tech-section { padding: 22px; }
+
+.tech-section-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 18px; }
+
+.tech-section-head h3 { font: var(--text-h4); margin: 0; color: var(--fg-1); }
+
+.tech-section-head p { margin: 4px 0 0; font-size: 13px; color: var(--fg-3); }
+
+/* Espaço reservado para os campos técnicos ainda não definidos. */
+.tech-empty { display: flex; gap: 13px; align-items: flex-start; padding: 18px; border: 1.5px dashed var(--border-strong); border-radius: var(--r-md); background: var(--bg-subtle); color: var(--fg-4); }
+
+.tech-empty strong { display: block; font-size: 13.5px; color: var(--fg-2); margin-bottom: 4px; }
+
+.tech-empty p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--fg-3); max-width: 62ch; }
+
 /* Grade para os campos técnicos, quando existirem (mesmo padrão do Panorama). */
 .tech-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 18px 26px; }
+
+/* ---------- Mapa da obra (piçarramento / pavimentação) ----------
+   O visualizador (.kmz-*) é o mesmo do modal, em Modals.css; aqui só o que
+   muda por estar embutido na página: cabeçalho com ações e seletor de arquivo. */
+.tech-mapa .tech-section-head { align-items: center; }
+.tech-mapa .tech-section-head > div:first-of-type { min-width: 0; }
+.tech-mapa-tipo { margin-left: 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--brand); background: var(--brand-soft); padding: 2px 8px; border-radius: var(--r-full); vertical-align: 2px; }
+.tech-mapa-acoes { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.tech-mapa-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+/* Na página o mapa pode ser mais alto que no modal: não disputa espaço com cabeçalho e rodapé. */
+.tech-mapa .kmz-map { height: min(64vh, 560px); }
+.tech-mapa .kmz-side { max-height: min(64vh, 560px); }
+
+@media (max-width: 720px) {
+  .tech-mapa .tech-section-head { flex-wrap: wrap; }
+  .tech-mapa-acoes { margin-left: 0; width: 100%; justify-content: flex-start; }
+  .tech-mapa .kmz-side { max-height: 220px; } /* painel abaixo do mapa, como no modal */
+}
 
 /* ---------- Cores do gráfico de progresso ----------
    Paleta própria do gráfico (cinza / laranja / verde), separada dos tokens de

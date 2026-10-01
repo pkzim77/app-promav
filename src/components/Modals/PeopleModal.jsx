@@ -1,7 +1,7 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field } from '../primitives/primitives.jsx'
-import { CARGOS, FORMACOES, SECTORS, ROLE_LABEL, effectiveProjectRole, AVATAR_COLORS, conselhoDe } from '../../data/store.js'
+import { CARGOS, FORMACOES, SECTORS, ROLE_LABEL, effectiveProjectRole, AVATAR_COLORS, conselhoDe, PROJECT_HEX } from '../../data/store.js'
 // Cadastro/edição de um profissional, com as abas de dados e de acesso.
 //
 // Este componente veio de 9724d68 (tela de Profissionais). O refactor d14c415
@@ -14,6 +14,11 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
   // Editando a própria conta: travar o próprio "is_admin"/"Inativo" evita se
   // trancar fora do sistema (o backend também recusa, isto é só o aviso na hora).
   const isSelf = editing && user.id === currentUserId
+  // Só trava a remoção do admin se ela for a única administradora ativa —
+  // havendo outra pessoa admin, alguém pode reabrir o acesso dela depois.
+ 
+    && users.filter(u => u.isAdmin && u.isActive !== false).length <= 1
+  
   // Só trava a remoção do admin se ela for a única administradora ativa —
   // havendo outra pessoa admin, alguém pode reabrir o acesso dela depois.
   const isLastAdmin = editing && user.isAdmin

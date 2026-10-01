@@ -101,9 +101,10 @@ export function ProjectDetail({ project, tasks, users, sessions, changes = [], c
           projeto para o outro. */}
       {tab === 'panorama' ? (
         <ProjectCover project={project} tasks={tasks} users={users} />
-      ) : tab === 'arquivos' ? (
+      )  : tab === 'arquivos' ? (
         <ProjectTechSheet project={project} canEdit={canEdit}
-          onCopyResource={onCopyResource} onDeleteResource={onDeleteResource} onAddResource={onAddResource} />
+          onCopyResource={onCopyResource} onDeleteResource={onDeleteResource} onAddResource={onAddResource}
+          onEditSegments={() => onEdit(project, 'tipo')} />
       ) : tab === 'mudancas' ? (
         <ProjectChanges project={project} changes={changes} tasks={tasks} users={users}
           currentUserId={currentUserId} canEdit={canEdit} canPublish={canPublish} onNew={onNewChange} onEdit={onEditChange}

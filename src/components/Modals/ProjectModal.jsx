@@ -1,10 +1,18 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
-import { Modal, Field, SelecaoMultipla, PopupPendencias } from '../primitives/primitives.jsx'
-import { PROJECT_HEX, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, PREFEITURAS, SECRETARIAS, canonizar, parseBRL, pendenciasDoProjeto } from '../../data/store.js'
+import { Modal, Field, SelecaoMultipla, PopupPendencias, SegControl } from '../primitives/primitives.jsx'
+import { PROJECT_HEX, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, PROJECT_TYPES, TIPOS_COM_KMZ, PREFEITURAS, SECRETARIAS, canonizar, parseBRL, pendenciasDoProjeto, formatBytes } from '../../data/store.js'
 import { dateError } from './shared/formHelpers.js'
 import { MoneyInput } from './shared/MoneyInput.jsx'
-import { ResourceEditor } from './ResourceModals.jsx'
+import { FilePicker } from './ResourceModals.jsx'
+import { ehArquivoKmz } from './shared/kmzGeo.js'
+
+// Carregado sob demanda: arrasta JSZip + togeojson (~90 KB) para ler o .kmz, e
+// só serve quando a aba "Tipo de obra" de um projeto já salvo é aberta — não
+// faz sentido pesar o modal de projeto, que carrega sempre, com isso.
+const KmzSegmentsEditor = React.lazy(() =>
+  import('./KmzSegmentsEditor.jsx').then(m => ({ default: m.KmzSegmentsEditor }))
+)
 
 // Equipe do projeto — lista única que resolve duas coisas de uma vez:
 //  • acesso: quem não estiver na lista NÃO enxerga o projeto no sistema
@@ -134,7 +142,7 @@ function PermissionsEditor({ users, members, responsibleIds, onChangeMembers, on
   )
 }
 
-export function ProjectModal({ project, users = [], folders = [], defaultFolderId = null, isAdmin = false, onSave, onClose }) {
+export function ProjectModal({ project, users = [], folders = [], defaultFolderId = null, isAdmin = false, initialTab = 'geral', onSave, onClose }) {
   const editing = !!project
   const [name, setName] = React.useState(project?.name || '')
   const [desc, setDesc] = React.useState(project?.desc || '')
@@ -162,7 +170,32 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const [convenioNumero, setConvenioNumero] = React.useState(project?.convenioNumero || '')
   const [convenioValorText, setConvenioValorText] = React.useState(moneyText(project?.convenioValor))
   const [projStatus, setProjStatus] = React.useState(project?.status || 'planejamento')
+  const [tipo, setTipo] = React.useState(project?.tipo || 'construcao')
   const [touched, setTouched] = React.useState(false)
+  const [tab, setTab] = React.useState(initialTab || 'geral') // 'geral' | 'tipo'
+  // .kmz escolhido agora, ainda no computador do usuário: o arquivo não cabe no
+  // corpo JSON do projeto, então sobe num segundo passo (ver saveProject em
+  // App.jsx) — inclusive num projeto novo, que só ganha id ao ser criado.
+  const [kmzFile, setKmzFile] = React.useState(null)
+  const [kmzLabel, setKmzLabel] = React.useState('')
+  const [kmzErr, setKmzErr] = React.useState(null)
+
+  // Só piçarramento e pavimentação têm traçado georreferenciado; nos demais
+  // tipos o bloco do .kmz não aparece (e um arquivo já anexado segue guardado,
+  // listado em Documentos na Ficha técnica).
+  const aceitaKmz = TIPOS_COM_KMZ.includes(tipo)
+  const kmzResources = resources.filter(ehArquivoKmz)
+  // Remover aqui é só tirar da lista: o PUT do projeto grava os recursos que
+  // sobraram e o servidor apaga o arquivo órfão. Fechar no Cancelar desfaz.
+  const removeKmz = (r) => setResources(rs => rs.filter(x => x.id !== r.id))
+  const pickKmz = (f, fileErr) => {
+    if (f && !/\.kmz$/i.test(f.name)) { setKmzFile(null); setKmzErr('Selecione um arquivo .kmz.'); return }
+    setKmzFile(fileErr ? null : f); setKmzErr(fileErr || null)
+  }
+  // Aplica uma edição de trecho (nome, extensão executada) dentro do recurso
+  // certo, sem mexer nos outros — o KmzSegmentsEditor devolve o recurso já
+  // atualizado, então é só substituir pelo id.
+  const updateResource = (atualizado) => setResources(rs => rs.map(r => r.id === atualizado.id ? atualizado : r))
   const [avisado, setAvisado] = React.useState(false)
 
   const dErr = dateError(start, end)
@@ -187,8 +220,8 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   // veio desfazer.
   const save = () => {
     setTouched(true)
-    if (!name.trim() || dErr) return
-    if (badMoney(estimadoText) || badMoney(orcadoText)) return
+    if (!name.trim() || dErr) { setTab('geral'); return }
+    if (badMoney(estimadoText) || badMoney(orcadoText)) { setTab('geral'); return }
     if (pendencias.length) { setAvisado(true); return }
     gravar()
   }
@@ -197,7 +230,10 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
     onSave({
       ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start, end, notes: notes.trim(), resources, members,
       prefeitura: prefeitura.trim(), secretaria: secretaria.trim(), responsibleIds,
-      origemRecurso, valorEstimado: parseBRL(estimadoText), valorOrcado: parseBRL(orcadoText), status: projStatus,
+      origemRecurso, valorEstimado: parseBRL(estimadoText), valorOrcado: parseBRL(orcadoText), status: projStatus, tipo,
+      // Só vai o .kmz de um tipo de obra que tem traçado — se o usuário trocou
+      // o tipo depois de escolher o arquivo, ele é descartado.
+      kmzUpload: aceitaKmz && kmzFile ? { file: kmzFile, label: kmzLabel.trim() } : null,
       ehConvenio, convenioNumero: ehConvenio ? convenioNumero.trim() : null,
       convenioValor: ehConvenio ? parseBRL(convenioValorText) : null,
     })
@@ -215,6 +251,67 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
           rotulo={editing ? 'Salvar mesmo assim' : 'Criar mesmo assim'}
           acao={'Dá para ' + (editing ? 'salvar' : 'criar') + ' assim e completar depois. Enquanto faltar, um aviso fica ao lado do nome do projeto.'} />
       )}
+      <div className="proj-tabs">
+        <button type="button" className={'proj-tab' + (tab === 'geral' ? ' on' : '')} onClick={() => setTab('geral')}>
+          <Icon name="file" size={15} />Geral
+        </button>
+        <button type="button" className={'proj-tab' + (tab === 'tipo' ? ' on' : '')} onClick={() => setTab('tipo')}>
+          <Icon name="landmark" size={15} />Tipo de obra
+        </button>
+      </div>
+
+      {tab === 'tipo' ? (
+        <>
+          <Field label="Tipo de projeto">
+            <SegControl options={PROJECT_TYPES} value={tipo} onChange={setTipo} />
+          </Field>
+          {aceitaKmz && (
+            <div className="field">
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                Arquivo .kmz
+                <span style={{ fontWeight: 400, color: 'var(--fg-4)', fontSize: 12.5 }}>área/trecho georreferenciado do serviço</span>
+              </label>
+              {kmzResources.map(r => (
+                <div className="kmz-edit-file" key={r.id}>
+                  <div className="res-edit-row">
+                    <span className="res-edit-ic"><Icon name="map" size={15} /></span>
+                    <span className="res-edit-info">
+                      <span className="res-edit-label">{r.label || r.filename || r.url}</span>
+                      {r.size ? <span className="res-edit-url">{formatBytes(r.size)}</span> : null}
+                    </span>
+                    <button type="button" className="btn-icon res-del" title="Remover este .kmz"
+                      aria-label={`Remover ${r.label || r.filename || 'arquivo .kmz'}`}
+                      onClick={() => removeKmz(r)}>
+                      <Icon name="trash" size={15} />
+                    </button>
+                  </div>
+                  {/* Só dá pra ler o arquivo depois de salvo (precisa do fileId
+                      já gravado no banco) — antes disso não há o que editar aqui. */}
+                  {r.fileId && (
+                    <React.Suspense fallback={<p className="kmz-msg">Carregando trechos…</p>}>
+                      <KmzSegmentsEditor resource={r} onChange={updateResource} />
+                    </React.Suspense>
+                  )}
+                </div>
+              ))}
+              {!kmzResources.length && !kmzFile && <div className="perm-empty">Nenhum arquivo .kmz anexado.</div>}
+              <div style={{ marginTop: kmzResources.length ? 10 : 6 }}>
+                <FilePicker accept=".kmz" file={kmzFile} onPick={pickKmz} error={kmzErr} />
+              </div>
+              {kmzFile && (
+                <input className="control" style={{ marginTop: 8 }} value={kmzLabel}
+                  placeholder="Nome do arquivo — opcional, usa o nome do .kmz se vazio"
+                  onChange={e => setKmzLabel(e.target.value)} />
+              )}
+              <p className="ro-hint" style={{ marginTop: 10, marginBottom: 0 }}>
+                <Icon name="flag" size={14} />
+                O envio e a remoção do .kmz só acontecem ao {editing ? 'salvar as alterações' : 'criar o projeto'}.
+              </p>
+            </div>
+          )}
+        </>
+      ) : (
+      <>
       <Field label="Nome do projeto">
         <input className="control" value={name?? ''} autoFocus placeholder="Ex.: Rebrand 2026" onChange={e => setName(e.target.value)} />
         {nameErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{nameErr}</span>}
@@ -325,6 +422,8 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
         <Field label="Data de término"><input type="date" className="control" value={end??''} onChange={e => setEnd(e.target.value)} /></Field>
       </div>
       {dErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{dErr}</span>}
+      </>
+      )}
     </Modal>
   )
 }

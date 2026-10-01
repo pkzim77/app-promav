@@ -154,6 +154,17 @@ export const PROJECT_STATUSES = [
 ]
 export const PROJECT_STATUS_MAP = Object.fromEntries(PROJECT_STATUSES.map(s => [s.id, s]))
 
+// Tipo de obra do projeto. Só piçarramento e pavimentação recebem o anexo
+// .kmz (a área/trecho georreferenciado do serviço) — os demais tipos não têm
+// uma geometria de mapa que faça sentido anexar.
+export const PROJECT_TYPES = [
+  { id: 'picarramento', label: 'Piçarramento' },
+  { id: 'pavimentacao', label: 'Pavimentação' },
+  { id: 'construcao',   label: 'Construção' },
+  { id: 'reforma',      label: 'Reforma' },
+]
+export const PROJECT_TYPE_MAP = Object.fromEntries(PROJECT_TYPES.map(t => [t.id, t]))
+export const TIPOS_COM_KMZ = ['picarramento', 'pavimentacao']
 // ---------- nome do projeto ----------
 // A equipe nomeia o projeto como um código: "260103_REF._ESC. JOSÉ MARQUES DE
 // SOUSA_NOVA UNIÃO" — data (AAMMNN), tipo de obra, nome e um complemento
