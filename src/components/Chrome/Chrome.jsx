@@ -439,7 +439,7 @@ export function TopBar({ title, currentUser, canNewProject = true, onToggleMobil
         <div className="tb-spacer" />
         <div className="search">
           <Icon name="search" size={17} />
-          <input value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Buscar projetos" />
+          <input value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} aria-label="Buscar projetos" placeholder="Buscar projetos" />
         </div>
         <TimeClock currentUser={currentUser} tasks={tasks} projects={projects} sessions={sessions} now={now}
           onStart={onStartTimer} onStop={onStopTimer} onOpenTask={onOpenTask} />

@@ -5,7 +5,7 @@ import { Avatar, StatusTag, PriorityTag, ChecklistMini, SemResponsavel } from '.
 import { STATUSES, PROJECT_COLORS, taskMembers, fmtShort, effectiveProjectRole, canEditProject } from '../../data/store.js'
 // Lista — atividades em formato de tabela, agrupadas por status (estilo ClickUp).
 
-export function TaskListView({ tasks, projects, users, authUser, filterProject, mine, currentUserId, onFilterProject, onToggleMine, onMoveTask, onNewTask, onEditTask }) {
+export function TaskListView({ tasks, projects, users, authUser, filterProject, mine, currentUserId, onFilterProject, onToggleMine, onMoveTask, onNewTask, onEditTask, embedded }) {
   // Grupos de status recolhidos.
   const [collapsed, setCollapsed] = React.useState(() => new Set())
   const toggle = (id) => setCollapsed(prev => {
@@ -96,7 +96,7 @@ export function TaskListView({ tasks, projects, users, authUser, filterProject, 
   }
 
   return (
-    <div className="page">
+    <div className={'page' + (embedded ? ' page-embutida' : '')}>
       <div className="sec-head">
         <div><h2>Lista</h2><div className="sub">Todas as atividades em formato de lista, agrupadas por status.</div></div>
         {canCreate && <button className="btn btn-primary" onClick={() => onNewTask(createProjectId)}><Icon name="plus" size={17} stroke={2.2} />Nova atividade</button>}

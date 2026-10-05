@@ -769,6 +769,19 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
 .proj-head-desc { font-size: 13.5px; color: var(--fg-3); margin: 2px 0 0; }
 
 .proj-head-editar { flex-shrink: 0; }
+/* Visões do projeto: o cabeçalho fica e só o corpo troca. */
+.proj-visoes { display: inline-flex; gap: 2px; padding: 3px; background: var(--bg-muted); border-radius: var(--r-md); flex-shrink: 0; margin-left: auto; }
+.proj-visao { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: none; background: none; border-radius: calc(var(--r-md) - 2px); font: inherit; font-size: 13px; font-weight: 600; color: var(--fg-3); cursor: pointer; transition: background var(--dur), color var(--dur); }
+.proj-visao:hover { color: var(--fg-1); }
+.proj-visao.on { background: var(--surface); color: var(--fg-1); box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,.08)); }
+.proj-visoes + .proj-head-editar { margin-left: 0; }
+
+/* Kanban/Lista/Gantt dentro do projeto: o projeto já está escolhido. */
+.page-embutida { padding: 0; max-width: none; }
+.page-embutida .filter-select, .page-embutida .filterbar > span { display: none; }
+.page-embutida .sec-head > div:first-child { display: none; }
+.page-embutida .sec-head { justify-content: flex-end; }
+.page-embutida .filterbar:empty { display: none; }
 
 .proj-head-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 18px; padding-left: 36px; font-size: 12.5px; color: var(--fg-3); }
 

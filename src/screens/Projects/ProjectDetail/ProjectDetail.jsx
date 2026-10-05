@@ -6,9 +6,11 @@ import { ProjectTechSheet } from './ProjectTechSheet.jsx'
 import { ProjectStages } from './ProjectStages.jsx'
 import { ProjectChanges } from './ProjectChanges.jsx'
 
-export function ProjectDetail({ project, tasks, users, sessions, changes = [], currentUserId, now, canEdit = true, role, initialTab, focusId, focusNonce, onAssignChecklist, onSetChecklistState, onEditChecklistItem, onExcluirChecklistItem, onDeleteStages, onMoveTask, onNewStageItem, onNewStage, onCreateStages, onStartTimer, onStopTimer, onBack, onEdit, onNewTask, onEditTask, onDeleteTask, onCopyResource, onDeleteResource, onAddResource, onNewChange, onEditChange, onAckChange, onDecideChange }) {
+export function ProjectDetail({ project, tasks, users, sessions, changes = [], currentUserId, now, canEdit = true, role, initialTab, focusId, focusNonce, onAssignChecklist, onSetChecklistState, onEditChecklistItem, onExcluirChecklistItem, onDeleteStages, onMoveTask, onNewStageItem, onNewStage, onCreateStages, onStartTimer, onStopTimer, onBack, onEdit, renderVisao, onNewTask, onEditTask, onDeleteTask, onCopyResource, onDeleteResource, onAddResource, onNewChange, onEditChange, onAckChange, onDecideChange }) {
   // O Panorama abre primeiro: é o que se mostra numa reunião com o cliente.
   // Uma notificação clicada entra com a aba já escolhida em 'initialTab'.
+  const [visao, setVisao] = React.useState('projeto') // 'projeto' | 'kanban' | 'list' | 'gantt'
+  React.useEffect(() => { setVisao('projeto') }, [project.id])
   const [tab, setTab] = React.useState(initialTab || 'panorama') // 'panorama' | 'etapas' | 'arquivos' | 'mudancas'
 
   // Vindo de uma notificação: troca a aba. O 'focusNonce' entra nas dependências
@@ -52,6 +54,15 @@ export function ProjectDetail({ project, tasks, users, sessions, changes = [], c
           <h1>{partes.titulo}</h1>
           {project.desc && <p className="proj-head-desc">{project.desc}</p>}
         </div>
+        {renderVisao && (
+          <div className="proj-visoes" role="group" aria-label="Visualização do projeto">
+            {[['projeto', 'landmark', 'Projeto'], ['kanban', 'inbox', 'Kanban'], ['list', 'list', 'Lista'], ['gantt', 'calendar', 'Gantt']].map(([id, icone, rotulo]) => (
+              <button key={id} className={'proj-visao' + (visao === id ? ' on' : '')} aria-pressed={visao === id} onClick={() => setVisao(id)}>
+                <Icon name={icone} size={15} />{rotulo}
+              </button>
+            ))}
+          </div>
+        )}
         {canEdit && (
           <button className="btn btn-secondary btn-sm proj-head-editar" onClick={() => onEdit(project)}>
             <Icon name="pencil" size={15} />Editar
@@ -81,6 +92,7 @@ export function ProjectDetail({ project, tasks, users, sessions, changes = [], c
           "Ficha técnica" e "Atividades" saíram: a primeira só tinha um aviso de
           campos não definidos mais os arquivos (que viraram aba própria), e a
           segunda era a mesma tabela de tasks que Etapas agora lê como etapas. */}
+      {visao !== 'projeto' ? renderVisao(visao) : <>
       <div className="proj-tabs">
         <button className={'proj-tab' + (tab === 'panorama' ? ' on' : '')} onClick={() => setTab('panorama')}>
           <Icon name="landmark" size={15} />Panorama
@@ -118,6 +130,7 @@ export function ProjectDetail({ project, tasks, users, sessions, changes = [], c
           onNewStageItem={onNewStageItem} onCreateStages={onCreateStages} onNewTask={onNewTask} onEditTask={onEditTask}
           onDeleteTask={onDeleteTask} onStartTimer={onStartTimer} onStopTimer={onStopTimer} />
       )}
+      </>}
     </div>
   )
 }
