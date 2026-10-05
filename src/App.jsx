@@ -1,7 +1,7 @@
 import React from 'react'
 import { Sidebar, TopBar } from './components/Chrome/Chrome.jsx'
 import { Toast } from './components/primitives/primitives.jsx'
-import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal,KmzModal, PeopleModal, PersonCard, StageItemModal, StageActivitiesModal } from './components/Modals/Modals.jsx'
+import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal,KmzModal, PeopleModal, PersonCard, StageItemModal, StageActivitiesModal, ProjectSearchModal } from './components/Modals/Modals.jsx'
 import { Hub } from './screens/Hub/Hub.jsx'
 import { ProjectList, ProjectDetail } from './screens/Projects/Projects.jsx'
 import { Kanban } from './screens/Kanban/Kanban.jsx'
@@ -50,6 +50,7 @@ export default function App() {
   const [changes, setChanges] = React.useState([])
   const [route, setRoute] = React.useState({ view: 'hub' })
   const [projectSearch, setProjectSearch] = React.useState('')
+  const [searchOpen, setSearchOpen] = React.useState(false)
   // Em que pé está o relatório desta semana: 'nenhum', 'rascunho' ou 'enviado'.
   // Vem do bootstrap, então acompanha sozinho quando a pessoa salva ou envia.
   const [relatorioSemana, setRelatorioSemana] = React.useState('enviado')
@@ -978,10 +979,6 @@ export default function App() {
   const soAdmin = route.view === 'people' || route.view === 'weeklyreports'
   const effectiveRoute = soAdmin && !isAdmin ? { view: 'hub' } : route
   const currentProject = effectiveRoute.projectId ? projects.find(p => p.id === effectiveRoute.projectId) : null
-  const normalizedSearch = projectSearch.trim().toLocaleLowerCase('pt-BR')
-  const searchedProjects = normalizedSearch
-    ? projects.filter(p => `${p.name} ${p.desc || ''}`.toLocaleLowerCase('pt-BR').includes(normalizedSearch))
-    : projects
   // Papel efetivo do usuário no projeto aberto (admin/full/view).
   const currentRole = currentProject ? effectiveProjectRole(currentProject, authUser) : 'view'
   const canEditCurrent = canEditProject(currentRole)
@@ -989,7 +986,7 @@ export default function App() {
 
   let screen
   if (effectiveRoute.view === 'hub') {
-    screen = <Hub projects={projects} recentProjects={searchedProjects} tasks={tasks} changes={changes}
+    screen = <Hub projects={projects} recentProjects={projects} tasks={tasks} changes={changes}
       onNavigate={navigate} sessions={sessions} currentUserId={currentUserId} authUser={authUser}
       relatorioSemana={relatorioSemana} now={now} />
   } else if (effectiveRoute.view === 'projects' && currentProject) {
@@ -1002,6 +999,16 @@ export default function App() {
       // por pasta nenhuma, e ainda assim é ali que ele quer continuar.
       onBack={() => { setPastaAberta(currentProject.folderId || null); setRoute({ view: 'projects' }) }}
       onEdit={openEditProject}
+      renderVisao={(view) => view === 'kanban'
+        ? <Kanban embedded tasks={tasks} projects={projects} users={users} authUser={authUser} filterProject={currentProject.id} mine={mine}
+            currentUserId={currentUserId} onFilterProject={setFilterProject} onToggleMine={() => setMine(m => !m)}
+            onMoveTask={moveTask} onNewTask={openNewTask} onEditTask={openEditTask}
+            sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer} />
+        : view === 'list'
+        ? <TaskListView embedded tasks={tasks} projects={projects} users={users} authUser={authUser} filterProject={currentProject.id} mine={mine}
+            currentUserId={currentUserId} onFilterProject={setFilterProject} onToggleMine={() => setMine(m => !m)}
+            onMoveTask={moveTask} onNewTask={openNewTask} onEditTask={openEditTask} />
+        : <Gantt embedded tasks={tasks} projects={projects} filterProject={currentProject.id} onFilterProject={setFilterProject} />}
       onNewTask={openNewTask} onEditTask={openEditTask} onDeleteTask={askDeleteTask}
       onAssignChecklist={assignChecklistItem} onMoveTask={moveTask}
       onSetChecklistState={setChecklistState} onEditChecklistItem={editChecklistItem}
@@ -1011,7 +1018,7 @@ export default function App() {
       onAddResource={openAddResource}
       onNewChange={openNewChange} onEditChange={openEditChange} onAckChange={ackChange} onDecideChange={decideChange} />
   } else if (effectiveRoute.view === 'projects') {
-    screen = <ProjectList projects={searchedProjects} tasks={tasks} folders={folders} authUser={authUser} canCreate={isAdmin}
+    screen = <ProjectList projects={projects} tasks={tasks} folders={folders} authUser={authUser} canCreate={isAdmin}
       openId={pastaAberta} onOpenFolder={setPastaAberta}
       onOpen={(id) => setRoute({ view: 'projects', projectId: id })}
       onEdit={openEditProject} onDelete={askDeleteProject} onNew={openNewProject} onMoveProject={moveProject} onMoveFolder={moveFolder} onNewSubfolder={createFolder} onDeleteFolder={askDeleteFolder} />
@@ -1041,7 +1048,7 @@ export default function App() {
 
   return (
     <div className={'app' + (mobileNavOpen ? ' nav-open' : '')}>
-      <Sidebar route={effectiveRoute} onNavigate={navigate} projects={searchedProjects} tasks={tasks}
+      <Sidebar route={effectiveRoute} onNavigate={navigate} projects={projects} tasks={tasks}
         folders={folders} isAdmin={isAdmin}
         collapsed={navCollapsed} mobileOpen={mobileNavOpen}
         onToggleCollapse={() => setNavCollapsed(c => !c)}
@@ -1059,7 +1066,7 @@ export default function App() {
           onLogout={handleLogout} onNewProject={openNewProject}
           tasks={tasks} projects={projects} sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
           onOpenTask={openStageActivities}
-          searchQuery={projectSearch} onSearchChange={setProjectSearch}
+          searchQuery={projectSearch} onSearchChange={(v) => { setProjectSearch(v); setSearchOpen(true) }}
           notifications={visibleNotifications} unreadCount={unreadNotifications.length}
           readNewsIds={new Set(readNewsIds)} onMarkRead={markNewsAsRead} onMarkAllRead={markAllNewsAsRead}
           onOpenNotification={openNotification}
@@ -1091,6 +1098,11 @@ export default function App() {
             onAbrirEtapa={(t) => openEditTask(t)} onClose={() => setModal(null)} />
         ) : null
       })()}
+      {searchOpen && (
+        <ProjectSearchModal query={projectSearch} onQueryChange={setProjectSearch} projects={projects}
+          onOpen={(id) => { setSearchOpen(false); setProjectSearch(''); setRoute({ view: 'projects', projectId: id }) }}
+          onClose={() => { setSearchOpen(false); setProjectSearch('') }} />
+      )}
       {modal?.type === 'mysector' && (
         <MySectorModal current={authUser?.sector} onSubmit={saveMySector} onClose={() => setModal(null)} />
       )}

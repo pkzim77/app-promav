@@ -5,7 +5,7 @@ import { PROJECT_COLORS, parseDate, dayDiff, addDays, fmtShort, MONTHS_PT, today
 
 const DAY_W = 26
 
-export function Gantt({ tasks, projects, filterProject, onFilterProject }) {
+export function Gantt({ tasks, projects, filterProject, onFilterProject, embedded }) {
   // visible projects
   const shownProjects = filterProject ? projects.filter(p => p.id === filterProject) : projects
   const shownTasks = tasks.filter(t => shownProjects.some(p => p.id === t.projectId))
@@ -60,8 +60,8 @@ export function Gantt({ tasks, projects, filterProject, onFilterProject }) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', maxWidth: 1280, width: '100%', margin: '0 auto' }}>
-      <div style={{ padding: '28px 36px 0' }}>
+    <div className={embedded ? 'page-embutida' : undefined} style={{ display: 'flex', flexDirection: 'column', height: '100%', maxWidth: 1280, width: '100%', margin: '0 auto' }}>
+      <div style={{ padding: embedded ? 0 : '28px 36px 0' }}>
         <div className="sec-head" style={{ marginBottom: 14 }}>
           <div><h2>Gantt</h2><div className="sub">Linha do tempo das atividades, agrupadas por projeto.</div></div>
         </div>
@@ -74,7 +74,7 @@ export function Gantt({ tasks, projects, filterProject, onFilterProject }) {
         </div>
       </div>
 
-      <div style={{ padding: '0 36px 32px', flex: 1, minHeight: 0 }}>
+      <div style={{ padding: embedded ? '0 0 32px' : '0 36px 32px', flex: 1, minHeight: 0 }}>
         <div className="gantt">
           <div className="gantt-scroll" ref={scrollRef}>
             <div className="gantt-grid" style={{ minWidth: 220 + trackW }}>

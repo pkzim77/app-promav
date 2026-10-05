@@ -39,7 +39,7 @@ function KanbanCard({ task, project, users, sessions, currentUserId, now, onStar
   )
 }
 
-export function Kanban({ tasks, projects, users, authUser, filterProject, mine, currentUserId, onFilterProject, onToggleMine, onMoveTask, onNewTask, onEditTask, sessions, now, onStartTimer, onStopTimer }) {
+export function Kanban({ tasks, projects, users, authUser, filterProject, mine, currentUserId, onFilterProject, onToggleMine, onMoveTask, onNewTask, onEditTask, sessions, now, onStartTimer, onStopTimer, embedded }) {
   const [draggingId, setDraggingId] = React.useState(null)
   const [overCol, setOverCol] = React.useState(null)
 
@@ -67,7 +67,7 @@ export function Kanban({ tasks, projects, users, authUser, filterProject, mine, 
   }
 
   return (
-    <div className="page">
+    <div className={'page' + (embedded ? ' page-embutida' : '')}>
       <div className="sec-head">
         <div><h2>Kanban</h2><div className="sub">Arraste os cards entre as colunas para mudar o status.</div></div>
         {canCreate && <button className="btn btn-primary" onClick={() => onNewTask(createProjectId)}><Icon name="plus" size={17} stroke={2.2} />Nova atividade</button>}
