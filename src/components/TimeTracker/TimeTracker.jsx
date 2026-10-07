@@ -1,6 +1,7 @@
 import './TimeTracker.css'
 import React from 'react'
 import { Icon } from '../Icon.jsx'
+import { useFecharFora } from '../primitives/primitives.jsx'
 import { PROJECT_COLORS, PROJECT_STATUS_MAP, estadoDoItem } from '../../data/store.js'
 // Cronômetro por atividade — cada sessão é vinculada a uma tarefa (taskId).
 
@@ -17,10 +18,6 @@ export function fmtDur(ms) {
   if (h) return `${h}h`
   return `${m}min`
 }
-export function fmtHM(ts) {
-  const d = new Date(ts)
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
-}
 export function sameDay(a, b) { const x = new Date(a), y = new Date(b); return x.toDateString() === y.toDateString() }
 
 // total de tempo (ms) numa atividade, para um usuário (ou todos se userId omitido)
@@ -34,7 +31,7 @@ export function activeSessionFor(sessions, userId) {
 }
 
 // Botão play/parar reutilizável, embutido em cards e linhas de tabela.
-export function TaskTimerButton({ task, sessions, currentUserId, now, onStart, onStop, compact }) {
+export function TaskTimerButton({ task, sessions, currentUserId, now, onStart, onStop }) {
   const active = sessions.find(s => s.taskId === task.id && s.userId === currentUserId && !s.end)
   const total = taskTimeFor(sessions, task.id, currentUserId, now)
   if (active) {
@@ -46,7 +43,7 @@ export function TaskTimerButton({ task, sessions, currentUserId, now, onStart, o
   }
   return (
     <button className="timerbtn" onClick={(e) => { e.stopPropagation(); onStart(task.id) }} title="Iniciar cronômetro nesta atividade">
-      <Icon name="play" size={13} stroke={2.4} />{total > 0 && !compact && <span className="t">{fmtDur(total)}</span>}
+      <Icon name="play" size={13} stroke={2.4} />{total > 0 && <span className="t">{fmtDur(total)}</span>}
     </button>
   )
 }
@@ -72,11 +69,7 @@ function resumoDoProjeto(p) {
 export function TimeClock({ currentUser, tasks, projects, sessions, now, onStart, onStop, onOpenTask }) {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef(null)
-  React.useEffect(() => {
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
+  useFecharFora(ref, () => setOpen(false), open)
 
   const mine = sessions.filter(s => s.userId === currentUser.id)
   const active = activeSessionFor(sessions, currentUser.id)
@@ -113,7 +106,8 @@ export function TimeClock({ currentUser, tasks, projects, sessions, now, onStart
 
   return (
     <div className="userselect" ref={ref}>
-      <button className={'ponto-pill' + (active ? ' on' : '')} onClick={() => setOpen(o => !o)} title="Cronômetro por atividade">
+      <button className={'ponto-pill' + (active ? ' on' : '')} aria-expanded={open} aria-haspopup="true"
+        onClick={() => setOpen(o => !o)} title="Cronômetro por atividade">
         {/* Parado, o rótulo só mostra o total de hoje a partir de um minuto:
             abaixo disso o fmtDur arredonda para "0min", que lê como defeito. */}
         {active
@@ -188,8 +182,8 @@ export function TimeClock({ currentUser, tasks, projects, sessions, now, onStart
               <div className="ponto-list">
                 {todayTasks.map(({ task, ms }) => (
                   <div className="ponto-row" key={task.id}>
-                    <span className="dot" style={{ width: 8, height: 8, borderRadius: 50, background: PROJECT_COLORS[projOf(task.projectId)?.color] }} />
-                    <span className="ponto-range" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</span>
+                    <span className="ponto-rowdot" style={{ background: PROJECT_COLORS[projOf(task.projectId)?.color] }} />
+                    <span className="ponto-row-title">{task.title}</span>
                     <span className="ponto-dur">{fmtDur(ms)}</span>
                   </div>
                 ))}

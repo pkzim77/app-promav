@@ -2,7 +2,9 @@
 
 .hub-titulo { font: var(--text-h1); margin: 0 0 22px; letter-spacing: var(--tracking-tight); color: var(--fg-1); }
 
-.hub-sec { font: var(--text-h3); margin: 0; color: var(--fg-1); }
+/* Tipo+classe para vencer `.sec-head h2` do kit: só com `.hub-sec` o título
+   ficava com o h2 de 24px em vez do h3. margin e color já vêm de lá. */
+.sec-head h2.hub-sec { font: var(--text-h3); }
 
 /* Os grids eram fixos em 4 e 2 colunas, e a tela não tinha uma media query
    sequer: num celular de 360px os quatro cartões de número ficavam com 80px

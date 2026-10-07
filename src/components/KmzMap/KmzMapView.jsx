@@ -1,20 +1,18 @@
 import React from 'react'
 import L from 'leaflet'
-import JSZip from 'jszip'
-import { kml as kmlToGeoJSON } from '@tmcw/togeojson'
 import 'leaflet/dist/leaflet.css'
 import { Icon } from '../Icon.jsx'
-import { api } from '../../data/api.js'
 import {
-  extrairKml, montarFeatures, aplicarEdicoes, agruparTrechos, pastasDosPlacemarks, totalizar,
+  aplicarEdicoes, agruparTrechos, totalizar,
   medeExtensao, percentualExecutado, formatarArea, formatarDistancia,
 } from '../Modals/shared/kmzGeo.js'
+import { lerKmz } from '../Modals/shared/kmzLoad.js'
 import { carregarWayback, dataBR } from '../Modals/shared/wayback.js'
 
 // Visualizador de .kmz/.kml: mapa + painel de trechos. O navegador não
-// renderiza KMZ nativamente: o arquivo é um ZIP com um .kml dentro, então aqui
-// a gente descompacta (JSZip), converte o KML em GeoJSON (@tmcw/togeojson),
-// mede cada elemento (kmzGeo.js) e desenha num mapa Leaflet.
+// renderiza KMZ nativamente: o arquivo é um ZIP com um .kml dentro, então o
+// kmzLoad.js descompacta, converte o KML em GeoJSON e mede cada elemento, e
+// aqui o traçado vai para um mapa Leaflet.
 //
 // É o miolo tanto do modal (KmzViewerModal) quanto do mapa embutido na Ficha
 // técnica — um lugar só para o traçado, os fundos e o painel de trechos, para
@@ -173,20 +171,13 @@ export function KmzMapView({ resource, equipe = false }) {
 
     async function run() {
       try {
-        const res = await fetch(api.fileUrl(resource.fileId))
-        if (!res.ok) throw new Error('Não foi possível baixar o arquivo do servidor.')
-        const buffer = await res.arrayBuffer()
-        const kmlText = await extrairKml(buffer, resource.filename || '', JSZip)
-        const doc = new DOMParser().parseFromString(kmlText, 'text/xml')
-        if (doc.querySelector('parsererror')) throw new Error('O KML dentro do arquivo está corrompido.')
-        const geo = kmlToGeoJSON(doc)
+        const { geo, features } = await lerKmz(resource)
         if (cancelado) return
-        if (!geo.features?.length) throw new Error('O arquivo não tem nenhuma geometria para desenhar.')
 
         // Só o que vem do arquivo. Os nomes e o progresso lançados na aba
         // "Tipo de obra" (resource.segments) entram no useMemo `feats` acima.
         parsedRef.current = { geo }
-        setBase(montarFeatures(geo, pastasDosPlacemarks(doc)))
+        setBase(features)
         setGeoVersion(v => v + 1)
         setStatus('ok')
       } catch (e) {
@@ -214,8 +205,16 @@ export function KmzMapView({ resource, equipe = false }) {
     const geo = { ...geoCompleto, features: geoCompleto.features.filter((_, i) => vivos.has(`f${i}`)) }
 
     // preferCanvas: com dezenas de trechos o canvas rende bem melhor que SVG.
-    const map = L.map(boxRef.current, { zoomControl: true, preferCanvas: true })
+    const map = L.map(boxRef.current, { zoomControl: false, preferCanvas: true })
     mapRef.current = map
+    // Controles em pt-BR: o Leaflet grava o title também no aria-label dos
+    // botões +/−, então o inglês ia para tooltip e leitor de tela.
+    L.control.zoom({ zoomInTitle: 'Aproximar', zoomOutTitle: 'Afastar' }).addTo(map)
+    // Mantém o crédito ao Leaflet, só traduz o tooltip. String fixa, por isso pode ir como HTML.
+    map.attributionControl.setPrefix('<a href="https://leafletjs.com" title="Biblioteca de mapas interativos">Leaflet</a>')
+    // O 1.9.4 grava 'Close popup' à força (sem opção); corrige pela API pública
+    // (getElement + classe estável), não pelo campo privado _closeButton.
+    map.on('popupopen', (e) => e.popup.getElement()?.querySelector('.leaflet-popup-close-button')?.setAttribute('aria-label', 'Fechar'))
     L.control.scale({ imperial: false, maxWidth: 140 }).addTo(map)
 
     // A ordem de style/onEachFeature acompanha a de geo.features, que é a
@@ -300,9 +299,10 @@ export function KmzMapView({ resource, equipe = false }) {
     camadas.forEach(l => l.addTo(map))
     // O mapa pode já ter sido destruído quando o componente sai — daí a checagem.
     return () => { if (mapRef.current) camadas.forEach(l => map.removeLayer(l)) }
-    // geoVersion: o mapa é recriado a cada arquivo lido, e o fundo precisa
-    // entrar de novo no mapa novo — sem isso ele nascia cinza, sem satélite.
-  }, [fundoId, status, geoVersion])
+    // geoVersion e idsVivos: o mapa é recriado a cada arquivo lido E quando um
+    // trecho é apagado, e o fundo precisa entrar de novo no mapa novo — sem
+    // isso ele nascia cinza, sem satélite.
+  }, [fundoId, status, geoVersion, idsVivos])
 
   // ---------- acervo histórico (Esri Wayback) ----------
   React.useEffect(() => {
@@ -325,7 +325,7 @@ export function KmzMapView({ resource, equipe = false }) {
       maxZoom: 21, maxNativeZoom: 18, zIndex: Z_HIST,
       attribution: `Esri Wayback ${dataBR(rel.data)}`,
     }).addTo(map)
-  }, [histIdx, releases, status, geoVersion])
+  }, [histIdx, releases, status, geoVersion, idsVivos])
 
   // ---------- ações ----------
   const irPara = (f) => {
@@ -382,7 +382,7 @@ export function KmzMapView({ resource, equipe = false }) {
       <div className="kmz-toolbar">
         <label className="kmz-tool">
           <Icon name="layers" size={15} />
-          <select className="control kmz-select" value={fundoId}
+          <select className="control kmz-select" aria-label="Fundo do mapa" value={fundoId}
             onChange={e => { setAvisoFundo(null); setFundoId(e.target.value) }}>
             {FUNDOS.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
           </select>

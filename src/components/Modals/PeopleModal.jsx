@@ -1,7 +1,8 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field } from '../primitives/primitives.jsx'
-import { CARGOS, FORMACOES, SECTORS, ROLE_LABEL, effectiveProjectRole, AVATAR_COLORS, conselhoDe, PROJECT_HEX } from '../../data/store.js'
+import { CARGOS, FORMACOES, SECTORS, ROLE_LABEL, effectiveProjectRole, AVATAR_COLORS, conselhoDe } from '../../data/store.js'
+import { FieldError } from './shared/FieldError.jsx'
 // Cadastro/edição de um profissional, com as abas de dados e de acesso.
 //
 // Este componente veio de 9724d68 (tela de Profissionais). O refactor d14c415
@@ -14,11 +15,6 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
   // Editando a própria conta: travar o próprio "is_admin"/"Inativo" evita se
   // trancar fora do sistema (o backend também recusa, isto é só o aviso na hora).
   const isSelf = editing && user.id === currentUserId
-  // Só trava a remoção do admin se ela for a única administradora ativa —
-  // havendo outra pessoa admin, alguém pode reabrir o acesso dela depois.
- 
-    && users.filter(u => u.isAdmin && u.isActive !== false).length <= 1
-  
   // Só trava a remoção do admin se ela for a única administradora ativa —
   // havendo outra pessoa admin, alguém pode reabrir o acesso dela depois.
   const isLastAdmin = editing && user.isAdmin
@@ -43,6 +39,7 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
   const [revealPassword, setRevealPassword] = React.useState(false)
   const [copied, setCopied] = React.useState(false)
   const [touched, setTouched] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
   const [tab, setTab] = React.useState('dados')
 
   const copyPassword = async () => {
@@ -70,7 +67,7 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
   const cargoListId = React.useId()
   const cargosUsados = React.useMemo(() => {
     const vistos = new Set()
-    return [...CARGOS.map(c => c.label), ...users.map(u => u.jobTitle)]
+    return [...CARGOS, ...users.map(u => u.jobTitle)]
       .map(c => String(c || '').trim()).filter(Boolean)
       .filter(c => { const k = c.toLocaleLowerCase('pt-BR'); if (vistos.has(k)) return false; vistos.add(k); return true })
       .sort((a, b) => a.localeCompare(b, 'pt-BR'))
@@ -87,7 +84,7 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
   const emailErr = touched && !outsourced && !email.trim() ? 'Informe o e-mail.'
     : touched && email.trim() && !email.includes('@') ? 'E-mail inválido.' : null
   const shortNameErr = touched && !shortName.trim() ? 'Informe o nome social.' : null
-  const jobTitleErr = touched && !jobTitle ? 'Selecione o cargo.' : null
+  const jobTitleErr = touched && !jobTitle.trim() ? 'Informe o cargo.' : null
   const sectorErr = touched && !sector ? 'Selecione o setor.' : null
   // Terceirizado não entra no sistema, então não tem senha para definir.
   const pedeSenha = !editing && !outsourced
@@ -132,39 +129,43 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
     return fim ? `(${ddd}) ${meio}-${fim}` : `(${ddd}) ${meio}`
   }
 
-  const save = () => {
+  const save = async () => {
+    if (saving) return
     setTouched(true)
     if (!name.trim()) return
     if (!outsourced && (!email.trim() || !email.includes('@'))) return
     if (email.trim() && !email.includes('@')) return
     // Telefone não entra: é contato, não identidade. Exigir travava o cadastro
     // de quem ainda não tinha o número à mão, e ele pode ser preenchido depois.
-    if (!shortName.trim() || !jobTitle || !sector) return
+    if (!shortName.trim() || !jobTitle.trim() || !sector) return
     if (pedeSenha && initialPassword.trim().length < 6) return
-    onSave({
-      ...(user || {}),
-      name: name.trim(),
-      email: email.trim(),
-      phone: phone.trim() || null,
-      shortName: shortName.trim() || null,
-      sector: sector || null,
-      jobTitle: jobTitle.trim() || null,
-      formation: formation || null,
-      professionalRegister: conselho ? (professionalRegister.trim() || null) : null,
-      initials: displayInitials || 'P',
-      color: color || 'var(--proj-blue)',
-      isAdmin,
-      isOutsourced: outsourced,
-      isActive,
-      initialPassword: pedeSenha ? (initialPassword || undefined) : undefined,
-    })
+    setSaving(true)
+    try {
+      await onSave({
+        ...(user || {}),
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim() || null,
+        shortName: shortName.trim() || null,
+        sector: sector || null,
+        jobTitle: jobTitle.trim() || null,
+        formation: formation || null,
+        professionalRegister: conselho ? (professionalRegister.trim() || null) : null,
+        initials: displayInitials || 'P',
+        color: color || 'var(--proj-blue)',
+        isAdmin,
+        isOutsourced: outsourced,
+        isActive,
+        initialPassword: pedeSenha ? (initialPassword || undefined) : undefined,
+      })
+    } finally { setSaving(false) }
   }
 
   return (
     <Modal className="project-modal" title={editing ? 'Editar profissional' : 'Novo profissional'} onClose={onClose}
       footer={<>
-        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-primary" onClick={save}>{editing ? 'Salvar alterações' : 'Criar profissional'}</button>
+        <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
+        <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Criar profissional'}</button>
       </>}>
       {editing && (
         <div className="tabs-strip">
@@ -227,20 +228,20 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
           <Field label="Nome completo">
             <input className="control" value={name} autoFocus placeholder="Ex.: Ana Pereira"
               onChange={e => setName(e.target.value)} />
-            {nameErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{nameErr}</span>}
+            <FieldError>{nameErr}</FieldError>
           </Field>
         </div>
       </div>
 
       <div className="field-row">
-        <Field label="Iniciais (editar)">
+        <Field label="Iniciais">
           <input className="control" value={initials} maxLength={2} placeholder={autoInitials || 'AA'}
             onChange={e => setInitials(e.target.value.toUpperCase())} />
           <span style={{ fontSize: 12, color: 'var(--fg-4)' }}>Deixe vazio para usar automaticamente</span>
         </Field>
         <Field label="Cor do avatar">
           <div className="color-swatches" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {AVATAR_COLORS.map(hex => (
+            {AVATAR_COLORS.map((hex, i) => (
               <button key={hex} type="button"
                 className={color === hex ? 'on' : ''}
                 style={{
@@ -252,6 +253,8 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
                   cursor: 'pointer',
                 }}
                 onClick={() => setColor(hex)}
+                aria-pressed={color === hex}
+                aria-label={`Cor ${i + 1}`}
                 title={hex}
               />
             ))}
@@ -284,9 +287,9 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
 
       <div className="field-row">
         <Field label={"Nome Social"}>
-          <input className="control" value={shortName} placeholder='Ana Rodrigues'
+          <input className="control" value={shortName} placeholder="Ex.: Ana"
           onChange={e => setShortName(e.target.value)} />
-          {shortNameErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{shortNameErr}</span>}
+          <FieldError>{shortNameErr}</FieldError>
         </Field>
         <Field label="Telefone (opcional)">
           <input className="control" type="tel" value={phone} placeholder="(11) 99999-9999"
@@ -298,7 +301,7 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
         <Field label={outsourced ? 'E-mail (contato, opcional)' : 'E-mail'}>
           <input className="control" type="email" value={email} placeholder="ana@promav.com.br"
             onChange={e => setEmail(e.target.value)} />
-          {emailErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{emailErr}</span>}
+          <FieldError>{emailErr}</FieldError>
         </Field>
         <Field label="Cargo">
           <input className="control" value={jobTitle} list={cargoListId}
@@ -307,7 +310,7 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
           <datalist id={cargoListId}>
             {cargosUsados.map(c => <option key={c} value={c} />)}
           </datalist>
-          {jobTitleErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{jobTitleErr}</span>}
+          <FieldError>{jobTitleErr}</FieldError>
         </Field>
       </div>
 
@@ -317,7 +320,7 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
             <option value="">Selecione</option>
             {SECTORS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
-          {sectorErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{sectorErr}</span>}
+          <FieldError>{sectorErr}</FieldError>
         </Field>
         {/* Opcional de propósito: são quatro diplomas e o cadastro tem gente
             que não cabe em nenhum. Quando está em branco, o conselho vem do
@@ -347,11 +350,11 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
               faziam esta coluna crescer o dobro da vizinha e a linha saía torta. */}
           <div className="marcas">
             <label className="marca">
-              <input type="checkbox" checked={outsourced} onChange={e => setOutsourced(e.target.checked)} />
+              <input type="checkbox" className="ck-nativo" checked={outsourced} disabled={isSelf} onChange={e => setOutsourced(e.target.checked)} />
               Terceirizado
             </label>
             <label className="marca">
-              <input type="checkbox" checked={isAdmin} disabled={isSelf && isLastAdmin}
+              <input type="checkbox" className="ck-nativo" checked={isAdmin} disabled={isSelf && isLastAdmin}
                 onChange={e => setIsAdmin(e.target.checked)} />
               Administrador
             </label>
@@ -381,7 +384,7 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
             </button>
           </div>
           {copied && <span className="password-copied" style={{ marginTop: 6 }}><Icon name="check" size={13} stroke={3} />Senha copiada!</span>}
-          {passwordErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{passwordErr}</span>}
+          <FieldError>{passwordErr}</FieldError>
         </Field>
       )}
 

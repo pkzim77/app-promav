@@ -105,7 +105,7 @@
 
 .cart-rotulo { font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
 
-.cart-caixa { background: #fff; color: #16150F; border-radius: var(--r-sm); padding: 6px 10px; font-size: 13px; font-weight: 600; min-height: 30px; display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cart-caixa { background: #fff; color: var(--fg-1); border-radius: var(--r-sm); padding: 6px 10px; font-size: 13px; font-weight: 600; min-height: 30px; display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Campo sem valor fica visivelmente vazio, como a linha em branco do crachá:
    some do olho como dado, mas continua aparecendo como lacuna. */
@@ -146,8 +146,6 @@
 
 /* Marcação simples dentro de um campo (terceirizado, administrador). */
 .marca { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--fg-1); cursor: pointer; padding: 3px 0; }
-
-.marca input { width: 17px; height: 17px; flex-shrink: 0; accent-color: var(--brand); cursor: pointer; }
 
 .marca-nota { font-size: 12px; color: var(--fg-4); line-height: 1.45; }
 
@@ -235,19 +233,9 @@
 
 .member-picker { display: flex; flex-wrap: wrap; gap: 8px; }
 
-.member-chip { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--fg-2); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-full); padding: 4px 11px 4px 4px; transition: all var(--dur); }
-
-.member-chip:hover { border-color: var(--fg-4); }
-
-.member-chip.on { background: var(--brand-soft); border-color: transparent; color: var(--brand); }
-
-.member-chip.resp { background: var(--brand-soft-2); cursor: default; }
-
 .member-tag { font-size: 10px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--brand); background: var(--surface); padding: 1px 6px; border-radius: var(--r-full); }
 
 /* ---------- Project resources (editor in modal) ---------- */
-
-.res-edit-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
 
 .res-edit-row { display: flex; align-items: center; gap: 10px; padding: 7px 6px; border-radius: var(--r-sm); }
 
@@ -265,17 +253,7 @@
 
 .res-edit-row:hover .res-del { opacity: 1; }
 
-.res-add { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-
-.res-add .seg { flex-basis: 100%; }
-
-.res-add .control { flex: 1; min-width: 140px; }
-
-.res-add .btn { flex-shrink: 0; }
-
 .ro-hint { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-3); background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; margin: 0 0 16px; }
-
-.perm-default { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 
 .perm-default-label { font-size: 13px; color: var(--fg-2); }
 
@@ -338,7 +316,7 @@
 .perm-add { margin-bottom: 12px; }
 
 /* Caixa de marcação "é responsável pelo projeto" */
-.resp-check { flex: 0 0 20px; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid var(--border-strong, var(--border)); border-radius: var(--r-sm); color: #fff; background: transparent; transition: background var(--dur), border-color var(--dur); }
+.resp-check { flex: 0 0 20px; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid var(--border-strong); border-radius: var(--r-sm); color: #fff; background: transparent; transition: background var(--dur), border-color var(--dur); }
 
 .resp-check:hover { border-color: var(--brand); }
 
@@ -453,7 +431,8 @@
 .kmz-grupo-medida { font-size: 11.5px; color: var(--fg-4); font-variant-numeric: tabular-nums; }
 .kmz-grupo-itens { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .kmz-grupo-itens.recuado { padding-left: 8px; }
-.kmz-popup-grupo { font-size: 11px !important; text-transform: uppercase; letter-spacing: 0.04em; color: #777 !important; }
+/* Qualificado pelo pai para vencer `.kmz-popup p` (tipo+classe) sem !important. */
+.kmz-popup .kmz-popup-grupo { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #777; }
 
 /* Aviso de equipe no painel: trechos ainda sem execução lançada. */
 .kmz-hint { margin: 0; padding: 8px 10px; font-size: 11.5px; line-height: 1.45; color: var(--fg-3);
@@ -470,7 +449,7 @@
 .kmz-msg-error { color: var(--danger); }
 .kmz-popup strong { display: block; font-size: 13px; margin-bottom: 2px; }
 .kmz-popup p { margin: 0; font-size: 12px; color: #555; }
-.kmz-popup-medida { font-weight: 600; color: #b23c17 !important; font-variant-numeric: tabular-nums; }
+.kmz-popup .kmz-popup-medida { font-weight: 600; color: #b23c17; font-variant-numeric: tabular-nums; }
 
 /* Em tela estreita o painel desce para baixo do mapa. */
 @media (max-width: 860px) {
@@ -496,7 +475,7 @@
 .kmz-edit-row { display: grid; grid-template-columns: 1fr 160px auto auto auto auto; align-items: center; gap: 8px; }
 .kmz-edit-del { display: grid; place-items: center; width: 28px; height: 28px; border: 0; background: none; color: var(--fg-4);
   border-radius: var(--r-sm); cursor: pointer; }
-.kmz-edit-del:hover { color: var(--danger, #c0392b); background: var(--bg-subtle); }
+.kmz-edit-del:hover { color: var(--danger); background: var(--bg-subtle); }
 .kmz-edit-nome, .kmz-edit-grupo-inp { min-width: 0; }
 
 /* Cabeçalho de grupo no editor: nome do grupo e o subtotal dele. */

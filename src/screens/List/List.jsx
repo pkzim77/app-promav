@@ -14,14 +14,6 @@ export function TaskListView({ tasks, projects, users, authUser, filterProject, 
     return next
   })
 
-  // Subtarefas recolhidas (por atividade-mãe). Vazio = todas expandidas.
-  const [subCollapsed, setSubCollapsed] = React.useState(() => new Set())
-  const toggleSub = (id) => setSubCollapsed(prev => {
-    const next = new Set(prev)
-    next.has(id) ? next.delete(id) : next.add(id)
-    return next
-  })
-
   // Arrastar uma atividade para outro grupo muda o status (igual ao Kanban).
   const [draggingId, setDraggingId] = React.useState(null)
   const [overGroup, setOverGroup] = React.useState(null)
@@ -48,50 +40,37 @@ export function TaskListView({ tasks, projects, users, authUser, filterProject, 
   // quem entrava numa atividade de outro simplesmente não a via mais.
   if (mine) visible = visible.filter(t => taskMembers(t).includes(currentUserId))
 
-  // Subtarefas visíveis por mãe; e quem é "de topo" na lista (sem mãe visível).
-  const visibleIds = new Set(visible.map(t => t.id))
-  const childrenOf = (id) => visible.filter(t => t.parentId === id)
-  const isTopLevel = (t) => !t.parentId || !visibleIds.has(t.parentId)
-
-  // Uma linha da tabela — serve para a mãe e para a subtarefa (isChild).
-  const renderRow = (t, isChild = false) => {
+  const renderRow = (t) => {
     const u = userOf(t.assigneeId)
     const p = projOf(t.projectId)
     const st = stOf(t.status)
-    const kids = isChild ? [] : childrenOf(t.id)   // um nível só
-    const expanded = !subCollapsed.has(t.id)
     return (
-      <React.Fragment key={t.id}>
-        <div className={'lv-row lv-item' + (isChild ? ' lv-sub' : '') + (draggingId === t.id ? ' dragging' : '')}
-          draggable={!isChild}
-          onDragStart={isChild ? undefined : (e) => { setDraggingId(t.id); e.dataTransfer.effectAllowed = 'move' }}
-          onDragEnd={isChild ? undefined : () => { setDraggingId(null); setOverGroup(null) }}
-          onClick={() => onEditTask(t)}>
-          <div className="lv-c-name" style={isChild ? { paddingLeft: 30 } : undefined}>
-            {kids.length > 0
-              ? <button className="lv-twist" onClick={(e) => { e.stopPropagation(); toggleSub(t.id) }} aria-label={expanded ? 'Recolher' : 'Expandir'}>
-                  <Icon name={expanded ? 'chevronDown' : 'chevronRight'} size={14} />
-                </button>
-              : <span className="lv-twist-spacer" />}
-            <span className="lv-status-dot" style={{ background: st?.color }} />
-            <span className="lv-title" title={t.title}>{t.title}</span>
-            <ChecklistMini task={t} />
-            {kids.length > 0 && <span className="lv-subcount" title="subtarefas">{kids.length}</span>}
-            {!isChild && canCreate && (
-              <button className="lv-addsub" title="Adicionar subtarefa"
-                onClick={(e) => { e.stopPropagation(); onNewTask(t.projectId, undefined, t.id) }}>
-                <Icon name="plus" size={13} stroke={2.4} />
-              </button>
-            )}
-          </div>
-          <div>{p && <span className="proj-pill" style={{ fontSize: 12 }}><span className="dot" style={{ background: PROJECT_COLORS[p.color] }} />{p.name}</span>}</div>
-          <div>{u ? <span className="lv-assignee"><Avatar user={u} size={22} />{u.name.split(' ')[0]}</span> : <SemResponsavel compacto />}</div>
-          <div>{t.end ? <span className="lv-date"><Icon name="calendar" size={13} />{fmtShort(t.end)}</span> : <span className="lv-empty">—</span>}</div>
-          <div><PriorityTag priority={t.priority} /></div>
-          <div><StatusTag status={t.status} /></div>
+      <div key={t.id} className={'lv-row lv-item' + (draggingId === t.id ? ' dragging' : '')}
+        draggable
+        tabIndex={0}
+        onDragStart={(e) => { setDraggingId(t.id); e.dataTransfer.effectAllowed = 'move' }}
+        onDragEnd={() => { setDraggingId(null); setOverGroup(null) }}
+        onClick={() => onEditTask(t)}
+        onKeyDown={(e) => {
+          // A linha fica focável pelo teclado, mas sem role="button": esse role é
+          // "children presentational" e tiraria projeto, responsável, vencimento,
+          // prioridade e status da árvore de acessibilidade, deixando o leitor de
+          // tela com um rótulo só. Sem ele, o conteúdo da linha é o nome anunciado
+          // e as colunas voltam a ser lidas; o Enter/Espaço daqui mantém o
+          // acionamento por teclado que o clique já tinha.
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEditTask(t) }
+        }}>
+        <div className="lv-c-name">
+          <span className="lv-status-dot" style={{ background: st?.color }} />
+          <span className="lv-title" title={t.title}>{t.title}</span>
+          <ChecklistMini task={t} />
         </div>
-        {expanded && kids.map(k => renderRow(k, true))}
-      </React.Fragment>
+        <div>{p && <span className="proj-pill"><span className="dot" style={{ background: PROJECT_COLORS[p.color] }} />{p.name}</span>}</div>
+        <div>{u ? <span className="lv-assignee"><Avatar user={u} size={22} />{u.name.split(' ')[0]}</span> : <SemResponsavel compacto />}</div>
+        <div>{t.end ? <span className="lv-date"><Icon name="calendar" size={13} />{fmtShort(t.end)}</span> : <span className="lv-empty">—</span>}</div>
+        <div><PriorityTag priority={t.priority} /></div>
+        <div><StatusTag status={t.status} /></div>
+      </div>
     )
   }
 
@@ -126,7 +105,7 @@ export function TaskListView({ tasks, projects, users, authUser, filterProject, 
           </div>
 
           {STATUSES.map(col => {
-            const rows = visible.filter(t => t.status === col.id && isTopLevel(t))
+            const rows = visible.filter(t => t.status === col.id)
             const open = !collapsed.has(col.id)
             return (
               <div key={col.id} className={'lv-group' + (overGroup === col.id ? ' dragover' : '')}

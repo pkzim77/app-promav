@@ -3,7 +3,7 @@ import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
 import { AvatarStack, PriorityTag, ChecklistMini, SemResponsavel } from '../../components/primitives/primitives.jsx'
 import { TaskTimerButton } from '../../components/TimeTracker/TimeTracker.jsx'
-import { STATUSES, PROJECT_COLORS, taskMembers, fmtShort, effectiveProjectRole, canEditProject } from '../../data/store.js'
+import { STATUSES, PROJECT_COLORS, taskMembers, fmtShort, fmtPeriodo, effectiveProjectRole, canEditProject } from '../../data/store.js'
 // Kanban — columns by status, cross-project cards, drag & drop, filters.
 
 function KanbanCard({ task, project, users, sessions, currentUserId, now, onStartTimer, onStopTimer, onDragStart, onDragEnd, dragging, onClick }) {
@@ -19,18 +19,20 @@ function KanbanCard({ task, project, users, sessions, currentUserId, now, onStar
       onClick={() => onClick(task)}
       style={{ borderLeftColor: PROJECT_COLORS[project.color] }}>
       <div className="kc-proj" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span className="proj-pill" style={{ fontSize: 12 }}>
+        <span className="proj-pill">
           <span className="dot" style={{ background: PROJECT_COLORS[project.color] }} />{project.name}
         </span>
         <TaskTimerButton task={task} sessions={sessions} currentUserId={currentUserId} now={now} onStart={onStartTimer} onStop={onStopTimer} />
       </div>
-      <p className="kc-title">{task.title}</p>
+      {/* stopPropagation: sem ele o clique sobe para o card e `onClick` roda duas vezes,
+          gravando duas leituras da atividade. */}
+      <button type="button" className="kc-title" onClick={(e) => { e.stopPropagation(); onClick(task) }}>{task.title}</button>
       <div className="kc-foot">
         <PriorityTag priority={task.priority} />
         <div className="right">
           <ChecklistMini task={task} />
           {(task.start || task.end) && (
-            <span className="kc-date">{fmtShort(task.start)}–{fmtShort(task.end)}</span>
+            <span className="kc-date">{fmtPeriodo(task.start, task.end, fmtShort, '–')}</span>
           )}
           {members.length ? <AvatarStack users={members} size={24} max={3} /> : <SemResponsavel compacto />}
         </div>
@@ -87,17 +89,20 @@ export function Kanban({ tasks, projects, users, authUser, filterProject, mine, 
       <div className="board">
         {STATUSES.map(col => {
           const colTasks = visible.filter(t => t.status === col.id)
+          // Sem o guard de draggingId, arrastar um arquivo de fora da janela
+          // também acendia a coluna, e o realce ficava aceso para sempre: um
+          // drop externo não passa por onDrop nem por onDragEnd daqui.
           return (
             <div
               key={col.id}
               className={'column' + (overCol === col.id ? ' dragover' : '')}
-              onDragOver={(e) => { e.preventDefault(); setOverCol(col.id) }}
+              onDragOver={(e) => { if (!draggingId) return; e.preventDefault(); setOverCol(col.id) }}
               onDragLeave={(e) => { if (e.currentTarget === e.target) setOverCol(null) }}
               onDrop={(e) => onDrop(e, col.id)}>
               <div className="col-head">
                 <span className="dot" style={{ background: col.color }} />
                 <span className="name">{col.label}</span>
-                <span className="count">{colTasks.length}</span>
+                <span className="rep-count count">{colTasks.length}</span>
               </div>
               {colTasks.map(t => (
                 <KanbanCard key={t.id} task={t} project={projOf(t.projectId)} users={users}

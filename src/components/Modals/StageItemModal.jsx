@@ -3,6 +3,7 @@ import { Icon } from '../Icon.jsx'
 import { Modal, Field } from '../primitives/primitives.jsx'
 import { paraAtribuir } from '../../data/store.js'
 import { SugestaoItem } from './shared/SugestaoItem.jsx'
+import { FieldError } from './shared/FieldError.jsx'
 
 // Trabalho novo dentro de uma etapa. Antes, "Nova atividade" criava sempre uma
 // atividade de texto livre, que não batia o padrão "N · Nome" e caía em
@@ -55,7 +56,7 @@ export function StageItemModal({ etapas = [], users = [], members = [], defaultS
   }
 
   return (
-    <Modal title="Novas atividades" onClose={onClose}
+    <Modal title="Novas atividades" onClose={onClose} travado={saving}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
         <button className="btn btn-primary" onClick={save} disabled={saving || !etapas.length}>
@@ -83,8 +84,10 @@ export function StageItemModal({ etapas = [], users = [], members = [], defaultS
             <div className="ev-lista">
               {linhas.map((l, i) => (
                 <div className="ev-linha" key={l.chave}>
+                  {/* A linha nova entra sempre no fim: focar a última deixa o
+                      Enter continuar a digitação, em vez de parar na anterior. */}
                   <SugestaoItem value={l.text} onChange={(v) => mudar(l.chave, { text: v })}
-                    onEnter={() => l.text.trim() && somar()} autoFocus={i === 0}
+                    onEnter={() => l.text.trim() && somar()} autoFocus={i === 0 || i === linhas.length - 1}
                     etapa={etapaAtual?.n} jaUsados={[...jaNaEtapa, ...linhas.filter(x => x.chave !== l.chave).map(x => x.text)]}
                     placeholder="Ex.: Revisar a prancha 04 do arquitetônico"
                     ariaLabel={`Atividade ${i + 1}`} />
@@ -112,7 +115,7 @@ export function StageItemModal({ etapas = [], users = [], members = [], defaultS
               disabled={linhas.length >= MAX}>
               <Icon name="plus" size={15} stroke={2.2} />Mais uma atividade
             </button>
-            {textErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{textErr}</span>}
+            <FieldError>{textErr}</FieldError>
           </Field>
 
           {/* Admin aparece sempre, então a lista nunca fica vazia — mas num projeto

@@ -1,6 +1,6 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
-import { sectorLabel, RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, dayDiff, parseDate, todayISO, formatBRL, calcularProgresso, fmtFull, taskMembers } from '../../../data/store.js'
+import { sectorLabel, RESOURCE_ORIGIN_MAP, PROJECT_STATUS_MAP, dayDiff, parseDate, formatBRL, calcularProgresso, fmtFull, taskMembers } from '../../../data/store.js'
 import { NotesText } from '../shared/NotesText.jsx'
 
 // Ficha que abre ao passar o mouse num responsável.
@@ -19,13 +19,11 @@ function FichaResponsavel({ user, doProjeto }) {
   const feitas = minhas.filter(t => t.status === 'done').length
   const cargo = (user.jobTitle || '').trim()
   const setor = sectorLabel(user.sector)
-
-  // O leitor de tela não enxerga a ficha (ela some com visibility), então a
-  // mesma informação vai no rótulo do chip.
-  const rotulo = [user.name,
-    cargo ? `cargo ${cargo}` : 'cargo não informado',
-    setor ? `setor ${setor}` : 'setor não informado',
-    `${minhas.length} atividade${minhas.length === 1 ? '' : 's'} neste projeto`].join(', ')
+  // O chip mostra só o primeiro nome e o avatar é decorativo, então o nome
+  // completo precisa vir no aria-label; o aria-describedby aponta para a
+  // ficha, de onde o leitor de tela tira cargo, setor e carga de trabalho,
+  // que de outro modo ficariam só no visual (a ficha some com visibility).
+  const fichaId = React.useId()
 
   const linha = (rot, valor) => (
     <span className="ds-ficha-linha">
@@ -35,13 +33,13 @@ function FichaResponsavel({ user, doProjeto }) {
   )
 
   return (
-    <span className="ds-person ds-com-ficha" tabIndex={0} aria-label={rotulo}>
-      <span className="av" style={{ width: 24, height: 24, background: user.color, fontSize: 9 }}>{user.initials}</span>
+    <span className="ds-person ds-com-ficha" tabIndex={0} aria-label={user.name} aria-describedby={fichaId}>
+      <span className="av" aria-hidden="true" style={{ width: 24, height: 24, background: user.color, fontSize: 9 }}>{user.initials}</span>
       {user.name.split(' ')[0]}
 
-      <span className="ds-ficha" role="tooltip" aria-hidden="true">
+      <span className="ds-ficha" id={fichaId} role="tooltip">
         <span className="ds-ficha-topo">
-          <span className="av" style={{ width: 34, height: 34, background: user.color, fontSize: 13 }}>{user.initials}</span>
+          <span className="av" aria-hidden="true" style={{ width: 34, height: 34, background: user.color, fontSize: 13 }}>{user.initials}</span>
           <span className="ds-ficha-id">
             <b>{user.name}</b>
             <i>{user.email}</i>
@@ -171,9 +169,8 @@ function prazoPorExtenso(deISO, ateISO) {
 // Cronograma: quanto do prazo já passou contra quanto do projeto foi executado.
 // É a leitura que importa numa reunião — 60% executado com 80% do prazo
 // consumido é atraso, mesmo o número de progresso parecendo bom sozinho.
-function Cronograma({ start, end, executado }) {
+function Cronograma({ start, end, executado, hoje }) {
   if (!start || !end) return null
-  const hoje = todayISO()
   const totalDias = dayDiff(start, end)
   if (totalDias <= 0) return null
 
@@ -185,12 +182,15 @@ function Cronograma({ start, end, executado }) {
   // Antes do início e depois do fim o comparativo não faz sentido.
   const naoComecou = parseDate(hoje) < parseDate(start)
   const terminou = parseDate(hoje) > parseDate(end)
+  // O número do title segue o mesmo ramo do texto ao lado: `restam` sozinho
+  // dava a duração inteira em "Começa em …" e "0 dias" em "Prazo encerrado há …".
+  const diasTexto = naoComecou ? dayDiff(hoje, start) : terminou ? dayDiff(end, hoje) : restam
 
   const situacao =
     naoComecou ? { label: 'Ainda não iniciado', cor: 'var(--fg-3)', fundo: 'var(--bg-muted)' }
     : folga >= 0 ? { label: 'Dentro do prazo', cor: 'var(--success)', fundo: 'var(--success-soft)' }
     : folga >= -10 ? { label: 'Atenção ao prazo', cor: '#A8680A', fundo: '#FDF2E2' }
-    : { label: 'Atrasado', cor: 'var(--danger)', fundo: 'var(--danger-soft, #FDECEC)' }
+    : { label: 'Atrasado', cor: 'var(--danger)', fundo: 'var(--danger-soft)' }
 
   return (
     <div className="card crono">
@@ -217,7 +217,7 @@ function Cronograma({ start, end, executado }) {
         <span><Icon name="calendar" size={14} />{fmtFull(start)}</span>
         {/* Prazo por extenso; o número exato de dias fica no title, para quem
             precisar da precisão sem poluir a leitura. */}
-        <span className="crono-foot-mid" title={`${restam} ${restam === 1 ? 'dia' : 'dias'}`}>
+        <span className="crono-foot-mid" title={`${diasTexto} ${diasTexto === 1 ? 'dia' : 'dias'}`}>
           {(() => {
             if (naoComecou) {
               const p = prazoPorExtenso(hoje, start)
@@ -240,7 +240,12 @@ function Cronograma({ start, end, executado }) {
 
 // Panorama — primeira aba, pensada para ser projetada numa reunião:
 // progresso do projeto em destaque + a ficha do cadastro em blocos legíveis.
-export function ProjectCover({ project, tasks, users }) {
+//
+// Memoizado: o pai re-renderiza a cada segundo por causa do `now` do
+// cronômetro, e nada aqui depende dele. `hoje` chega por prop, em vez de
+// todayISO() dentro do Cronograma, para que o render dependa só das props —
+// a string vira à meia-noite, então "Faltam X dias" continua mudando com o dia.
+export const ProjectCover = React.memo(function ProjectCover({ project, tasks, users, hoje }) {
   const list = tasks.filter(t => t.projectId === project.id)
   const origem = RESOURCE_ORIGIN_MAP[project.origemRecurso]
   const st = PROJECT_STATUS_MAP[project.status] || PROJECT_STATUS_MAP.planejamento
@@ -266,7 +271,6 @@ export function ProjectCover({ project, tasks, users }) {
       hint: 'das atividades finalizadas — status Concluído ou checklist inteiro marcado' },
   ]
   const detail = breakdown.find(s => s.id === hovered) || null
-  const dias = project.start && project.end ? dayDiff(project.start, project.end) : null
 
   return (
     <div className="proj-cover">
@@ -330,7 +334,7 @@ export function ProjectCover({ project, tasks, users }) {
         </div>
       </div>
 
-      <Cronograma start={project.start} end={project.end} executado={prog.executado} />
+      <Cronograma start={project.start} end={project.end} executado={prog.executado} hoje={hoje} />
 
       {/* ---- Ficha do cadastro ---- */}
       <div className="cover-facts">
@@ -370,7 +374,6 @@ export function ProjectCover({ project, tasks, users }) {
         </div>
       </div>
 
-      {/* ---- Responsáveis ---- */}
       {/* ---- Observações ---- */}
       {project.notes && (
         <div className="card cover-block">
@@ -380,4 +383,4 @@ export function ProjectCover({ project, tasks, users }) {
       )}
     </div>
   )
-}
+})

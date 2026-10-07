@@ -4,14 +4,16 @@
   "version": "0.1.0",
   "description": "Promav — app de gestão de projetos (pt-BR). Projetos, atividades, Kanban, Gantt, cronômetro e relatórios.",
   "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "concurrently -n web,api -c cyan,magenta \"vite\" \"node server/index.js\"",
     "dev:web": "vite",
     "server": "node server/index.js",
-    "start": "node server/index.js",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -20,9 +22,11 @@
     "ag-grid-react": "^36.1.0",
     "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",
+    "content-disposition": "^3.0.0",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
     "express": "^4.22.2",
+    "express-rate-limit": "^8.7.1",
     "jsonwebtoken": "^9.0.3",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",

@@ -33,13 +33,9 @@
 
 .sb-item.active { background: rgba(255,255,255,.13); color: #fff; }
 
-.sb-item .badge { margin-left: auto; font-family: var(--font-mono); font-size: 11px; font-weight: 600; background: rgba(255,255,255,.14); color: rgba(255,255,255,.8); padding: 1px 7px; border-radius: var(--r-full); }
-
 .sb-proj { display: flex; align-items: center; gap: 10px; padding: 7px 11px; border-radius: var(--r-md); color: rgba(255,255,255,.7); font-size: 12px; font-weight: 500; width: 100%; text-align: left; }
 
 .sb-proj:hover { color: #fff; }
-
-.sb-proj .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 
 .sb-proj .sb-proj-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
 
@@ -57,7 +53,7 @@
 
 .sb-proj-row .sb-folder-menu-btn { visibility: hidden; }
 
-.sb-proj-row:hover .sb-folder-menu-btn, .sb-proj-row .sb-folder-menu.open .sb-folder-menu-btn { visibility: visible; }
+.sb-proj-row:focus-within .sb-folder-menu-btn, .sb-proj-row:hover .sb-folder-menu-btn, .sb-proj-row .sb-folder-menu.open .sb-folder-menu-btn { visibility: visible; }
 
 /* ----- drag-and-drop da sidebar ----- */
 
@@ -102,15 +98,13 @@
 
 .sb-folder-menu-btn { visibility: hidden; display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r-sm); color: rgba(255,255,255,.6); }
 
-.sb-folder-row:hover .sb-folder-menu-btn, .sb-folder-menu.open .sb-folder-menu-btn { visibility: visible; }
+.sb-folder-row:focus-within .sb-folder-menu-btn, .sb-folder-row:hover .sb-folder-menu-btn, .sb-folder-menu.open .sb-folder-menu-btn { visibility: visible; }
 
 .sb-folder-menu-btn:hover { background: rgba(255,255,255,.14); color: #fff; }
 
 .sb-folder-body { padding-left: 14px; }
 
 .sb-folder-empty { padding: 6px 11px; font-size: 12.5px; color: rgba(255,255,255,.38); font-style: italic; }
-
-.sb-foot { margin-top: auto; padding-top: 12px; }
 
 /* ---------- Top bar ---------- */
 
@@ -138,13 +132,13 @@
 
 .tb-bell:hover { background: var(--bg-subtle); color: var(--fg-1); }
 
-.tb-bell-badge { position: absolute; top: -3px; right: -2px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--brand); color: #fff; display: grid; place-items: center; font-size: 10px; font-weight: 700; }
+.tb-bell-badge { position: absolute; top: -3px; right: -2px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-full); background: var(--brand); color: #fff; display: grid; place-items: center; font-size: 10px; font-weight: 700; }
 
 .news-overlay { position: fixed; inset: 0; background: rgba(17, 17, 17, 0.22); z-index: 90; }
 
-.news-panel { position: absolute; right: 0; top: 0; width: min(360px, 92vw); height: 100vh; background: #fff; box-shadow: -12px 0 30px rgba(12, 17, 23, 0.12); display: flex; flex-direction: column; }
+.news-panel { position: absolute; right: 0; top: 0; width: min(360px, 92vw); height: 100%; background: #fff; box-shadow: -12px 0 30px rgba(12, 17, 23, 0.12); display: flex; flex-direction: column; }
 
-.news-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 18px 14px; background: #f6f4ef; border-bottom: 1px solid var(--border); }
+.news-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 18px 14px; background: var(--bg-subtle); border-bottom: 1px solid var(--border); }
 
 .news-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: var(--fg-1); }
 
@@ -154,7 +148,7 @@
 
 .news-filters { display: flex; gap: 8px; padding: 12px 14px; background: #f9f8f7; border-bottom: 1px solid var(--border); overflow-x: auto; }
 
-.news-filter-btn { padding: 6px 12px; border-radius: 999px; background: transparent; color: var(--fg-3); font-size: 12px; font-weight: 600; border: 1px solid var(--border); cursor: pointer; transition: all var(--dur); white-space: nowrap; }
+.news-filter-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--r-full); background: transparent; color: var(--fg-3); font-size: 12px; font-weight: 600; border: 1px solid var(--border); cursor: pointer; transition: all var(--dur); white-space: nowrap; }
 
 .news-filter-btn:hover { border-color: var(--fg-2); color: var(--fg-2); }
 
@@ -168,7 +162,7 @@
 
 .news-item-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
 
-.news-tag { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 999px; background: #f0efe9; color: var(--fg-2); font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
+.news-tag { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: var(--r-full); background: #f0efe9; color: var(--fg-2); font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
 
 .news-time { font-size: 11px; color: var(--fg-4); }
 
@@ -195,27 +189,16 @@
 @media (min-width: 861px) {
   .sidebar.nav-collapsed { width: 72px; padding-left: 8px; padding-right: 8px; overflow-x: hidden; }
   .sidebar.nav-collapsed .sb-brand { justify-content: center; padding: 6px 0 18px; }
+  /* Recolhido: esconde logo, rótulos e a seção "Projetos" inteira (título, botão +,
+     pastas/projetos e a área de soltar na raiz); fica só a navegação principal. */
   .sidebar.nav-collapsed .logo,
   .sidebar.nav-collapsed .sb-label,
-  .sidebar.nav-collapsed .sb-section-text,
-  .sidebar.nav-collapsed .sb-folder-name,
-  .sidebar.nav-collapsed .sb-proj-name,
-  .sidebar.nav-collapsed .sb-folder-chevron,
-  .sidebar.nav-collapsed .sb-folder-menu,
-  .sidebar.nav-collapsed .sb-folder-empty,
-  .sidebar.nav-collapsed .sb-root-drop { display: none; }
-  .sidebar.nav-collapsed .sb-collapse-btn { margin-left: 0; }
-  .sidebar.nav-collapsed .sb-item,
-  .sidebar.nav-collapsed .sb-folder-head,
-  .sidebar.nav-collapsed .sb-proj { justify-content: center; padding-left: 0; padding-right: 0; gap: 0; }
-  .sidebar.nav-collapsed .sb-section { justify-content: center; padding: 12px 0 6px; }
-  .sidebar.nav-collapsed .sb-folder { margin-left: 0 !important; }
-  .sidebar.nav-collapsed .sb-folder-body { padding-left: 0; }
-  /* Recolhido: esconde a seção "Projetos" inteira (título, botão + e as pastas/projetos);
-     fica só a navegação principal. Expanda o menu para ver os projetos. */
   .sidebar.nav-collapsed .sb-section,
   .sidebar.nav-collapsed .sb-folder,
-  .sidebar.nav-collapsed .sb-proj-row { display: none; }
+  .sidebar.nav-collapsed .sb-proj-row,
+  .sidebar.nav-collapsed .sb-root-drop { display: none; }
+  .sidebar.nav-collapsed .sb-collapse-btn { margin-left: 0; }
+  .sidebar.nav-collapsed .sb-item { justify-content: center; padding-left: 0; padding-right: 0; gap: 0; }
 }
 
 /* ---------- Celular: sidebar vira drawer ---------- */
@@ -234,19 +217,18 @@
   .app.nav-open .nav-backdrop { display: block; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
 }
 
-
 /* Bolinha da cor do tipo dentro do chip de filtro. */
-.news-filter-btn { display: inline-flex; align-items: center; gap: 6px; }
-
-.news-filter-dot { width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; }
+.news-filter-dot { width: 6px; height: 6px; border-radius: var(--r-full); flex-shrink: 0; }
 
 /* Notificação que leva a algum lugar ganha affordance de clique. */
 .news-item.clickable:hover { border-color: var(--fg-2); box-shadow: var(--shadow-xs); }
 
-.news-item.clickable:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+.news-item-title { all: unset; cursor: pointer; font: inherit; color: inherit; }
+.news-item-title:disabled { cursor: default; }
+.news-item-title:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
 
 /* Ações do cabeçalho: marcar tudo como lido + limpar tudo. */
-.news-header-acoes { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #f6f4ef; border-bottom: 1px solid var(--border); }
+.news-header-acoes { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--bg-subtle); border-bottom: 1px solid var(--border); }
 
 /* Sem quebra de linha: é o que cortava "Limpar tudo" quando os botões
    disputavam a largura do cabeçalho. */

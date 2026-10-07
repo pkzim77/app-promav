@@ -1,7 +1,7 @@
 import React from 'react'
-import { Icon } from '../Icon.jsx'
 import { Modal, Field } from '../primitives/primitives.jsx'
 import { SECTORS } from '../../data/store.js'
+import { FieldError } from './shared/FieldError.jsx'
 
 // A pessoa liga a própria conta ao setor em que trabalha. É esse vínculo que
 // faz uma mudança endereçada a "Engenharia" encontrar gente de verdade.
@@ -10,7 +10,7 @@ export function MySectorModal({ current, onSubmit, onClose }) {
   const [busy, setBusy] = React.useState(false)
   const save = async () => { setBusy(true); try { await onSubmit(sector || null) } finally { setBusy(false) } }
   return (
-    <Modal title="Meu setor" onClose={onClose}
+    <Modal title="Meu setor" onClose={onClose} travado={busy}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose} disabled={busy}>Cancelar</button>
         <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'Salvando…' : 'Salvar'}</button>
@@ -20,7 +20,7 @@ export function MySectorModal({ current, onSubmit, onClose }) {
           <option value="">Sem setor</option>
           {SECTORS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
-        <span className="peso-hint">
+        <span className="marca-nota">
           Mudanças endereçadas a um setor cobram ciência de quem estiver nele.
           Sem setor definido, você não recebe esses avisos.
         </span>
@@ -37,6 +37,7 @@ export function ChangePasswordModal({ onSubmit, onClose }) {
   const [busy, setBusy] = React.useState(false)
 
   const save = async () => {
+    if (busy) return
     setError(null)
     if (next.length < 6) return setError('A nova senha precisa ter ao menos 6 caracteres.')
     if (next !== confirm) return setError('A confirmação não confere.')
@@ -48,19 +49,25 @@ export function ChangePasswordModal({ onSubmit, onClose }) {
   return (
     <Modal title="Trocar senha" onClose={onClose}
       footer={<>
-        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+        <button className="btn btn-secondary" onClick={onClose} disabled={busy}>Cancelar</button>
         <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'Salvando…' : 'Salvar senha'}</button>
       </>}>
       <Field label="Senha atual">
-        <input className="control" type="password" autoFocus value={current} onChange={e => setCurrent(e.target.value)} />
+        <input className="control" type="password" autoFocus value={current}
+          onChange={e => setCurrent(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); save() } }} />
       </Field>
       <Field label="Nova senha">
-        <input className="control" type="password" value={next} onChange={e => setNext(e.target.value)} />
+        <input className="control" type="password" value={next}
+          onChange={e => setNext(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); save() } }} />
       </Field>
       <Field label="Confirmar nova senha">
-        <input className="control" type="password" value={confirm} onChange={e => setConfirm(e.target.value)} />
+        <input className="control" type="password" value={confirm}
+          onChange={e => setConfirm(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); save() } }} />
       </Field>
-      {error && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{error}</span>}
+      <FieldError>{error}</FieldError>
     </Modal>
   )
 }

@@ -1,10 +1,10 @@
 // ============================================================
-// Promav — shared store (single source of truth)
-// Seed data for users, projects, tasks + helpers. Imported by
-// every screen so they read/write the same data shape.
+// Promav — constantes de domínio e helpers puros compartilhados pelas telas
+// (status, prioridades, listas do cadastro, permissões, datas, progresso).
+// Os dados vêm da API (src/data/api.js); aqui não há dado de exemplo.
 // ============================================================
 
-import { progressoExecutado } from './progresso.js'
+import { progressoExecutado, estadoDoItem } from './progresso.js'
 
 export const PROJECT_COLORS = {
   indigo: 'var(--proj-indigo)', blue: 'var(--proj-blue)', teal: 'var(--proj-teal)',
@@ -44,13 +44,10 @@ export const CHECK_STATES = [
   { id: 'done',      label: 'Concluído' },
 ]
 
-// O estado de um item aceitando o formato antigo, que só tinha `done`.
-export const estadoDoItem = (item) => item?.state || (item?.done ? 'done' : 'todo')
-
 export const PRIORITIES = [
-  { id: 'low',    label: 'Baixa', color: 'var(--prio-low)',    hex: '#7B8794', soft: 'var(--prio-low-soft)',    text: '#5a6470' },
-  { id: 'medium', label: 'Média', color: 'var(--prio-medium)', hex: '#E8920C', soft: 'var(--prio-medium-soft)', text: '#a8680a' },
-  { id: 'high',   label: 'Alta',  color: 'var(--prio-high)',   hex: '#E5484D', soft: 'var(--prio-high-soft)',   text: '#c5333a' },
+  { id: 'low',    label: 'Baixa', color: 'var(--prio-low)',    soft: 'var(--prio-low-soft)',    text: '#5a6470' },
+  { id: 'medium', label: 'Média', color: 'var(--prio-medium)', soft: 'var(--prio-medium-soft)', text: '#a8680a' },
+  { id: 'high',   label: 'Alta',  color: 'var(--prio-high)',   soft: 'var(--prio-high-soft)',   text: '#c5333a' },
 ]
 export const PRIORITY_MAP = Object.fromEntries(PRIORITIES.map(p => [p.id, p]))
 
@@ -95,7 +92,7 @@ export const SECRETARIAS = [
   'Sec. Municipal de Governo',
   'Sec. Municipal de Meio Ambiente e Sustentabilidade',
   'Sec. Municipal de Obras e Infraestrutura',
-  'Sec. Municipal de Segurança e Ordem Púbica',
+  'Sec. Municipal de Segurança e Ordem Pública',
 ]
 
 // Contas de manutenção do sistema (users.is_dev) e profissionais inativos
@@ -224,7 +221,6 @@ export function pendenciasDoProjeto(p = {}) {
   if (!String(p.secretaria || '').trim()) faltando.push('Secretaria')
   if (!(p.responsibleIds || []).length) faltando.push('Profissional responsável')
   if (!p.start || !p.end) faltando.push('Prazo (início e entrega)')
-  if (!p.origemRecurso) faltando.push('Origem do recurso')
   if (p.valorEstimado == null) faltando.push('Valor estimado')
   if (p.ehConvenio && !String(p.convenioNumero || '').trim()) faltando.push('Número do convênio')
   if (p.ehConvenio && p.convenioValor == null) faltando.push('Valor do convênio')
@@ -281,15 +277,7 @@ export function etapasDoProjeto(tasks = [], projectId) {
 // Cargo não é formação. "Projetos Prediais" e "Estagiário de TI" são cargos
 // reais no cadastro e não cabem em nenhum diploma; a formação, logo abaixo, é
 // que diz qual conselho a pessoa tem.
-export const CARGOS = [
-  {id: 'Arquitetura', label: 'Arquitetura'},
-  {id: 'Projetos Prediais', label: 'Projetos Prediais'},
-  {id: 'Orçamentista', label: 'Orçamentista'},
-  {id: 'Coordenação', label: 'Coordenação'},
-  {id: 'Direção', label: 'Direção'},
-  {id: 'Estagiário', label: 'Estagiário'},
-  {id: 'TI', label: 'TI'}
-]
+export const CARGOS = ['Arquitetura', 'Projetos Prediais', 'Orçamentista', 'Coordenação', 'Direção', 'Estagiário', 'TI']
 
 // Formação profissional da pessoa (users.formation). É o diploma, não o que a
 // pessoa faz: é daqui que sai o conselho, porque o conselho segue a formação.
@@ -299,7 +287,7 @@ export const FORMACOES = [
   { id: 'engenharia-civil',    label: 'Engenharia Civil' },
   { id: 'engenharia-eletrica', label: 'Engenharia Elétrica' },
 ]
-export const FORMACAO_MAP = Object.fromEntries(FORMACOES.map(f => [f.id, f]))
+const FORMACAO_MAP = Object.fromEntries(FORMACOES.map(f => [f.id, f]))
 export const formacaoLabel = (id) => FORMACAO_MAP[id]?.label || null
 
 // Conselho profissional: CREA para engenharia, CAU para arquitetura.
@@ -309,35 +297,30 @@ export const formacaoLabel = (id) => FORMACAO_MAP[id]?.label || null
 // quem é de Engenharia Elétrica tem CREA sem que o setor precise dizer nada.
 // O setor entra quando a formação está em branco (a maioria do cadastro hoje),
 // e o cargo é o último recurso.
-export const FORMACAO_CONSELHO = {
+const FORMACAO_CONSELHO = {
   'arquitetura': 'CAU',
   'engenharia-civil': 'CREA',
   'engenharia-eletrica': 'CREA',
 }
 
-export const SETOR_CONSELHO = {
+const SETOR_CONSELHO = {
   'Engenharia': 'CREA',
   'Arquitetura': 'CAU',
 }
 
 // O cargo virou texto livre, então a comparação ignora caixa e acento:
 // "arquitetura" e "Arquitetura" são o mesmo cargo para quem digitou com pressa.
-export const CARGO_CONSELHO = {
+const CARGO_CONSELHO = {
   'Arquitetura': 'CAU',
   'Projetos Prediais': 'CREA',
 }
 
-export const YES_NO_OPTIONS = [
-  {id: 'sim', label: 'Sim'},
-  {id: 'não', label: 'Não'}
-]
-
 const CARGO_CONSELHO_POR_CHAVE = Object.fromEntries(
   Object.entries(CARGO_CONSELHO).map(([cargo, conselho]) => [chaveTexto(cargo), conselho]))
 
-export const conselhoDaFormacao = (formacao) => FORMACAO_CONSELHO[formacao] || null
-export const conselhoDoSetor = (setor) => SETOR_CONSELHO[setor] || null
-export const conselhoDoCargo = (cargo) => CARGO_CONSELHO_POR_CHAVE[chaveTexto(cargo)] || null
+const conselhoDaFormacao = (formacao) => FORMACAO_CONSELHO[formacao] || null
+const conselhoDoSetor = (setor) => SETOR_CONSELHO[setor] || null
+const conselhoDoCargo = (cargo) => CARGO_CONSELHO_POR_CHAVE[chaveTexto(cargo)] || null
 
 // A regra completa. Recebe a pessoa (ou o rascunho dela no formulário) em vez
 // de três argumentos soltos: na ordem errada eles se trocam sem erro nenhum.
@@ -368,7 +351,7 @@ export const SECTORS = [
   { id: 'Arquitetura', label: 'Arquitetura' },
   { id: 'TI',          label: 'TI' },
 ]
-export const SECTOR_MAP = Object.fromEntries(SECTORS.map(s => [s.id, s]))
+const SECTOR_MAP = Object.fromEntries(SECTORS.map(s => [s.id, s]))
 export const sectorLabel = (id) => SECTOR_MAP[id]?.label || null
 
 // Tipo da mudança. Requisição obriga; sugestão é proposta e só vira trabalho
@@ -446,77 +429,6 @@ export function parseBRL(text) {
   return Number.isFinite(n) && n >= 0 ? n : null
 }
 
-export const SEED_USERS = [
-  { id: 'u1', name: 'Marina Souza',  initials: 'MS', color: 'var(--proj-blue)' },
-  { id: 'u2', name: 'Lucas Rocha',   initials: 'LR', color: 'var(--proj-purple)' },
-  { id: 'u3', name: 'Camila Alves',  initials: 'CA', color: 'var(--proj-green)' },
-  { id: 'u4', name: 'João Pereira',  initials: 'JP', color: 'var(--proj-coral)' },
-  { id: 'u5', name: 'Rafael Brito',  initials: 'RB', color: 'var(--proj-teal)' },
-]
-
-export const SEED_PROJECTS = [
-  { id: 'p1', name: 'Rebrand 2026',       desc: 'Nova identidade visual e site institucional.', color: 'coral', start: '2026-05-04', end: '2026-06-19' },
-  { id: 'p2', name: 'App mobile',         desc: 'Lançamento do app iOS e Android.',             color: 'teal',  start: '2026-05-11', end: '2026-07-03' },
-  { id: 'p3', name: 'Marketing Q2',       desc: 'Campanhas e conteúdo do segundo trimestre.',   color: 'amber', start: '2026-05-01', end: '2026-06-12' },
-  { id: 'p4', name: 'Onboarding clientes',desc: 'Melhorar a ativação de novos clientes.',       color: 'blue',  start: '2026-05-18', end: '2026-06-30' },
-]
-
-export const SEED_TASKS = [
-  { id: 't1',  projectId: 'p1', title: 'Finalizar manual de marca', assigneeId: 'u1', status: 'progress', priority: 'high',   start: '2026-05-14', end: '2026-05-28' },
-  { id: 't2',  projectId: 'p1', title: 'Aprovar nova paleta',       assigneeId: 'u3', status: 'done',     priority: 'high',   start: '2026-05-04', end: '2026-05-12' },
-  { id: 't3',  projectId: 'p1', title: 'Wireframes do site',        assigneeId: 'u2', status: 'progress', priority: 'medium', start: '2026-05-18', end: '2026-05-30' },
-  { id: 't4',  projectId: 'p1', title: 'Sessão de fotos',           assigneeId: 'u4', status: 'todo',     priority: 'low',    start: '2026-06-01', end: '2026-06-08' },
-  { id: 't5',  projectId: 'p1', title: 'Publicar site institucional', assigneeId: 'u1', status: 'todo',  priority: 'high',   start: '2026-06-10', end: '2026-06-19' },
-  { id: 't6',  projectId: 'p2', title: 'Telas de onboarding',       assigneeId: 'u2', status: 'progress', priority: 'medium', start: '2026-05-20', end: '2026-05-30' },
-  { id: 't7',  projectId: 'p2', title: 'Integração de login',       assigneeId: 'u5', status: 'todo',     priority: 'high',   start: '2026-05-25', end: '2026-06-05' },
-  { id: 't8',  projectId: 'p2', title: 'Design system mobile',      assigneeId: 'u3', status: 'done',     priority: 'medium', start: '2026-05-11', end: '2026-05-22' },
-  { id: 't9',  projectId: 'p2', title: 'Testes beta',               assigneeId: 'u4', status: 'todo',     priority: 'medium', start: '2026-06-08', end: '2026-06-20' },
-  { id: 't10', projectId: 'p2', title: 'Publicar nas lojas',        assigneeId: 'u1', status: 'todo',     priority: 'high',   start: '2026-06-25', end: '2026-07-03' },
-  { id: 't11', projectId: 'p3', title: 'Calendário editorial',      assigneeId: 'u3', status: 'done',     priority: 'low',    start: '2026-05-01', end: '2026-05-08' },
-  { id: 't12', projectId: 'p3', title: 'Campanha de lançamento',    assigneeId: 'u4', status: 'progress', priority: 'high',   start: '2026-05-12', end: '2026-05-30' },
-  { id: 't13', projectId: 'p3', title: 'Newsletter de maio',        assigneeId: 'u1', status: 'done',     priority: 'medium', start: '2026-05-05', end: '2026-05-15' },
-  { id: 't14', projectId: 'p3', title: 'Anúncios pagos',            assigneeId: 'u5', status: 'todo',     priority: 'medium', start: '2026-05-28', end: '2026-06-12' },
-  { id: 't15', projectId: 'p4', title: 'Fluxo de ativação',         assigneeId: 'u2', status: 'progress', priority: 'high',   start: '2026-05-18', end: '2026-06-02' },
-  { id: 't16', projectId: 'p4', title: 'E-mails de boas-vindas',    assigneeId: 'u3', status: 'todo',     priority: 'medium', start: '2026-05-12', end: '2026-05-22' },
-  { id: 't17', projectId: 'p4', title: 'Tutorial in-app',           assigneeId: 'u1', status: 'todo',     priority: 'low',    start: '2026-06-05', end: '2026-06-18' },
-]
-
-// ---------- checklists (subetapas por atividade) ----------
-// Fonte do progresso fino de cada atividade. done=true marca o item concluído.
-const CHECKLISTS = {
-  t1:  [['Coletar referências',1],['Definir grid e tipografia',1],['Diagramar páginas',0],['Revisão final',0]],
-  t2:  [['Testar contraste',1],['Aprovar com o time',1],['Documentar tokens',1]],
-  t3:  [['Mapa do site',1],['Wireframe da home',1],['Wireframe internas',0],['Validar com stakeholders',0]],
-  t4:  [['Briefing da sessão',0],['Reservar estúdio',0],['Lista de cenas',0]],
-  t5:  [['Configurar hospedagem',0],['Migrar conteúdo',0],['Testes de QA',0],['Go live',0]],
-  t6:  [['Fluxo de telas',1],['Protótipo navegável',1],['Microcopy',0],['Handoff para dev',0]],
-  t7:  [['Tela de login',0],['Integração OAuth',0],['Recuperação de senha',0]],
-  t8:  [['Componentes base',1],['Tokens de cor',1],['Documentação',1]],
-  t9:  [['Recrutar testers',0],['Roteiro de testes',0],['Coletar feedback',0]],
-  t10: [['Assets das lojas',0],['Ficha App Store',0],['Ficha Play Store',0],['Enviar para revisão',0]],
-  t11: [['Levantar datas-chave',1],['Montar calendário',1]],
-  t12: [['Conceito criativo',1],['Peças gráficas',1],['Plano de mídia',0],['Aprovação final',0]],
-  t13: [['Definir pauta',1],['Redigir texto',1],['Disparar',1]],
-  t14: [['Definir público',0],['Criar anúncios',0],['Configurar campanha',0]],
-  t15: [['Mapear jornada',1],['Definir gatilhos',1],['Implementar fluxo',0],['Medir conversão',0]],
-  t16: [['Escrever copy',0],['Montar template',0],['Programar envio',0]],
-  t17: [['Roteiro do tour',0],['Telas guiadas',0],['Publicar',0]],
-}
-SEED_TASKS.forEach(t => {
-  t.checklist = (CHECKLISTS[t.id] || []).map(([text, done], i) => ({ id: `${t.id}-c${i}`, text, done: !!done }))
-})
-
-// ---------- membros adicionais por atividade (além do responsável) ----------
-const MEMBERS = {
-  t1:  ['u3','u4'],
-  t3:  ['u1'],
-  t6:  ['u5'],
-  t7:  ['u2','u3'],
-  t12: ['u1','u5'],
-  t15: ['u3'],
-}
-SEED_TASKS.forEach(t => { t.memberIds = MEMBERS[t.id] ? [...MEMBERS[t.id]] : [] })
-
 // Todas as pessoas de uma atividade: responsável + membros (sem duplicar).
 export function taskMembers(task) {
   const ids = [task.assigneeId, ...(task.memberIds || [])].filter(Boolean)
@@ -525,6 +437,9 @@ export function taskMembers(task) {
 
 // ---------- date helpers ----------
 export const MONTHS_PT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
+// O documento que vai ao cliente escreve o mês por extenso; a forma
+// abreviada acima é para caber nas telas.
+export const MESES_EXTENSO = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
 // Prazo passou a ser opcional no cadastro (ver pendenciasDoProjeto), e com isso
 // toda data pode chegar vazia. Antes qualquer uma destas funções recebendo null
 // derrubava a tela inteira num `null.split` — uma informação que falta não pode
@@ -532,7 +447,7 @@ export const MONTHS_PT = ['jan','fev','mar','abr','mai','jun','jul','ago','set',
 //
 // Sem data: parseDate devolve null, os formatadores devolvem travessão e as
 // contas devolvem null, que é diferente de zero e obriga quem chama a decidir.
-export const SEM_DATA = '—'
+const SEM_DATA = '—'
 export function parseDate(s) {
   if (!s) return null
   const [y,m,d] = String(s).split('-').map(Number)
@@ -542,6 +457,17 @@ export function parseDate(s) {
 export function fmtShort(s) { const d = parseDate(s); return d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}` : SEM_DATA }
 export function fmtMed(s) { const d = parseDate(s); return d ? `${d.getDate()} de ${MONTHS_PT[d.getMonth()]}` : SEM_DATA }
 export function fmtFull(s) { const d = parseDate(s); return d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : SEM_DATA }
+// Período com só uma das pontas preenchidas imprimia '— – —' ou '—–06/10':
+// o travessão de "sem data" dos dois lados do separador não informa nada.
+// Devolve null quando não há data nenhuma, para cada tela manter o próprio
+// texto de vazio. Separador e formatador entram por parâmetro porque cada
+// tela já tinha o seu.
+export function fmtPeriodo(start, end, fmt = fmtShort, sep = ' – ') {
+  if (start && end) return `${fmt(start)}${sep}${fmt(end)}`
+  if (end) return `até ${fmt(end)}`
+  if (start) return `a partir de ${fmt(start)}`
+  return null
+}
 export function dayDiff(a, b) {
   const x = parseDate(a), y = parseDate(b)
   return x && y ? Math.round((y - x) / 86400000) : null
@@ -565,7 +491,9 @@ export const PROJECT_ROLES = [
   { id: 'full', label: 'Edição total' },
   { id: 'view', label: 'Só exibição' },
 ]
-export const ROLE_LABEL = { admin: 'Administrador', full: 'Edição total', view: 'Só exibição' }
+// Rótulo de cada papel, com o 'admin' que não é papel de projeto. O resto sai
+// de PROJECT_ROLES para um papel novo não precisar ser escrito em dois lugares.
+export const ROLE_LABEL = { admin: 'Administrador', ...Object.fromEntries(PROJECT_ROLES.map(r => [r.id, r.label])) }
 
 // Papel efetivo de um usuário num projeto (espelha a lógica do backend):
 // admin global > pessoa incluída no projeto. Quem não foi incluído não tem
@@ -593,12 +521,12 @@ export function formatBytes(bytes) {
 }
 
 // ---------- checklist / progress helpers ----------
-// O cálculo ponderado por peso vive em progresso.js (função pura, testada).
-export { calcularProgresso, progressoExecutado } from './progresso.js'
+// O cálculo do progresso vive em progresso.js (função pura, sem React).
+export { calcularProgresso, estadoDoItem } from './progresso.js'
 export function checklistStats(task) {
   const list = task.checklist || []
   const total = list.length
-  const done = list.filter(i => i.done).length
+  const done = list.filter(i => estadoDoItem(i) === 'done').length
   return { total, done, remaining: total - done, pct: total ? Math.round(done / total * 100) : null }
 }
 // Progresso de uma atividade, em três camadas:
@@ -613,9 +541,10 @@ export function taskProgress(task) {
   return task.status === 'progress' ? 50 : 0
 }
 
-// Progresso do projeto: percentual executado segundo os PESOS das atividades
-// (ver src/data/progresso.js). Antes era a média simples do progresso de cada
-// atividade — o que fazia um serviço de 3 dias pesar igual a um de 3 meses.
+// Progresso do projeto (ver src/data/progresso.js): toda atividade vale 100/N;
+// concluída entra inteira, as demais entram só com a fração do checklist já
+// marcada. Difere da média simples de taskProgress em não dar 50% a uma
+// atividade em andamento sem checklist.
 //
 // Recebe JÁ as atividades do projeto. A versão anterior recebia a lista
 // inteira mais um projectId e filtrava por conta própria, o que parecia

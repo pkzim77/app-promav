@@ -5,7 +5,20 @@ import { PROJECT_COLORS, parseDate, dayDiff, addDays, fmtShort, MONTHS_PT, today
 
 const DAY_W = 26
 
-export function Gantt({ tasks, projects, filterProject, onFilterProject, embedded }) {
+// Memoizado: o pai re-renderiza a cada segundo por causa do `now` do
+// cronômetro, e nada aqui depende dele. Como o memo também barra o render que
+// trazia o dia novo, quem cuida da data de hoje é o próprio componente.
+export const Gantt = React.memo(function Gantt({ tasks, projects, filterProject, onFilterProject, embedded }) {
+  // O dia fica em estado e se reagenda para a meia-noite seguinte, senão a
+  // coluna destacada, a linha de hoje e a legenda ficariam no dia anterior até
+  // alguma prop mudar.
+  const [hojeISO, setHojeISO] = React.useState(todayISO)
+  React.useEffect(() => {
+    const agora = new Date()
+    const proximaMeiaNoite = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() + 1)
+    const id = setTimeout(() => setHojeISO(todayISO()), proximaMeiaNoite - agora + 1000)
+    return () => clearTimeout(id)
+  }, [hojeISO])
   // visible projects
   const shownProjects = filterProject ? projects.filter(p => p.id === filterProject) : projects
   const shownTasks = tasks.filter(t => shownProjects.some(p => p.id === t.projectId))
@@ -13,13 +26,8 @@ export function Gantt({ tasks, projects, filterProject, onFilterProject, embedde
   // date range across project + task bounds, padded to whole weeks-ish
   // Sem prazo não há barra para desenhar, e uma data vazia no meio do cálculo
   // de extremos contaminava o intervalo inteiro.
-  const allDates = []
-  shownProjects.forEach(p => { allDates.push(p.start, p.end) })
-  shownTasks.forEach(t => { allDates.push(t.start, t.end) })
-  const comData = allDates.filter(Boolean)
-  allDates.length = 0
-  allDates.push(...comData)
-  if (!allDates.length) allDates.push(todayISO(), addDays(todayISO(), 14))
+  const allDates = [...shownProjects.flatMap(p => [p.start, p.end]), ...shownTasks.flatMap(t => [t.start, t.end])].filter(Boolean)
+  if (!allDates.length) allDates.push(hojeISO, addDays(hojeISO, 14))
   const minD = allDates.reduce((a, b) => parseDate(b) < parseDate(a) ? b : a)
   const maxD = allDates.reduce((a, b) => parseDate(b) > parseDate(a) ? b : a)
   const rangeStart = addDays(minD, -2)
@@ -32,22 +40,26 @@ export function Gantt({ tasks, projects, filterProject, onFilterProject, embedde
     const iso = addDays(rangeStart, i)
     const d = parseDate(iso)
     const wd = d.getDay()
-    days.push({ iso, num: d.getDate(), month: d.getMonth(), weekend: wd === 0 || wd === 6, today: iso === todayISO() })
+    days.push({ iso, num: d.getDate(), month: d.getMonth(), year: d.getFullYear(), weekend: wd === 0 || wd === 6, today: iso === hojeISO })
   }
-  // month segments
+  // Segmentos de mês. O ano entra na comparação porque um intervalo de vários
+  // anos tem 'jan' mais de uma vez, e sem isso eles virariam um bloco só.
   const months = []
   days.forEach(dy => {
     const last = months[months.length - 1]
-    if (last && last.month === dy.month) last.count++
-    else months.push({ month: dy.month, count: 1 })
+    if (last && last.month === dy.month && last.year === dy.year) last.count++
+    else months.push({ month: dy.month, year: dy.year, count: 1 })
   })
 
   const trackW = totalDays * DAY_W
-  const todayLeft = (dayDiff(rangeStart, todayISO())) * DAY_W + DAY_W / 2
+  const todayLeft = (dayDiff(rangeStart, hojeISO)) * DAY_W + DAY_W / 2
+  // O intervalo vem das datas do projeto, que pode ter terminado meses atrás
+  // ou nem ter começado: hoje nem sempre tem coluna onde cair.
+  const hojeNoIntervalo = todayLeft >= 0 && todayLeft <= trackW
 
   const scrollRef = React.useRef(null)
   React.useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollLeft = Math.max(0, todayLeft - 220)
+    if (scrollRef.current) scrollRef.current.scrollLeft = hojeNoIntervalo ? Math.max(0, todayLeft - 220) : 0
   }, [filterProject])
 
   // Devolve null quando falta prazo: quem desenha decide o que fazer, em vez de
@@ -74,10 +86,10 @@ export function Gantt({ tasks, projects, filterProject, onFilterProject, embedde
         </div>
       </div>
 
-      <div style={{ padding: embedded ? '0 0 32px' : '0 36px 32px', flex: 1, minHeight: 0 }}>
+      <div style={{ padding: embedded ? '0 0 32px' : '0 36px 32px', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <div className="gantt">
           <div className="gantt-scroll" ref={scrollRef}>
-            <div className="gantt-grid" style={{ minWidth: 220 + trackW }}>
+            <div className="gantt-grid" style={{ minWidth: 220 + trackW, '--gantt-day-w': DAY_W + 'px' }}>
               {/* ruler */}
               <div className="gantt-ruler">
                 <div className="gantt-label-col" style={{ display: 'flex', alignItems: 'flex-end', padding: '0 12px 6px' }}>
@@ -86,8 +98,9 @@ export function Gantt({ tasks, projects, filterProject, onFilterProject, embedde
                 <div style={{ width: trackW }}>
                   <div style={{ display: 'flex' }}>
                     {months.map((m, i) => (
-                      <div key={i} className="gantt-month" style={{ width: m.count * DAY_W, borderLeft: i ? '1px solid var(--border)' : 'none' }}>
-                        {MONTHS_PT[m.month]}
+                      <div key={i} className="gantt-month" title={`${MONTHS_PT[m.month]} ${m.year}`} style={{ width: m.count * DAY_W, borderLeft: i ? '1px solid var(--border)' : 'none' }}>
+                        {/* O ano só cabe a partir de 3 dias de segmento; nas pontas curtas o nowrap da régua cortaria o ano no meio, e 'AGO 2' se lê como outro ano. O title guarda o rótulo inteiro. */}
+                        {m.count >= 3 ? `${MONTHS_PT[m.month]} ${String(m.year).slice(2)}` : MONTHS_PT[m.month]}
                       </div>
                     ))}
                   </div>
@@ -100,7 +113,7 @@ export function Gantt({ tasks, projects, filterProject, onFilterProject, embedde
               </div>
 
               {/* today line */}
-              <div className="gantt-today-line" style={{ left: 220 + todayLeft }} />
+              {hojeNoIntervalo && <div className="gantt-today-line" style={{ left: 220 + todayLeft }} />}
 
               {/* rows grouped by project */}
               {shownProjects.map(p => {
@@ -139,9 +152,9 @@ export function Gantt({ tasks, projects, filterProject, onFilterProject, embedde
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 12, fontSize: 12, color: 'var(--fg-4)' }}>
-          <span style={{ width: 14, height: 2, background: 'var(--brand)', opacity: .55 }} />Hoje · {fmtShort(todayISO())}
+          <span style={{ width: 14, height: 2, background: 'var(--brand)', opacity: .55 }} />Hoje · {fmtShort(hojeISO)}{!hojeNoIntervalo && ' (fora do período exibido)'}
         </div>
       </div>
     </div>
   )
-}
+})
