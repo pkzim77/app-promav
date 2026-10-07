@@ -1,26 +1,34 @@
 import React from 'react'
 import { Sidebar, TopBar } from './components/Chrome/Chrome.jsx'
 import { Toast } from './components/primitives/primitives.jsx'
-import { TaskModal, ProjectModal, ChangeModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal,KmzModal, PeopleModal, PersonCard, StageItemModal, StageActivitiesModal, ProjectSearchModal } from './components/Modals/Modals.jsx'
+import { ErrorBoundary, lazyComAviso } from './components/ErrorBoundary.jsx'
+import { fmtDur } from './components/TimeTracker/TimeTracker.jsx'
+import { TaskModal, ProjectModal, MySectorModal, ConfirmDialog, ChangePasswordModal, DocumentModal, LinkModal, ImageModal,KmzModal, StageItemModal, StageActivitiesModal, ProjectSearchModal } from './components/Modals/Modals.jsx'
 import { Hub } from './screens/Hub/Hub.jsx'
 import { ProjectList, ProjectDetail } from './screens/Projects/Projects.jsx'
 import { Kanban } from './screens/Kanban/Kanban.jsx'
 import { TaskListView } from './screens/List/List.jsx'
 import { Gantt } from './screens/Gantt/Gantt.jsx'
-import { Reports } from './screens/Reports/Reports.jsx'
-import { TeamReport } from './screens/TeamReport/TeamReport.jsx'
-import { MyWeeklyReport, AdminWeeklyReports } from './screens/WeeklyReport/WeeklyReport.jsx'
 import { Login } from './screens/Login/Login.jsx'
 import { api } from './data/api.js'
-import { effectiveProjectRole, canEditProject, NOTIF_KIND_MAP, etapasDoProjeto } from './data/store.js'
+import { usePersistido } from './data/usePersistido.js'
+import { effectiveProjectRole, canEditProject, estadoDoItem, NOTIF_KIND_MAP, STATUS_MAP, PROJECT_STATUS_MAP, etapasDoProjeto, fmtShort, PADRAO_ETAPA } from './data/store.js'
 import { tocarAviso, destravarSom, avisarNoNavegador, pedirPermissao, permissaoNotificacao, suportaNotificacao } from './data/avisos.js'
 // Promav app — root: dados vêm do backend (Express + Neon) via src/data/api.js.
 
-// Profissionais carrega sob demanda: o AG Grid que ela usa responde por ~1,2 MB
-// do bundle, e a tela é só de administrador. Sem isto, todo mundo baixa a
-// biblioteca no primeiro acesso mesmo sem nunca abrir a tela.
-// O módulo tem export nomeado, daí o mapeamento para default que o lazy exige.
-const People = React.lazy(() => import('./screens/People/People.jsx').then(m => ({ default: m.People })))
+// Telas e modais de uso raro ou só-admin (Profissionais, Relatórios, Equipe,
+// relatório semanal, cadastro de pessoa, mudanças) carregam sob demanda: o AG
+// Grid de Profissionais sozinho responde por ~1,2 MB, e sem isto todo mundo
+// baixa no primeiro acesso tudo o que talvez nunca abra.
+// Os módulos têm export nomeado, daí o mapeamento para default que o lazy exige.
+const People = lazyComAviso(() => import('./screens/People/People.jsx').then(m => ({ default: m.People })))
+const Reports = lazyComAviso(() => import('./screens/Reports/Reports.jsx').then(m => ({ default: m.Reports })))
+const TeamReport = lazyComAviso(() => import('./screens/TeamReport/TeamReport.jsx').then(m => ({ default: m.TeamReport })))
+const MyWeeklyReport = lazyComAviso(() => import('./screens/WeeklyReport/WeeklyReport.jsx').then(m => ({ default: m.MyWeeklyReport })))
+const AdminWeeklyReports = lazyComAviso(() => import('./screens/WeeklyReport/WeeklyReport.jsx').then(m => ({ default: m.AdminWeeklyReports })))
+const ChangeModal = lazyComAviso(() => import('./components/Modals/ChangeModal.jsx').then(m => ({ default: m.ChangeModal })))
+const PersonCard = lazyComAviso(() => import('./components/Modals/PersonCard.jsx').then(m => ({ default: m.PersonCard })))
+const PeopleModal = lazyComAviso(() => import('./components/Modals/PeopleModal.jsx').then(m => ({ default: m.PeopleModal })))
 
 const TITLES ={ hub: 'Visão geral', projects: 'Projetos', list: 'Lista', kanban: 'Kanban', gantt: 'Gantt', people: 'Profissionais', reports: 'Relatórios', team: 'Equipe', myreport: 'Meu relatório', weeklyreports: 'Relatórios individuais' }
 
@@ -39,6 +47,22 @@ const REPOUSO_MS = 3 * 24 * 60 * 60 * 1000 // 3 dias
 
 // De quanto em quanto tempo conferir o carimbo do banco (/api/pulse).
 const PULSE_MS = 30000 // 30s
+
+// Estado da atividade como a notificação o enuncia: minúsculas e no feminino
+// ("atividade concluída"). O label de STATUS_MAP não serve aqui — é título
+// de coluna ("Concluído") e a frase ficaria sem concordância.
+const ESTADO_ATIV = { todo: 'a fazer', progress: 'em andamento', review: 'em revisão', diligence: 'em diligência', done: 'concluída' }
+
+// Padrões do que fica guardado no navegador. Ficam fora do componente para a
+// identidade não trocar a cada render.
+const AVISOS_PADRAO = { som: true, navegador: false }
+const SEM_IDS = []
+// O aviso do navegador vale só se ele ainda estiver autorizado: a pessoa pode
+// ter revogado a permissão nas configurações depois de ligar aqui.
+const normAvisos = (salvo) => salvo
+  ? { som: salvo.som !== false, navegador: !!salvo.navegador && permissaoNotificacao() === 'granted' }
+  : AVISOS_PADRAO
+const soLista = (xs) => Array.isArray(xs) ? xs : []
 
 export default function App() {
   const [authUser, setAuthUser] = React.useState(null)   // usuário logado (ou null)
@@ -70,12 +94,14 @@ export default function App() {
 
   const currentUserId = authUser?.id || null
 
-  // O relógio só precisa correr de segundo em segundo quando há cronômetro
-  // rodando — é a única coisa que muda a cada segundo. Sem essa guarda, o
-  // `now` no topo da árvore re-renderizava o app inteiro 86.400 vezes por dia
-  // para exibir um número parado. Parado, um tique a cada 30s basta: serve só
-  // para a virada do dia no total de hoje.
-  const cronometroAtivo = sessions.some(s => !s.end)
+  // O relógio só precisa correr de segundo em segundo quando o cronômetro da
+  // PRÓPRIA pessoa está rodando — só a sessão dela é exibida em segundos; as
+  // dos colegas entram apenas em totais por minuto. Sem essa guarda, o `now`
+  // no topo da árvore re-renderizava o app inteiro 86.400 vezes por dia para
+  // exibir números parados (e, para um administrador, bastava qualquer colega
+  // cronometrando). Parado, um tique a cada 30s basta: serve para a virada do
+  // dia no total de hoje e para os totais da equipe acompanharem o minuto.
+  const cronometroAtivo = sessions.some(s => !s.end && s.userId === currentUserId)
   React.useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), cronometroAtivo ? 1000 : 30000)
     return () => clearInterval(t)
@@ -86,47 +112,84 @@ export default function App() {
   // decidir o que fazer com ela — ainda mais quando chegava com a mesma cara
   // de confirmação. Quem escreve a mensagem não precisa lembrar do tipo: é o
   // falhou() que se usa no catch.
+  //
+  // O id do temporizador fica num ref. Pendurado na própria função, ele se
+  // perdia a cada render (a função é outra), o clearTimeout não achava nada e o
+  // timer da mensagem anterior apagava a nova no meio da leitura.
+  const toastTimer = React.useRef(null)
   const flash = (msg, tipo = 'ok') => {
-    clearTimeout(flash._t)
+    clearTimeout(toastTimer.current)
     setToast({ msg, tipo })
-    if (tipo !== 'erro') flash._t = setTimeout(() => setToast(null), 2400)
+    if (tipo !== 'erro') toastTimer.current = setTimeout(() => setToast(null), 2400)
   }
   const falhou = (msg) => flash(msg, 'erro')
 
   // Busca todos os dados do backend (após autenticar).
-  const loadData = React.useCallback(async () => {
-    setLoadError(null)
+  //
+  // `silencioso` é para as recargas de fundo (pulso, handlers que reconciliam
+  // o estado): uma falha ali vira toast, não a tela de erro — o app continua
+  // de pé com o que já tinha. Só a carga inicial e o login derrubam para
+  // "Não foi possível carregar os dados".
+  //
+  // O contador descarta a resposta de uma carga que outra atropelou: sem isso,
+  // um bootstrap lento que chega depois de um mais novo (ou de uma edição
+  // otimista) reescreve o estado com dados velhos.
+  const falhouRef = React.useRef(() => {}); falhouRef.current = falhou // falhou é recriado a cada render; o useCallback lê sempre a versão atual
+  const cargaRef = React.useRef(0)
+  const loadData = React.useCallback(async ({ silencioso = false } = {}) => {
+    if (!silencioso) setLoadError(null)
+    const minha = ++cargaRef.current
     try {
       const data = await api.bootstrap()
+      if (minha !== cargaRef.current) return // outra carga começou depois: esta resposta está velha
       setUsers(data.users); setProjects(data.projects); setTasks(data.tasks); setSessions(data.sessions); setFolders(data.folders || [])
       setChanges(data.changes || [])
       setRelatorioSemana(data.relatorioSemana || 'nenhum')
       setDataReady(true)
-    } catch (err) { setLoadError(err.message) }
+    } catch (err) {
+      if (silencioso) falhouRef.current('Não foi possível atualizar os dados: ' + err.message)
+      else setLoadError(err.message)
+    }
   }, [])
 
-  // Limpa a sessão (logout ou token expirado).
-  const handleLogout = React.useCallback(() => {
+  // Por que a tela de login voltou. Só a sessão vencida tem motivo: sair é
+  // deliberado e não precisa de explicação.
+  const [motivoLogin, setMotivoLogin] = React.useState(null)
+
+  // Limpa a sessão (logout ou token expirado). O toast e os filtros também
+  // saem: com a conta trocada, um "Projeto excluído." ainda na tela ou um
+  // recorte por projeto que o próximo usuário nem enxerga são lixo da sessão
+  // anterior.
+  const handleLogout = React.useCallback((motivo = null) => {
     api.logout()
+    clearTimeout(toastTimer.current); setToast(null)
     setAuthUser(null); setDataReady(false)
     setUsers([]); setProjects([]); setTasks([]); setSessions([]); setFolders([]); setChanges([])
-    setRoute({ view: 'hub' }); setModal(null)
+    setModal(null); setMobileNavOpen(false)
+    setFilterProject(null); setMine(false); setPastaAberta(null); setProjectSearch(''); setSearchOpen(false)
+    // Sessão vencida guarda o lugar: entrando de novo, a pessoa volta para a
+    // tela em que estava. Sair recomeça na visão geral.
+    if (!motivo) setRoute({ view: 'hub' })
+    setMotivoLogin(motivo)
   }, [])
 
-  // Se a API responder 401 em qualquer chamada, derruba a sessão.
-  React.useEffect(() => { api.setUnauthorizedHandler(() => handleLogout()) }, [handleLogout])
+  // Se a API responder 401 em qualquer chamada, derruba a sessão — dizendo por
+  // quê, senão o login aparece do nada no meio de um formulário preenchido.
+  React.useEffect(() => {
+    api.setUnauthorizedHandler(() => handleLogout('Sua sessão expirou. Entre de novo para continuar de onde parou.'))
+  }, [handleLogout])
 
   // Na carga: se houver token salvo, restaura a sessão.
   React.useEffect(() => {
     if (!api.hasToken()) { setBooting(false); return }
     api.me()
       .then(async (me) => { setAuthUser(me); await loadData() })
-      .catch(() => api.logout())
+      .catch(() => { /* 401 já derrubou o token em req(); falha de rede mantém o token para a próxima carga */ })
       .finally(() => setBooting(false))
   }, [loadData])
 
   // ----- polling: mantém o app em dia sem recarregar a página -----
-  // Consulta o /api/pulse (~100 bytes) e só refaz o /bootstrap (54 KB) quando
+  // Consulta o /api/pulse (~100 bytes) e só refaz o /bootstrap (dezenas de KB) quando
   // o carimbo do banco muda. É o que faz a ciência confirmada por outra pessoa
   // aparecer sozinha, sem F5.
   const pulseRef = React.useRef(null)
@@ -152,7 +215,7 @@ export default function App() {
         // a próxima volta tenta de novo — assim que ela fechar, atualiza.
         if (modalRef.current) return
         pulseRef.current = v
-        await loadData()
+        await loadData({ silencioso: true })
       } catch { /* rede instável ou API fora: tenta na próxima volta */ }
     }
 
@@ -167,10 +230,34 @@ export default function App() {
     }
   }, [authUser, dataReady, loadData])
 
+  // Aba aberta durante um deploy: o chunk com o hash antigo dá 404 no import
+  // dinâmico e a tela sob demanda não abre. O Vite avisa por 'vite:preloadError'
+  // (só no build) e recarregar busca o index novo.
+  React.useEffect(() => {
+    const aoFalharChunk = (e) => {
+      // Com um modal aberto não recarrega: o formulário em edição iria embora.
+      // O erro sobe para a boundary, que oferece o recarregar num botão.
+      if (modalRef.current) return
+      const k = 'promav-reload-chunk'
+      try {
+        const ultimo = Number(sessionStorage.getItem(k)) || 0
+        if (Date.now() - ultimo < 60000) return
+        sessionStorage.setItem(k, String(Date.now()))
+      } catch { return } // sem storage não há como travar o laço: melhor deixar o erro subir
+      // O preventDefault vem só depois das guardas: adiantá-lo faria o Vite
+      // resolver o import com undefined, e o `.then(m => m.People)` estouraria.
+      e.preventDefault()
+      location.reload()
+    }
+    window.addEventListener('vite:preloadError', aoFalharChunk)
+    return () => window.removeEventListener('vite:preloadError', aoFalharChunk)
+  }, [])
+
   // Chamado pela tela de Login. Rejeita em caso de credenciais inválidas.
   const handleLogin = async (email, password) => {
     const user = await api.login(email, password)
     setAuthUser(user)
+    setMotivoLogin(null)
     loadData()
   }
 
@@ -179,28 +266,33 @@ export default function App() {
     setModal(null); flash('Senha atualizada.')
   }
 
+  // O start/stop devolvem só as linhas que mexeram — a fechada e a aberta —, e
+  // não a lista inteira de sessões: a mesclagem com o que já está na tela é
+  // feita aqui.
+  const mesclarSessoes = ({ fechadas = [], aberta = null }) => setSessions(prev => {
+    const porId = new Map(fechadas.map(s => [s.id, s]))
+    const base = prev.map(s => porId.get(s.id) || s)
+    return aberta ? [...base, aberta] : base
+  })
   const startTimer = async (taskId) => {
     try {
-      setSessions(await api.startTimer(currentUserId, taskId))
+      mesclarSessoes(await api.startTimer(taskId))
       const t = tasks.find(x => x.id === taskId)
       flash(`Cronômetro iniciado${t ? ': ' + t.title : ''}.`)
-    } catch (e) { falhou('Erro ao iniciar cronômetro.') }
+    } catch (e) { falhou(e.message || 'Erro ao iniciar cronômetro.') }
   }
   const stopTimer = async () => {
-    try { setSessions(await api.stopTimer(currentUserId)); flash('Cronômetro parado.') }
-    catch (e) { falhou('Erro ao parar cronômetro.') }
+    try { mesclarSessoes(await api.stopTimer()); flash('Cronômetro parado.') }
+    catch (e) { falhou(e.message || 'Erro ao parar cronômetro.') }
   }
 
   const navigate = (r) => {
-    if (r.view === 'people' && !isAdmin) {
-      setRoute({ view: 'hub' })
-      return
-    }
-    setRoute({ view: r.view, projectId: r.projectId })
+    // A aba e o item a destacar vêm das pendências do Hub: sem repassá-los, o
+    // clique abria o projeto no Panorama, longe da etapa que motivou o clique.
+    setRoute({ view: r.view, projectId: r.projectId, tab: r.tab, focusId: r.focusId, focusNonce: r.focusId ? Date.now() : undefined })
     // Ao abrir a Lista a partir de um projeto, já filtra por ele.
     if (r.view === 'list') setFilterProject(r.projectId || null)
     if (r.view === 'kanban') setMine(!!r.mine)
-    if (r.mine) setMine(true)
   }
 
   // A própria pessoa liga a conta ao setor em que trabalha.
@@ -209,7 +301,10 @@ export default function App() {
       await api.setMySector(sector)
       setAuthUser(u => u ? { ...u, sector } : u)
       setUsers(us => us.map(u => u.id === currentUserId ? { ...u, sector } : u))
-      setModal(null); flash('Setor atualizado.')
+      // Só fecha se o modal na tela ainda for este: a resposta pode chegar
+      // depois de a pessoa ter aberto outra coisa.
+      setModal(m => m?.type === 'mysector' ? null : m)
+      flash('Setor atualizado.')
     } catch (e) { falhou(e.message || 'Erro ao salvar o setor.') }
   }
 
@@ -233,8 +328,8 @@ export default function App() {
         ? await api.updateChange(data.id, data)
         : await api.publishChange(data.projectId, data)
       setChanges(cs => data.id ? cs.map(c => c.id === saved.id ? saved : c) : [saved, ...cs])
-      if (!data.id) await loadData() // traz a atividade recém-criada
-      setModal(null)
+      if (!data.id) await loadData({ silencioso: true }) // traz a atividade recém-criada
+      setModal(m => m?.type === 'change' ? null : m)
       flash(data.id ? 'Mudança atualizada — a equipe precisa confirmar de novo.' : 'Mudança publicada e equipe avisada.')
     } catch (e) { falhou(e.message || 'Erro ao salvar a mudança.') }
   }
@@ -249,7 +344,7 @@ export default function App() {
     try {
       const saved = await api.decideChange(change.id, accept, reason.trim())
       setChanges(cs => cs.map(c => c.id === saved.id ? saved : c))
-      if (accept) await loadData()
+      if (accept) await loadData({ silencioso: true })
       flash(accept ? 'Sugestão aceita — atividade criada no quadro.' : 'Sugestão recusada.')
     } catch (e) { falhou(e.message || 'Erro ao decidir a sugestão.') }
   }
@@ -298,9 +393,9 @@ export default function App() {
           saved = await api.uploadFile(saved.id, kmzUpload.file, 'kmz', kmzUpload.label || '')
           setProjects(ps => ps.map(p => p.id === saved.id ? saved : p))
           flash(`${msg} .kmz anexado.`)
-        } catch (e) { flash(`${msg} Mas o .kmz não foi enviado: ${e.message || 'erro no envio'}`) }
+        } catch (e) { falhou(`${msg} Mas o .kmz não foi enviado: ${e.message || 'erro no envio'}`) }
       } else flash(msg)
-    } catch (e) { flash(e.message || 'Erro ao salvar projeto.') }
+    } catch (e) { falhou(e.message || 'Erro ao salvar projeto.') }
   }
   const saveUser = async (data) => {
     try {
@@ -337,18 +432,37 @@ export default function App() {
       } catch (e) { falhou(e.message || 'Erro ao excluir profissional.') }
     },
   })
-  const askDeleteProject = (project) => setModal({
-    type: 'confirm', title: 'Excluir projeto?',
-    message: `As atividades de "${project.name}" também serão removidas. Essa ação não pode ser desfeita.`,
-    onConfirm: async () => {
-      try {
-        await api.deleteProject(project.id)
-        setProjects(ps => ps.filter(p => p.id !== project.id))
-        setTasks(ts => ts.filter(t => t.projectId !== project.id))
-        setModal(null); setRoute({ view: 'projects' }); flash('Projeto excluído.')
-      } catch (e) { falhou('Erro ao excluir projeto.') }
-    },
-  })
+  // Horas que a equipe registrou nas tarefas alvo. Somem junto com o DELETE
+  // (a FK de time_sessions é ON DELETE CASCADE), e o confirm precisa dizer
+  // isso: "as atividades serão removidas" não conta que um histórico de
+  // cronômetro vai embora.
+  const avisoHoras = (taskIds) => {
+    const ids = new Set(taskIds)
+    const ss = sessions.filter(s => ids.has(s.taskId))
+    if (!ss.length) return ''
+    const total = ss.reduce((acc, s) => acc + ((s.end || now) - s.start), 0)
+    const aberto = ss.some(s => !s.end) ? ', incluindo um cronômetro em andamento' : ''
+    return ` ${fmtDur(total)} de cronômetro registradas pela equipe também serão apagadas${aberto}.`
+  }
+  // Após excluir, as sessões das tarefas apagadas saem do estado na hora: Hub
+  // e cronômetro não podem seguir mostrando horas de tarefa que não existe
+  // até o próximo bootstrap.
+  const askDeleteProject = (project) => {
+    const idsTarefas = tasks.filter(t => t.projectId === project.id).map(t => t.id)
+    setModal({
+      type: 'confirm', title: 'Excluir projeto?',
+      message: `As atividades de "${project.name}" também serão removidas.${avisoHoras(idsTarefas)} Essa ação não pode ser desfeita.`,
+      onConfirm: async () => {
+        try {
+          await api.deleteProject(project.id)
+          setProjects(ps => ps.filter(p => p.id !== project.id))
+          setTasks(ts => ts.filter(t => t.projectId !== project.id))
+          setSessions(ss => ss.filter(s => !idsTarefas.includes(s.taskId)))
+          setModal(null); setRoute({ view: 'projects' }); flash('Projeto excluído.')
+        } catch (e) { falhou(e.message || 'Erro ao excluir projeto.') }
+      },
+    })
+  }
 
   // Abre o modal para adicionar um documento/link ao projeto atual.
   const openAddResource = (resType) => setModal({ type: 'resource', resType })
@@ -362,7 +476,8 @@ export default function App() {
         ? await api.uploadFile(project.id, payload.file, payload.kind, payload.label)
         : await api.addResource(project.id, payload)
       setProjects(ps => ps.map(p => p.id === saved.id ? saved : p))
-      setModal(null); flash('Material adicionado.')
+      setModal(m => m?.type === 'resource' ? null : m)
+      flash('Material adicionado.')
     } catch (e) { falhou(e.message || 'Erro ao adicionar material.') }
   }
 
@@ -409,20 +524,20 @@ export default function App() {
     onConfirm: async () => {
       try {
         await api.deleteFolder(folder.id)
-        // Reúne a pasta + todas as descendentes (espelha o ON DELETE CASCADE do banco).
-        setFolders(fs => {
-          const removed = new Set([folder.id])
-          let grew = true
-          while (grew) {
-            grew = false
-            for (const f of fs) {
-              if (f.parentId && removed.has(f.parentId) && !removed.has(f.id)) { removed.add(f.id); grew = true }
-            }
+        // Reúne a pasta + todas as descendentes (espelha o ON DELETE CASCADE do
+        // banco). Lê `folders` da closure porque o ConfirmDialog segura a tela:
+        // o pulso não recarrega com um modal aberto.
+        const removed = new Set([folder.id])
+        let grew = true
+        while (grew) {
+          grew = false
+          for (const f of folders) {
+            if (f.parentId && removed.has(f.parentId) && !removed.has(f.id)) { removed.add(f.id); grew = true }
           }
-          // os projetos das pastas apagadas ficam "soltos" (espelha o ON DELETE SET NULL)
-          setProjects(ps => ps.map(p => removed.has(p.folderId) ? { ...p, folderId: null } : p))
-          return fs.filter(f => !removed.has(f.id))
-        })
+        }
+        setFolders(fs => fs.filter(f => !removed.has(f.id)))
+        // os projetos das pastas apagadas ficam "soltos" (espelha o ON DELETE SET NULL)
+        setProjects(ps => ps.map(p => removed.has(p.folderId) ? { ...p, folderId: null } : p))
         setModal(null); flash('Pasta excluída.')
       } catch (e) { falhou(e.message || 'Erro ao excluir pasta.') }
     },
@@ -442,7 +557,7 @@ export default function App() {
       return pos < 0 ? f : { ...f, parentId: parent, position: pos }
     }))
     try { await api.reorderFolders(parent, order) }
-    catch (e) { falhou(e.message || 'Erro ao mover pasta.'); loadData() }
+    catch (e) { falhou(e.message || 'Erro ao mover pasta.'); loadData({ silencioso: true }) }
   }
   const moveProject = async (draggedId, newFolderId, beforeId) => {
     const folder = newFolderId || null
@@ -456,7 +571,7 @@ export default function App() {
       return pos < 0 ? p : { ...p, folderId: folder, position: pos }
     }))
     try { await api.reorderProjects(folder, order) }
-    catch (e) { falhou(e.message || 'Erro ao mover projeto.'); loadData() }
+    catch (e) { falhou(e.message || 'Erro ao mover projeto.'); loadData({ silencioso: true }) }
   }
 
   // ----- tasks -----
@@ -476,20 +591,21 @@ export default function App() {
   const openEditTask = (task) => {
     setModal({ type: 'task', task })
     api.viewTask(task.id)
-      .then(saved => setTasks(ts => ts.map(t => t.id === saved.id ? saved : t)))
+      .then(saved => setTasks(ts => ts.map(t => t.id === saved.id ? { ...t, views: saved.views } : t)))
       .catch(() => { /* registro de leitura é best-effort */ })
   }
   const saveTask = async (data) => {
     try {
       if (data.id) {
         const saved = await api.updateTask(data.id, data)
-        setTasks(ts => ts.map(t => t.id === saved.id ? saved : t)); flash('Atividade atualizada.')
+        setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
+        flash(PADRAO_ETAPA.test(data.title || '') ? 'Etapa atualizada.' : 'Atividade atualizada.')
       } else {
         const saved = await api.createTask(data)
         setTasks(ts => [...ts, saved]); flash('Atividade criada.')
       }
       setModal(null)
-    } catch (e) { falhou('Erro ao salvar atividade.') }
+    } catch (e) { falhou(e.message || 'Erro ao salvar atividade.') }
   }
   // Excluir etapa — uma pela lixeira da linha, ou várias pela seleção em massa.
   //
@@ -505,13 +621,14 @@ export default function App() {
     setModal({
       type: 'confirm',
       title: uma ? 'Excluir etapa?' : `Excluir ${etapas.length} etapas?`,
-      message: nAtividades
+      message: (nAtividades
         ? `Você quer excluir ${alvo} e suas ${nAtividades} atividade${nAtividades === 1 ? '' : 's'}?`
-        : `Você quer excluir ${alvo}?`,
+        : `Você quer excluir ${alvo}?`) + avisoHoras(ids),
       onConfirm: async () => {
         try {
           await api.bulkDeleteTasks(ids)
           setTasks(ts => ts.filter(t => !ids.includes(t.id)))
+          setSessions(ss => ss.filter(s => !ids.includes(s.taskId)))
           setModal(null)
           aoConcluir?.()
           flash(uma ? 'Etapa excluída.' : `${etapas.length} etapas excluídas.`)
@@ -534,24 +651,27 @@ export default function App() {
   })
 
   const askDeleteTask = (task) => setModal({
-    type: 'confirm', title: 'Excluir atividade?',
-    message: `"${task.title}" será removida permanentemente.`,
+    type: 'confirm', title: PADRAO_ETAPA.test(task.title || '') ? 'Excluir etapa?' : 'Excluir atividade?',
+    message: `"${task.title}" será removida permanentemente.${avisoHoras([task.id])}`,
     onConfirm: async () => {
       try {
         await api.deleteTask(task.id)
-        setTasks(ts => ts.filter(t => t.id !== task.id)); setModal(null); flash('Atividade excluída.')
-      } catch (e) { falhou('Erro ao excluir atividade.') }
+        setTasks(ts => ts.filter(t => t.id !== task.id)); setSessions(ss => ss.filter(s => s.taskId !== task.id))
+        setModal(null); flash('Atividade excluída.')
+      } catch (e) { falhou(e.message || 'Erro ao excluir atividade.') }
     },
   })
+  // O rollback devolve só o card movido: restaurar o array inteiro de antes
+  // apagaria o que outras ações mudaram enquanto o PATCH estava em voo.
   const moveTask = async (id, status) => {
-    const prev = tasks
+    const antes = tasks.find(t => t.id === id)
+    if (!antes || (antes.status || 'todo') === status) return // soltar na própria coluna não é mudança
     setTasks(ts => ts.map(t => t.id === id ? { ...t, status } : t)) // otimista
-    const labels = { todo: 'A fazer', progress: 'Em andamento', done: 'Concluído' }
     try {
       const saved = await api.moveTask(id, status)
       setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
-      flash(`Atividade movida para ${labels[status]}.`)
-    } catch (e) { setTasks(prev); falhou('Erro ao mover atividade.') }
+      flash(`Atividade movida para ${STATUS_MAP[status]?.label ?? status}.`)
+    } catch (e) { setTasks(ts => ts.map(t => t.id === id ? antes : t)); falhou(e.message || 'Erro ao mover atividade.') }
   }
   // Entrar/sair de uma atividade (só a própria participação). Disponível para 'Só exibição'.
   const toggleMyMembership = async (task, join) => {
@@ -564,46 +684,45 @@ export default function App() {
       flash(join ? 'Você entrou na atividade.' : 'Você saiu da atividade.')
     } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao atualizar participação.') }
   }
-  // Marca/desmarca um item de checklist (otimista). Disponível também para 'Só exibição'.
-  const toggleChecklistItem = async (task, itemId) => {
-    const atual = (task.checklist || []).find(i => i.id === itemId)
-    const feito = !(atual?.state ? atual.state === 'done' : atual?.done)
-    const next = (task.checklist || []).map(i => i.id === itemId
-      ? { ...i, done: feito, state: feito ? 'done' : 'todo' } : i)
+  // Fluxo otimista comum aos ajustes de item: aplica o patch na cópia local,
+  // manda só os campos que mudaram, troca pela etapa que o servidor devolveu
+  // (status recalculado) e, se falhar, volta a etapa como estava.
+  const patchItem = async (task, itemId, patch, msgErro) => {
+    const next = (task.checklist || []).map(i => i.id === itemId ? { ...i, ...patch } : i)
     setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
     try {
-      const saved = await api.patchChecklistItem(task.id, { id: itemId, done: feito })
+      const saved = await api.patchChecklistItem(task.id, { id: itemId, ...patch })
       setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
-    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao atualizar checklist.') }
+    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || msgErro) }
+  }
+
+  // Marca/desmarca um item de checklist (otimista). Disponível também para 'Só exibição'.
+  // Manda `state` e `done` juntos: o servidor dá precedência ao estado, e o
+  // espelho explícito evita depender de qual ramo ele escolhe.
+  const toggleChecklistItem = (task, itemId, feitoDoModal) => {
+    const atual = (task.checklist || []).find(i => i.id === itemId)
+    // Quem chama de dentro de um modal manda o valor novo: a `task` que ele tem
+    // em mão é a cópia tirada na abertura e não acompanha os cliques anteriores,
+    // então recalcular dali reenviaria done:true no segundo clique.
+    const feito = feitoDoModal ?? (estadoDoItem(atual) !== 'done')
+    return patchItem(task, itemId, { state: feito ? 'done' : 'todo', done: feito }, 'Erro ao atualizar checklist.')
   }
 
   // Move o item entre pendente / em revisão / em diligência / concluído.
   // Liberado para 'Só exibição' pelo mesmo motivo do marcar: quem faz o
   // serviço registra em que pé ele está. O status da ETAPA volta já
   // recalculado pelo servidor — é ele que espelha o pior estado dos itens.
-  const setChecklistState = async (task, itemId, state) => {
-    const next = (task.checklist || []).map(i => i.id === itemId
-      ? { ...i, state, done: state === 'done' } : i)
-    setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
-    try {
-      const saved = await api.patchChecklistItem(task.id, { id: itemId, state })
-      setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
-    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao mudar o estado do item.') }
-  }
+  const setChecklistState = (task, itemId, state) =>
+    patchItem(task, itemId, { state, done: state === 'done' }, 'Erro ao mudar o estado do item.')
 
   // Corrige o texto de um item no lugar. Antes era apagar e recriar, o que
   // jogava fora o dono do item, a posição dele na lista e o que já estava
   // marcado — um erro de digitação custava os três.
-  const editChecklistItem = async (task, itemId, text) => {
+  const editChecklistItem = (task, itemId, text) => {
     const limpo = String(text || '').trim()
     const atual = (task.checklist || []).find(i => i.id === itemId)
     if (!limpo || !atual || limpo === atual.text) return
-    const next = (task.checklist || []).map(i => i.id === itemId ? { ...i, text: limpo } : i)
-    setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
-    try {
-      const saved = await api.patchChecklistItem(task.id, { id: itemId, text: limpo })
-      setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
-    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao editar o item.') }
+    return patchItem(task, itemId, { text: limpo }, 'Erro ao editar o item.')
   }
 
   // "Nova atividade" na aba Etapas: escolhe a etapa e o trabalho entra como
@@ -618,7 +737,7 @@ export default function App() {
     try {
       const saved = await api.addChecklistItems(taskId, items)
       setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
-      setModal(null)
+      setModal(m => m?.type === 'stageItem' ? null : m)
       flash(items.length === 1 ? 'Atividade adicionada à etapa.' : `${items.length} atividades adicionadas à etapa.`)
     } catch (e) { falhou(e.message || 'Erro ao adicionar as atividades.') }
   }
@@ -634,81 +753,44 @@ export default function App() {
     try {
       const r = await api.createStages(projectId)
       if (r.tasks?.length) setTasks(ts => [...ts, ...r.tasks])
-      else await loadData() // nada novo: releitura barata que reconcilia o estado
+      else await loadData({ silencioso: true }) // nada novo: releitura barata que reconcilia o estado
       flash(r.criadas ? `${r.criadas} etapa${r.criadas === 1 ? '' : 's'} criada${r.criadas === 1 ? '' : 's'}.` : 'O projeto já tem todas as etapas.')
     } catch (e) { falhou(e.message || 'Erro ao criar as etapas.') }
   }
 
   // Liga um item do checklist a alguém da atividade (ou a ninguém, com null).
   // Usa a mesma rota do marcar: o servidor só toca no campo que veio no corpo.
-  const assignChecklistItem = async (task, itemId, userId) => {
-    const next = (task.checklist || []).map(i => i.id === itemId ? { ...i, assigneeId: userId } : i)
-    setTasks(ts => ts.map(t => t.id === task.id ? { ...t, checklist: next } : t))
-    try {
-      const saved = await api.patchChecklistItem(task.id, { id: itemId, assigneeId: userId })
-      setTasks(ts => ts.map(t => t.id === saved.id ? saved : t))
-    } catch (e) { setTasks(ts => ts.map(t => t.id === task.id ? task : t)); falhou(e.message || 'Erro ao atribuir o item.') }
-  }
+  const assignChecklistItem = (task, itemId, userId) =>
+    patchItem(task, itemId, { assigneeId: userId }, 'Erro ao atribuir o item.')
 
-  const [readNewsIds, setReadNewsIds] = React.useState([])
-  // Notificações limpas pela pessoa. Some da lista para sempre — ao contrário
-  // de "lida", que só tira o destaque. É por usuário e fica só neste navegador.
-  const [dismissedNewsIds, setDismissedNewsIds] = React.useState([])
-  // Preferências de aviso. Som já entra ligado (é discreto e não pede
-  // permissão); a notificação do sistema começa desligada porque depende de a
-  // pessoa autorizar no navegador.
-  const [avisos, setAvisos] = React.useState({ som: true, navegador: false })
   const newsKey = authUser ? `promav-news-${authUser.id}` : null
   const dismissedKey = authUser ? `promav-news-limpas-${authUser.id}` : null
   const avisosKey = authUser ? `promav-avisos-${authUser.id}` : null
 
-  React.useEffect(() => {
-    if (!avisosKey) return
-    try {
-      const salvo = JSON.parse(localStorage.getItem(avisosKey) || 'null')
-      if (salvo) setAvisos({
-        som: salvo.som !== false,
-        // Vale só se o navegador ainda estiver autorizado: a pessoa pode ter
-        // revogado a permissão nas configurações depois de ligar aqui.
-        navegador: !!salvo.navegador && permissaoNotificacao() === 'granted',
-      })
-    } catch { /* preferência é acessória */ }
-  }, [avisosKey])
+  const [readNewsIds, setReadNewsIds] = usePersistido(newsKey, SEM_IDS, soLista)
+  // Notificações limpas pela pessoa. Some da lista para sempre — ao contrário
+  // de "lida", que só tira o destaque. É por usuário e fica só neste navegador.
+  const [dismissedNewsIds, setDismissedNewsIds] = usePersistido(dismissedKey, SEM_IDS, soLista)
+  // Preferências de aviso. Som já entra ligado (é discreto e não pede
+  // permissão); a notificação do sistema começa desligada porque depende de a
+  // pessoa autorizar no navegador.
+  const [avisos, setAvisos] = usePersistido(avisosKey, AVISOS_PADRAO, normAvisos)
 
+  // As duas listas de ids só crescem; aqui saem as de entidade que já não
+  // existe. Não dá para podar contra `notifications`: aquela lista oscila (corte
+  // em 20, o repouso de 3 dias, o aviso de projeto que some quando há
+  // atividade) e uma notificação limpa ressuscitaria.
   React.useEffect(() => {
-    if (!avisosKey) return
-    try { localStorage.setItem(avisosKey, JSON.stringify(avisos)) } catch { /* ignore */ }
-  }, [avisosKey, avisos])
-
-  React.useEffect(() => {
-    if (!newsKey) { setReadNewsIds([]); return }
-    try {
-      const saved = JSON.parse(localStorage.getItem(newsKey) || '[]')
-      setReadNewsIds(Array.isArray(saved) ? saved : [])
-    } catch {
-      setReadNewsIds([])
+    if (!newsKey || !dataReady) return // sem bootstrap, nenhuma entidade é conhecida
+    const vivo = (id) => {
+      if (id.startsWith('task-')) return tasks.some(t => `task-${t.id}` === id)
+      if (id.startsWith('project-')) return projects.some(p => `project-${p.id}` === id)
+      if (id.startsWith('change-') || id.startsWith('ack-')) return changes.some(c => id === `change-${c.id}` || id === `change-task-${c.id}` || id.startsWith(`ack-${c.id}-`))
+      return true
     }
-  }, [newsKey])
-
-  React.useEffect(() => {
-    if (!newsKey) return
-    try { localStorage.setItem(newsKey, JSON.stringify(readNewsIds)) } catch { /* ignore */ }
-  }, [newsKey, readNewsIds])
-
-  React.useEffect(() => {
-    if (!dismissedKey) { setDismissedNewsIds([]); return }
-    try {
-      const saved = JSON.parse(localStorage.getItem(dismissedKey) || '[]')
-      setDismissedNewsIds(Array.isArray(saved) ? saved : [])
-    } catch {
-      setDismissedNewsIds([])
-    }
-  }, [dismissedKey])
-
-  React.useEffect(() => {
-    if (!dismissedKey) return
-    try { localStorage.setItem(dismissedKey, JSON.stringify(dismissedNewsIds)) } catch { /* ignore */ }
-  }, [dismissedKey, dismissedNewsIds])
+    const poda = (xs) => { const r = xs.filter(vivo); return r.length === xs.length ? xs : r }
+    setReadNewsIds(poda); setDismissedNewsIds(poda)
+  }, [tasks, changes, projects, newsKey, dataReady])
 
   // Relógio grosso: o 'now' bate a cada segundo (cronômetro), o que recalcularia
   // as notificações 60x por minuto à toa. Aqui basta a virada do minuto.
@@ -827,7 +909,7 @@ export default function App() {
         push('atividade', {
           id: `task-${task.id}`,
           title: task.title,
-          text: `${project.name} • ${task.status === 'done' ? 'concluída' : task.status === 'progress' ? 'em andamento' : 'a fazer'}`,
+          text: `${project.name} • ${ESTADO_ATIV[task.status] ?? task.status}`,
           time: 'Hoje',
           priority: 4,
           target: { view: 'projects', projectId: project.id, tab: 'etapas', focusId: `task-${task.id}` },
@@ -839,7 +921,7 @@ export default function App() {
         push('projeto', {
           id: `project-${project.id}`,
           title: `Atualização importante em ${project.name}`,
-          text: `${project.status ? `Status: ${project.status}` : 'Dados do projeto foram atualizados'}${project.start || project.end ? ` • ${project.start || '—'} até ${project.end || '—'}` : ''}`,
+          text: `${project.status ? `Status: ${PROJECT_STATUS_MAP[project.status]?.label ?? project.status}` : 'Dados do projeto foram atualizados'}${project.start || project.end ? ` • ${project.start ? fmtShort(project.start) : '—'} até ${project.end ? fmtShort(project.end) : '—'}` : ''}`,
           time: 'Hoje',
           priority: 5,
           target: { view: 'projects', projectId: project.id, tab: 'panorama' },
@@ -854,8 +936,12 @@ export default function App() {
       .slice(0, 20)
   }, [authUser, projects, tasks, changes, users, minutoAtual])
 
+  // Conjuntos, e não includes: as duas listas são varridas uma vez por
+  // notificação e crescem com o uso da conta.
+  const lidas = new Set(readNewsIds)
+  const limpas = new Set(dismissedNewsIds)
   // O que a pessoa realmente vê: tudo que ela não limpou.
-  const visibleNotifications = notifications.filter(item => !dismissedNewsIds.includes(item.id))
+  const visibleNotifications = notifications.filter(item => !limpas.has(item.id))
 
   // ----- avisos de novidade (som + notificação do sistema) -----
   // As notificações são estado derivado, recalculado do zero a cada carga: não
@@ -884,7 +970,7 @@ export default function App() {
     // já vê o sino piscando e o pop-up vira ruído.
     if (pref.navegador && document.hidden) avisarNoNavegador(novas, (item) => abrirRef.current?.(item))
   }, [idsKey])
-  const unreadNotifications = visibleNotifications.filter(item => !readNewsIds.includes(item.id))
+  const unreadNotifications = visibleNotifications.filter(item => !lidas.has(item.id))
 
   // Limpar é irreversível (não há "desfazer"), por isso as duas ações passam
   // pelo mesmo ConfirmDialog do resto do app.
@@ -900,7 +986,7 @@ export default function App() {
     const total = visibleNotifications.length
     if (!total) return
     setModal({
-      type: 'confirm', title: 'Limpar todas as notificações?',
+      type: 'confirm', title: 'Limpar todas as notificações?', confirmLabel: 'Limpar',
       message: `${total} ${total === 1 ? 'notificação sai' : 'notificações saem'} da sua lista. As atividades e mudanças em si não são apagadas.`,
       onConfirm: () => {
         setDismissedNewsIds(prev => Array.from(new Set([...prev, ...visibleNotifications.map(i => i.id)])))
@@ -954,7 +1040,7 @@ export default function App() {
   }
 
   // Não autenticado → tela de login.
-  if (!authUser) return <Login onLogin={handleLogin} />
+  if (!authUser) return <Login onLogin={handleLogin} motivo={motivoLogin} />
 
   // Autenticado, mas os dados ainda não chegaram (ou falharam).
   if (!dataReady || loadError) {
@@ -965,7 +1051,7 @@ export default function App() {
             <>
               <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--fg-1)', marginBottom: 8 }}>Não foi possível carregar os dados</div>
               <div style={{ fontSize: 13.5, lineHeight: 1.6 }}>{loadError}</div>
-              <button className="btn btn-secondary" style={{ marginTop: 16 }} onClick={loadData}>Tentar de novo</button>
+              <button className="btn btn-secondary" style={{ marginTop: 16 }} onClick={() => loadData()}>Tentar de novo</button>
             </>
           ) : 'Carregando…'}
         </div>
@@ -984,9 +1070,19 @@ export default function App() {
   const canEditCurrent = canEditProject(currentRole)
 
 
+  // Kanban, Lista e Gantt aparecem como tela e embutidos na aba do projeto. Uma
+  // montagem só para os dois lugares: duas tiravam a garantia de que as ~12
+  // props são as mesmas nos dois.
+  const propsTarefas = { tasks, projects, users, authUser, mine, currentUserId, onFilterProject: setFilterProject, onToggleMine: () => setMine(m => !m), onMoveTask: moveTask, onNewTask: openNewTask, onEditTask: openEditTask }
+  const telaDeTarefas = (view, filtro, embedded = false) => view === 'kanban'
+    ? <Kanban embedded={embedded} filterProject={filtro} sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer} {...propsTarefas} />
+    : view === 'list'
+    ? <TaskListView embedded={embedded} filterProject={filtro} {...propsTarefas} />
+    : <Gantt embedded={embedded} tasks={tasks} projects={projects} filterProject={filtro} onFilterProject={setFilterProject} />
+
   let screen
   if (effectiveRoute.view === 'hub') {
-    screen = <Hub projects={projects} recentProjects={projects} tasks={tasks} changes={changes}
+    screen = <Hub projects={projects} tasks={tasks} changes={changes}
       onNavigate={navigate} sessions={sessions} currentUserId={currentUserId} authUser={authUser}
       relatorioSemana={relatorioSemana} now={now} />
   } else if (effectiveRoute.view === 'projects' && currentProject) {
@@ -999,17 +1095,8 @@ export default function App() {
       // por pasta nenhuma, e ainda assim é ali que ele quer continuar.
       onBack={() => { setPastaAberta(currentProject.folderId || null); setRoute({ view: 'projects' }) }}
       onEdit={openEditProject}
-      renderVisao={(view) => view === 'kanban'
-        ? <Kanban embedded tasks={tasks} projects={projects} users={users} authUser={authUser} filterProject={currentProject.id} mine={mine}
-            currentUserId={currentUserId} onFilterProject={setFilterProject} onToggleMine={() => setMine(m => !m)}
-            onMoveTask={moveTask} onNewTask={openNewTask} onEditTask={openEditTask}
-            sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer} />
-        : view === 'list'
-        ? <TaskListView embedded tasks={tasks} projects={projects} users={users} authUser={authUser} filterProject={currentProject.id} mine={mine}
-            currentUserId={currentUserId} onFilterProject={setFilterProject} onToggleMine={() => setMine(m => !m)}
-            onMoveTask={moveTask} onNewTask={openNewTask} onEditTask={openEditTask} />
-        : <Gantt embedded tasks={tasks} projects={projects} filterProject={currentProject.id} onFilterProject={setFilterProject} />}
-      onNewTask={openNewTask} onEditTask={openEditTask} onDeleteTask={askDeleteTask}
+      renderVisao={(v) => telaDeTarefas(v, currentProject.id, true)}
+      onEditTask={openEditTask} onDeleteTask={askDeleteTask}
       onAssignChecklist={assignChecklistItem} onMoveTask={moveTask}
       onSetChecklistState={setChecklistState} onEditChecklistItem={editChecklistItem}
       onExcluirChecklistItem={askDeleteChecklistItem} onDeleteStages={askDeleteStages} onNewStage={openNewStage}
@@ -1023,16 +1110,11 @@ export default function App() {
       onOpen={(id) => setRoute({ view: 'projects', projectId: id })}
       onEdit={openEditProject} onDelete={askDeleteProject} onNew={openNewProject} onMoveProject={moveProject} onMoveFolder={moveFolder} onNewSubfolder={createFolder} onDeleteFolder={askDeleteFolder} />
   } else if (effectiveRoute.view === 'list') {
-    screen = <TaskListView tasks={tasks} projects={projects} users={users} authUser={authUser} filterProject={filterProject} mine={mine}
-      currentUserId={currentUserId} onFilterProject={setFilterProject} onToggleMine={() => setMine(m => !m)}
-      onMoveTask={moveTask} onNewTask={openNewTask} onEditTask={openEditTask} />
+    screen = telaDeTarefas('list', filterProject)
   } else if (effectiveRoute.view === 'kanban') {
-    screen = <Kanban tasks={tasks} projects={projects} users={users} authUser={authUser} filterProject={filterProject} mine={mine}
-      currentUserId={currentUserId} onFilterProject={setFilterProject} onToggleMine={() => setMine(m => !m)}
-      onMoveTask={moveTask} onNewTask={openNewTask} onEditTask={openEditTask}
-      sessions={sessions} now={now} onStartTimer={startTimer} onStopTimer={stopTimer} />
+    screen = telaDeTarefas('kanban', filterProject)
   } else if (effectiveRoute.view === 'gantt') {
-    screen = <Gantt tasks={tasks} projects={projects} filterProject={filterProject} onFilterProject={setFilterProject} />
+    screen = telaDeTarefas('gantt', filterProject)
   } else if (effectiveRoute.view === 'people' && isAdmin) {
     screen = <People users={users} projects={projects} tasks={tasks} currentUserId={currentUserId}
       onNewPerson={openNewPerson} onOpenPerson={openPerson} onEditPerson={openEditPerson} onDeletePerson={askDeletePerson} />
@@ -1043,12 +1125,12 @@ export default function App() {
   } else if (effectiveRoute.view === 'myreport') {
     screen = <MyWeeklyReport authUser={authUser} projects={projects} onFlash={flash} onFail={falhou} />
   } else if (effectiveRoute.view === 'weeklyreports' && isAdmin) {
-    screen = <AdminWeeklyReports users={users} projects={projects} onFail={falhou} />
+    screen = <AdminWeeklyReports users={users} projects={projects} />
   }
 
   return (
     <div className={'app' + (mobileNavOpen ? ' nav-open' : '')}>
-      <Sidebar route={effectiveRoute} onNavigate={navigate} projects={projects} tasks={tasks}
+      <Sidebar route={effectiveRoute} onNavigate={navigate} projects={projects}
         folders={folders} isAdmin={isAdmin}
         collapsed={navCollapsed} mobileOpen={mobileNavOpen}
         onToggleCollapse={() => setNavCollapsed(c => !c)}
@@ -1068,88 +1150,137 @@ export default function App() {
           onOpenTask={openStageActivities}
           searchQuery={projectSearch} onSearchChange={(v) => { setProjectSearch(v); setSearchOpen(true) }}
           notifications={visibleNotifications} unreadCount={unreadNotifications.length}
-          readNewsIds={new Set(readNewsIds)} onMarkRead={markNewsAsRead} onMarkAllRead={markAllNewsAsRead}
+          readNewsIds={lidas} onMarkRead={markNewsAsRead} onMarkAllRead={markAllNewsAsRead}
           onOpenNotification={openNotification}
           onDismiss={askDismissNotification} onDismissAll={askDismissAllNotifications}
           avisos={avisos} onToggleSom={alternarSom} onToggleNavegador={alternarNavegador} />
-        {/* O Suspense cobre a tela carregada sob demanda (Profissionais). As
-            demais são síncronas e passam direto. */}
+        {/* O Suspense cobre as telas carregadas sob demanda. A boundary em
+            volta guarda a barra lateral e o topo: sem ela, uma exceção na tela
+            derruba o app inteiro. O reset vai por `resetKey`, e não por `key`: a view
+            'projects' cobre a lista e o detalhe de todos os projetos, e
+            remontar a cada troca jogaria o ProjectDetail de volta ao Panorama. */}
         <div className="content">
-          <React.Suspense fallback={
-            <div className="page" style={{ display: 'grid', placeItems: 'center', minHeight: 240, color: 'var(--fg-3)' }}>Carregando…</div>
-          }>
-            {screen}
-          </React.Suspense>
+          <ErrorBoundary
+            resetKey={`${effectiveRoute.view}:${effectiveRoute.projectId || ''}`}
+            onReset={() => { setModal(null); navigate({ view: 'hub' }) }}>
+            <React.Suspense fallback={
+              <div className="page" style={{ display: 'grid', placeItems: 'center', minHeight: 240, color: 'var(--fg-3)' }}>Carregando…</div>
+            }>
+              {screen}
+            </React.Suspense>
+          </ErrorBoundary>
         </div>
       </div>
 
-      {modal?.type === 'task' && (
-        <TaskModal task={modal.task} projects={projects} tasks={tasks} users={users} currentUserId={currentUserId}
-          defaultProjectId={modal.defaultProjectId} defaultStatus={modal.defaultStatus} comoEtapa={modal.comoEtapa}
-          canEdit={modal.task ? canEditProject(effectiveProjectRole(projects.find(p => p.id === modal.task.projectId), authUser)) : isAdmin}
-          onToggleChecklist={toggleChecklistItem} onToggleMembership={toggleMyMembership}
-          onSave={saveTask} onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'atividades' && (() => {
-        const etapa = tasks.find(t => t.id === modal.taskId)
-        return etapa ? (
-          <StageActivitiesModal task={etapa} project={projects.find(p => p.id === etapa.projectId)}
-            users={users} onSetState={setChecklistState}
-            onAbrirEtapa={(t) => openEditTask(t)} onClose={() => setModal(null)} />
-        ) : null
-      })()}
-      {searchOpen && (
-        <ProjectSearchModal query={projectSearch} onQueryChange={setProjectSearch} projects={projects}
-          onOpen={(id) => { setSearchOpen(false); setProjectSearch(''); setRoute({ view: 'projects', projectId: id }) }}
-          onClose={() => { setSearchOpen(false); setProjectSearch('') }} />
-      )}
-      {modal?.type === 'mysector' && (
-        <MySectorModal current={authUser?.sector} onSubmit={saveMySector} onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'change' && (
-        <ChangeModal change={modal.change} projectId={modal.projectId} users={users} tasks={tasks}
-          members={projects.find(p => p.id === modal.projectId)?.members || []}
-          onSave={saveChange} onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'project' && (
-        <ProjectModal project={modal.project} users={users} folders={folders} defaultFolderId={modal.defaultFolderId} isAdmin={isAdmin}
-          initialTab={modal.tab} onSave={saveProject} onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'person' && (
-        <PersonCard user={modal.user} projects={projects} tasks={tasks}
-          onEdit={openEditPerson} onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'personEdit' && (
-        <PeopleModal user={modal.user} currentUserId={currentUserId} users={users} projects={projects} tasks={tasks} changes={changes}
-          onOpenProject={openProjectFromPerson} onSave={saveUser} onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'resource' && modal.resType === 'doc' && (
-        <DocumentModal onSave={saveResource} onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'resource' && modal.resType === 'link' && (
-        <LinkModal onSave={saveResource} onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'resource' && modal.resType === 'image' && (
-        <ImageModal onSave={saveResource} onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'resource' && modal.resType === 'kmz' && (
-        <KmzModal onSave={saveResource} onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'stageItem' && (
-        <StageItemModal
-          etapas={etapasDoProjeto(tasks, modal.projectId)}
-          users={users}
-          members={projects.find(p => p.id === modal.projectId)?.members || []}
-          defaultStageId={modal.stageTaskId}
-          onSave={addStageItems}
-          onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'confirm' && (
-        <ConfirmDialog title={modal.title} message={modal.message} onConfirm={modal.onConfirm} onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'password' && (
-        <ChangePasswordModal onSubmit={changePassword} onClose={() => setModal(null)} />
-      )}
+      {/* Os modais são irmãos do .main, fora da boundary da tela: uma exceção
+          aqui subiria até a raiz e levaria a barra lateral e o topo junto.
+          Os três carregados sob demanda levam Suspense próprio: sem ele o React
+          18 derruba a árvore enquanto o chunk ainda não chegou. */}
+      <ErrorBoundary
+        resetKey={modal?.type || (searchOpen ? 'search' : '')}
+        onReset={() => { setModal(null); setSearchOpen(false) }}
+        fallback={(err, reset) => (
+          <div className="scrim" onMouseDown={reset}>
+            <div className="modal" style={{ padding: 24, textAlign: 'center' }}>
+              <p>Não foi possível abrir esta janela.</p>
+              {/* A frase principal fica genérica porque esta boundary cobre qualquer
+                  exceção de render de qualquer modal; a mensagem do erro entra como
+                  linha de apoio. O recarregar precisa estar aqui: quando o que falha é
+                  o chunk de um modal sob demanda, o handler de 'vite:preloadError'
+                  desiste (há modal aberto) e reabrir falha igual, porque o navegador
+                  guarda o 404 daquela URL no module map — sem este botão não há saída. */}
+              {err?.message && <p style={{ color: 'var(--fg-3)' }}>{String(err.message)}</p>}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                <button type="button" className="btn btn-secondary" onClick={reset}>Fechar</button>
+                <button type="button" className="btn btn-primary" onClick={() => location.reload()}>Recarregar a página</button>
+              </div>
+            </div>
+          </div>
+        )}>
+        {modal?.type === 'task' && (() => {
+          // O papel vale por PROJETO, inclusive ao criar: o alvo é o projeto que
+          // veio no clique. Com `isAdmin` no lugar disso, quem tem Edição total
+          // sem ser administrador abria o formulário em somente leitura.
+          const pidAlvo = modal.task?.projectId || modal.defaultProjectId
+          const podeEditarAlvo = canEditProject(effectiveProjectRole(projects.find(p => p.id === pidAlvo), authUser))
+          // O projeto da etapa aberta fica na lista mesmo sem edição, senão o
+          // <select> de Projeto ficaria com um value sem opção correspondente.
+          const projetosEditaveis = projects.filter(p => canEditProject(effectiveProjectRole(p, authUser)) || p.id === modal.task?.projectId)
+          return (
+            <TaskModal task={modal.task} projects={projetosEditaveis} tasks={tasks} users={users} currentUserId={currentUserId}
+              defaultProjectId={modal.defaultProjectId} defaultStatus={modal.defaultStatus} comoEtapa={modal.comoEtapa}
+              canEdit={podeEditarAlvo}
+              onToggleChecklist={toggleChecklistItem} onToggleMembership={toggleMyMembership}
+              onSave={saveTask} onClose={() => setModal(null)} />
+          )
+        })()}
+        {modal?.type === 'atividades' && (() => {
+          const etapa = tasks.find(t => t.id === modal.taskId)
+          return etapa ? (
+            <StageActivitiesModal task={etapa} project={projects.find(p => p.id === etapa.projectId)}
+              users={users} onSetState={setChecklistState}
+              onAbrirEtapa={(t) => openEditTask(t)} onClose={() => setModal(null)} />
+          ) : null
+        })()}
+        {searchOpen && (
+          <ProjectSearchModal query={projectSearch} onQueryChange={setProjectSearch} projects={projects}
+            onOpen={(id) => { setSearchOpen(false); setProjectSearch(''); setRoute({ view: 'projects', projectId: id }) }}
+            onClose={() => { setSearchOpen(false); setProjectSearch('') }} />
+        )}
+        {modal?.type === 'mysector' && (
+          <MySectorModal current={authUser?.sector} onSubmit={saveMySector} onClose={() => setModal(null)} />
+        )}
+        {modal?.type === 'change' && (
+          <React.Suspense fallback={null}>
+            <ChangeModal change={modal.change} projectId={modal.projectId} users={users} tasks={tasks}
+              members={projects.find(p => p.id === modal.projectId)?.members || []}
+              onSave={saveChange} onClose={() => setModal(null)} />
+          </React.Suspense>
+        )}
+        {modal?.type === 'project' && (
+          <ProjectModal project={modal.project} users={users} folders={folders} defaultFolderId={modal.defaultFolderId} isAdmin={isAdmin}
+            initialTab={modal.tab} onSave={saveProject} onClose={() => setModal(null)} />
+        )}
+        {modal?.type === 'person' && (
+          <React.Suspense fallback={null}>
+            <PersonCard user={modal.user} projects={projects} tasks={tasks}
+              onEdit={openEditPerson} onClose={() => setModal(null)} />
+          </React.Suspense>
+        )}
+        {modal?.type === 'personEdit' && (
+          <React.Suspense fallback={null}>
+            <PeopleModal user={modal.user} currentUserId={currentUserId} users={users} projects={projects} tasks={tasks} changes={changes}
+              onOpenProject={openProjectFromPerson} onSave={saveUser} onClose={() => setModal(null)} />
+          </React.Suspense>
+        )}
+        {modal?.type === 'resource' && modal.resType === 'doc' && (
+          <DocumentModal onSave={saveResource} onClose={() => setModal(null)} />
+        )}
+        {modal?.type === 'resource' && modal.resType === 'link' && (
+          <LinkModal onSave={saveResource} onClose={() => setModal(null)} />
+        )}
+        {modal?.type === 'resource' && modal.resType === 'image' && (
+          <ImageModal onSave={saveResource} onClose={() => setModal(null)} />
+        )}
+        {modal?.type === 'resource' && modal.resType === 'kmz' && (
+          <KmzModal onSave={saveResource} onClose={() => setModal(null)} />
+        )}
+        {modal?.type === 'stageItem' && (
+          <StageItemModal
+            etapas={etapasDoProjeto(tasks, modal.projectId)}
+            users={users}
+            members={projects.find(p => p.id === modal.projectId)?.members || []}
+            defaultStageId={modal.stageTaskId}
+            onSave={addStageItems}
+            onClose={() => setModal(null)} />
+        )}
+        {modal?.type === 'confirm' && (
+          <ConfirmDialog title={modal.title} message={modal.message} confirmLabel={modal.confirmLabel} onConfirm={modal.onConfirm} onClose={() => setModal(null)} />
+        )}
+        {modal?.type === 'password' && (
+          <ChangePasswordModal onSubmit={changePassword} onClose={() => setModal(null)} />
+        )}
+      </ErrorBoundary>
       <Toast aviso={toast} onClose={() => setToast(null)} />
     </div>
   )

@@ -1,7 +1,7 @@
 import './primitives.css'
 import React from 'react'
 import { Icon } from '../Icon.jsx'
-import { STATUS_MAP, PRIORITY_MAP, PROJECT_COLORS } from '../../data/store.js'
+import { STATUS_MAP, PRIORITY_MAP, estadoDoItem } from '../../data/store.js'
 // Reusable presentational primitives for the Promav UI.
 
 // Pessoa inativa continua aparecendo onde já é histórico (responsável de uma
@@ -74,19 +74,9 @@ export function PriorityTag({ priority }) {
   )
 }
 
-export function ProjectPill({ project, size = 8 }) {
-  if (!project) return null
+export function ProgressBar({ value, color = 'var(--brand)', style }) {
   return (
-    <span className="proj-pill">
-      <span className="dot" style={{ width: size, height: size, background: PROJECT_COLORS[project.color] }} />
-      {project.name}
-    </span>
-  )
-}
-
-export function ProgressBar({ value, color = 'var(--brand)' }) {
-  return (
-    <div className="progress">
+    <div className="progress" style={style}>
       <div style={{ width: value + '%', background: color }} />
     </div>
   )
@@ -95,7 +85,7 @@ export function ProgressBar({ value, color = 'var(--brand)' }) {
 export function ChecklistMini({ task }) {
   const list = task.checklist || []
   if (!list.length) return null
-  const done = list.filter(i => i.done).length
+  const done = list.filter(i => estadoDoItem(i) === 'done').length
   const full = done === list.length
   return (
     <span className={'ck-mini' + (full ? ' full' : '')} title={`${done} de ${list.length} itens concluídos`}>
@@ -116,7 +106,7 @@ const FOCAVEIS = 'a[href], button:not([disabled]), input:not([disabled]), select
 // volta para o formulário enquanto o aviso está na frente.
 const pilhaDeModais = []
 
-export function Modal({ title, onClose, children, footer, className = '' }) {
+export function Modal({ title, onClose, children, footer, className = '', travado = false }) {
   const caixa = React.useRef(null)
   const tituloId = React.useId()
 
@@ -125,6 +115,13 @@ export function Modal({ title, onClose, children, footer, className = '' }) {
   // foco à origem a cada tecla digitada.
   const fechar = React.useRef(onClose)
   fechar.current = onClose
+
+  // Enquanto o pedido está no ar (`travado`), Cancelar já fica desabilitado —
+  // mas Esc, o clique fora e o X continuavam fechando, e a conclusão tardia
+  // derrubava o modal que estivesse aberto naquele momento. Vai por ref
+  // porque o efeito de teclado monta uma vez só, com dependências vazias.
+  const travadoRef = React.useRef(travado)
+  travadoRef.current = travado
 
   // Quem abriu o modal, para o foco voltar para lá no fim. Precisa ser lido
   // AQUI, durante o render: o autoFocus de um campo é aplicado no commit, que
@@ -142,7 +139,7 @@ export function Modal({ title, onClose, children, footer, className = '' }) {
 
     const aoTeclar = (e) => {
       if (pilhaDeModais[pilhaDeModais.length - 1] !== caixaNo) return
-      if (e.key === 'Escape') { fechar.current(); return }
+      if (e.key === 'Escape') { if (!travadoRef.current) fechar.current(); return }
       if (e.key !== 'Tab') return
       // offsetParent descarta o que está escondido (campo de aba fechada, por
       // exemplo): o foco não pode parar em algo que ninguém enxerga.
@@ -179,13 +176,15 @@ export function Modal({ title, onClose, children, footer, className = '' }) {
   }, [])
 
   return (
-    <div className="scrim" onMouseDown={onClose}>
+    // Só o botão principal fecha: botão direito abre o menu de contexto, e
+    // o do meio não é gesto de 'cancelar'.
+    <div className="scrim" onMouseDown={(e) => { if (e.button === 0 && !travado) onClose() }}>
       <div ref={caixa} className={'modal ' + className} tabIndex={-1}
-        role="dialog" aria-modal="true" aria-labelledby={tituloId}
+        role="dialog" aria-modal="true" aria-labelledby={tituloId} aria-busy={travado}
         onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h3 id={tituloId}>{title}</h3>
-          <button className="btn-icon" onClick={onClose} aria-label="Fechar"><Icon name="x" size={20} /></button>
+          <button className="btn-icon" onClick={onClose} aria-label="Fechar" disabled={travado}><Icon name="x" size={20} /></button>
         </div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
@@ -237,6 +236,26 @@ export function SegControl({ options, value, onChange }) {
   )
 }
 
+// Fecha um menu/popover ao clicar fora dele ou no Esc. Só escuta enquanto
+// `ativo`: fechado, não deixa listener nenhum no document (FolderMenu e
+// ProjectMenu montam um por linha da sidebar). O Esc não sobe até o Modal, que
+// também ouve keydown: dentro de um modal, fecha só a lista.
+export function useFecharFora(ref, fechar, ativo) {
+  const fecharRef = React.useRef(fechar)
+  fecharRef.current = fechar
+  React.useEffect(() => {
+    if (!ativo) return
+    const fora = (e) => { if (!ref.current?.contains(e.target)) fecharRef.current() }
+    const tecla = (e) => { if (e.key === 'Escape') { e.stopPropagation(); fecharRef.current() } }
+    document.addEventListener('mousedown', fora)
+    document.addEventListener('keydown', tecla)
+    return () => {
+      document.removeEventListener('mousedown', fora)
+      document.removeEventListener('keydown', tecla)
+    }
+  }, [ativo, ref])
+}
+
 // Aviso do rodapé — o único retorno que o app dá depois de salvar, e 27 das 60
 // mensagens são falhas. Todas saíam iguais a um sucesso: fundo escuro, ✓ verde
 // e 2,4 segundos até sumir. Erro agora vem com triângulo, faixa vermelha e sem
@@ -261,17 +280,7 @@ export function SelecaoMultipla({ itens, onAlternar, rotulo, buscaAcima = 8, ari
   const [filtro, setFiltro] = React.useState('')
   const caixa = React.useRef(null)
 
-  React.useEffect(() => {
-    if (!aberto) return
-    const fora = (e) => { if (!caixa.current?.contains(e.target)) setAberto(false) }
-    const tecla = (e) => { if (e.key === 'Escape') setAberto(false) }
-    document.addEventListener('mousedown', fora)
-    document.addEventListener('keydown', tecla)
-    return () => {
-      document.removeEventListener('mousedown', fora)
-      document.removeEventListener('keydown', tecla)
-    }
-  }, [aberto])
+  useFecharFora(caixa, () => setAberto(false), aberto)
 
   const busca = filtro.trim().toLocaleLowerCase('pt-BR')
   // O que já está marcado nunca some do filtro: desmarcar exige enxergar.
@@ -296,7 +305,7 @@ export function SelecaoMultipla({ itens, onAlternar, rotulo, buscaAcima = 8, ari
           <div className="msel-itens">
             {visiveis.map(i => (
               <label key={i.id} className={'msel-item' + (i.marcado ? ' on' : '')}>
-                <input type="checkbox" checked={i.marcado} onChange={() => onAlternar(i.id)} />
+                <input type="checkbox" className="ck-nativo" checked={i.marcado} onChange={() => onAlternar(i.id)} />
                 {i.antes}
                 <span className="msel-nome">{i.nome}</span>
                 {i.etiqueta && <span className="msel-tag">{i.etiqueta}</span>}
@@ -357,19 +366,24 @@ export function PainelPendencias({ itens = [], acao }) {
 
 export function Toast({ aviso, onClose }) {
   const erro = aviso?.tipo === 'erro'
-  return (
-    <div className="toast-wrap" role="status" aria-live="polite">
-      {aviso && (
-        <div className={'toast' + (erro ? ' erro' : '')}>
-          <span className="ic"><Icon name={erro ? 'alert' : 'check'} size={16} stroke={2.5} /></span>
-          {aviso.msg}
-          {erro && (
-            <button className="toast-x" onClick={onClose} aria-label="Fechar aviso">
-              <Icon name="x" size={15} stroke={2.5} />
-            </button>
-          )}
-        </div>
+  const caixa = aviso && (
+    <div className={'toast' + (erro ? ' erro' : '')}>
+      <span className="ic"><Icon name={erro ? 'alert' : 'check'} size={16} stroke={2.5} /></span>
+      {aviso.msg}
+      {erro && (
+        <button className="toast-x" onClick={onClose} aria-label="Fechar aviso">
+          <Icon name="x" size={15} stroke={2.5} />
+        </button>
       )}
+    </div>
+  )
+  // Duas regiões vivas sempre, mesmo vazias (leitor de tela só anuncia o que
+  // ENTRA numa região que já existia): sucesso é status/polite, erro é alert
+  // (assertive — interrompe a leitura; é a única sinalização de que não salvou).
+  return (
+    <div className="toast-wrap">
+      <div role="status" aria-live="polite">{!erro && caixa}</div>
+      <div role="alert">{erro && caixa}</div>
     </div>
   )
 }

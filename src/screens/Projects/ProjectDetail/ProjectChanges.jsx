@@ -90,7 +90,8 @@ function CartaoMudanca({ change, users, tasks, currentUser, canEdit, onEdit, onA
 
 export function ProjectChanges({ project, changes, tasks, users, currentUserId, canEdit, canPublish, onNew, onEdit, onAck, onDecide, onOpenTask }) {
   const lista = changes.filter(c => c.projectId === project.id).sort((a, b) => b.publishedAt - a.publishedAt)
+  const currentUser = users.find(u => u.id === currentUserId)
   if (!lista.length) return <EmptyState icon="history" title="Nenhuma mudança registrada" text="Registre aqui o que mudou no projeto. A equipe será avisada e uma requisição já vira atividade no quadro." action={canPublish ? <button className="btn btn-primary" onClick={() => onNew(project.id)}><Icon name="plus" size={17} stroke={2.2} />Registrar mudança</button> : null} />
   return <div className="proj-mudancas"><div className="mud-topo"><span className="mud-contagem">{lista.length} {lista.length === 1 ? 'mudança registrada' : 'mudanças registradas'}</span>{canPublish && <button className="btn btn-primary btn-sm" onClick={() => onNew(project.id)}><Icon name="plus" size={16} stroke={2.2} />Registrar mudança</button>}</div>
-    {lista.map(c => <CartaoMudanca key={c.id} change={c} users={users} tasks={tasks} currentUser={users.find(u => u.id === currentUserId)} canEdit={canEdit} onEdit={onEdit} onAck={onAck} onDecide={onDecide} onOpenTask={onOpenTask} />)}</div>
+    {lista.map(c => <CartaoMudanca key={c.id} change={c} users={users} tasks={tasks} currentUser={currentUser} canEdit={canEdit} onEdit={onEdit} onAck={onAck} onDecide={onDecide} onOpenTask={onOpenTask} />)}</div>
 }

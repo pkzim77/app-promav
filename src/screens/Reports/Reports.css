@@ -16,7 +16,7 @@
 
 .rep-group-name { font-weight: 700; font-size: 14.5px; color: var(--fg-1); }
 
-.rep-group-head .rep-count { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--fg-3); background: var(--surface); border: 1px solid var(--border); padding: 1px 9px; border-radius: var(--r-full); }
+.rep-group-head .rep-count { margin-left: auto; color: var(--fg-3); background: var(--surface); border: 1px solid var(--border); padding: 1px 9px; }
 
 .rep-group-empty { padding: 16px; font-size: 13px; color: var(--fg-4); }
 

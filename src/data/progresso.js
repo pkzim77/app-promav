@@ -24,18 +24,18 @@
 
 const round1 = (n) => Math.round(n * 10) / 10
 
-// O projeto usa `done`/`text` no checklist; aceitamos também `concluido`
-// para que dados no formato da especificação funcionem sem conversão.
-const itemFeito = (i) => !!(i && (i.done ?? i.concluido))
+// Estado de um ITEM do checklist. `state` manda; `done` é só o fallback de
+// dado antigo, que não tinha `state`. É A regra de 'item concluído' no app —
+// store.js a re-exporta e todo contador/percentual passa por aqui.
+export const estadoDoItem = (item) => item?.state || (item?.done ? 'done' : 'todo')
+const itemFeito = (i) => estadoDoItem(i) === 'done'
 
-// Status do quadro. Aceita os ids do app ('done'/'progress'/'todo') e os
-// nomes usados na especificação, para a função servir aos dois formatos.
-const ehConcluido = (a) => a?.status === 'done' || a?.status === 'concluido'
-// Revisão e diligência são serviço começado e não entregue — a mesma fatia de
-// 'Em andamento'. Separá-las aqui quebraria a soma em 100 das três fatias, e o
-// que o Panorama responde é onde o projeto está, não em que subestado.
-const ehAndamento = (a) => a?.status === 'progress' || a?.status === 'andamento'
-  || a?.status === 'review' || a?.status === 'diligence'
+// Status do quadro (ids do app). Revisão e diligência são serviço começado e
+// não entregue — a mesma fatia de 'Em andamento'. Separá-las aqui quebraria a
+// soma em 100 das três fatias, e o que o Panorama responde é onde o projeto
+// está, não em que subestado.
+const ehConcluido = (a) => a?.status === 'done'
+const ehAndamento = (a) => a?.status === 'progress' || a?.status === 'review' || a?.status === 'diligence'
 
 // Arredonda as três fatias para 1 casa mantendo a soma exata em 100.
 // A sobra do arredondamento vai para a maior fatia, onde pesa menos.
@@ -53,11 +53,10 @@ function ajustarPara100(valores) {
 /**
  * Divide o progresso de um projeto em três fatias que somam 100.
  *
- * @param {Array} atividades  lista de { id, title|nome, status, checklist: [{ done|concluido }] }
+ * @param {Array} atividades  lista de { id, status, checklist: [{ state, done }] }
  * @returns {{
  *   aFazer: number, emAndamento: number, concluido: number,  // percentuais, somam 100
  *   executado: number, // quanto do projeto já foi feito de fato
- *   peso: number,      // quanto cada atividade vale (100/N)
  *   total: number,     // quantidade de atividades
  *   detalhes: Array    // situação e contribuição de cada atividade
  * }}
@@ -68,7 +67,7 @@ export function calcularProgresso(atividades = []) {
 
   // Projeto sem atividades: nada foi executado.
   if (total === 0) {
-    return { aFazer: 100, emAndamento: 0, concluido: 0, executado: 0, peso: 0, total: 0, detalhes: [] }
+    return { aFazer: 100, emAndamento: 0, concluido: 0, executado: 0, total: 0, detalhes: [] }
   }
 
   const peso = 100 / total // toda atividade vale o mesmo
@@ -102,14 +101,7 @@ export function calcularProgresso(atividades = []) {
       executado += peso * frac     // normalmente 0
     }
 
-    detalhes.push({
-      id: a?.id,
-      nome: a?.title ?? a?.nome ?? '',
-      fatia,
-      peso: round1(peso),
-      itens: itens.length, feitos,
-      executado: round1(completa ? peso : peso * frac),
-    })
+    detalhes.push({ id: a?.id, fatia, peso: round1(peso), executado: round1(completa ? peso : peso * frac) })
   }
 
   const [pFazer, pAndamento, pConcluido] = ajustarPara100([aFazer, emAndamento, concluido])
@@ -119,7 +111,7 @@ export function calcularProgresso(atividades = []) {
     emAndamento: pAndamento,
     concluido: pConcluido,
     executado: round1(executado),
-    peso: round1(peso), total, detalhes,
+    total, detalhes,
   }
 }
 

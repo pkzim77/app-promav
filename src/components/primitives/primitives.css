@@ -14,18 +14,22 @@
 
 /* ---------- Modal ---------- */
 
-.scrim { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: flex-start; justify-content: center; padding: 64px 20px; z-index: 100; animation: fade var(--dur) var(--ease); }
+.scrim { --scrim-pad: 64px; position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: flex-start; justify-content: center; padding: var(--scrim-pad) 20px; z-index: 100; animation: fade var(--dur) var(--ease); }
 
 .modal { 
   width: 100%; 
   /* Largura padrão de todos os modais. Subiu de 520px porque os formulários
      com campos pareados (data+urgência, emissor+destinatário) espremiam. */
   max-width: 600px; 
-  max-height: 91vh;
+  /* Cabe entre as margens do scrim em qualquer altura de tela; dvh desconta a
+     barra do navegador móvel e o vh fica de reserva para quem não o entende. */
+  max-height: calc(100vh - var(--scrim-pad) * 2);
+  max-height: calc(100dvh - var(--scrim-pad) * 2);
   background: var(--surface);
   border-radius: var(--r-xl);
   overflow-x: hidden;
-  overflow-y: scroll;
+  overflow-y: auto;
+  scrollbar-gutter: stable; /* reserva o espaço sem desenhar o trilho quando não há rolagem */
   box-shadow: var(--shadow-lg); 
   animation: rise var(--dur-slow) var(--ease-out); 
   /* A caixa recebe o foco ao abrir, para o leitor de tela anunciar o título.
@@ -37,11 +41,22 @@
 
 .modal-head h3 { font: var(--text-h3); margin: 0; letter-spacing: var(--tracking-snug); }
 
+/* X do cabeçalho desabilitado enquanto o pedido está no ar (Modal travado).
+   O kit não tem estado :disabled para .btn-icon, e `button { cursor: pointer }`
+   mais `.btn-icon:hover` deixavam o X com cursor de mão e realce no hover sem
+   fazer nada. Opacidade igual à do `.btn:disabled` do Cancelar, que fica no
+   mesmo modal; sem pointer-events, que mataria tooltip de botão de ícone.
+   A especificidade (2 classes + :disabled) já vence o `.btn-icon:hover` do kit. */
+.modal-head .btn-icon:disabled { opacity: .6; cursor: default; background: none; color: var(--fg-3); }
+
 .modal-body { padding: 22px 24px; display: flex; flex-direction: column; gap: 16px; }
 
 .modal-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--border); }
 
 @keyframes fade { from { opacity: 0; } }
+
+/* Tela baixa (laptop com zoom, celular deitado): menos margem acima/abaixo do modal. */
+@media (max-height: 600px) { .scrim { --scrim-pad: 16px; } }
 
 /* ---------- Checklist mini indicator (cards / table) ---------- */
 
@@ -69,7 +84,7 @@
 
 /* A região existe mesmo sem aviso na tela (ver Toast). Vazia ela não tem
    tamanho, mas pointer-events garante que nunca engula um clique. */
-.toast-wrap { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+.toast-wrap { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 0; align-items: center; pointer-events: none; }
 
 .toast { display: flex; align-items: center; gap: 10px; background: var(--brand-ink); color: #fff; font-size: 14px; font-weight: 500; padding: 11px 16px; border-radius: var(--r-md); box-shadow: var(--shadow-lg); animation: rise var(--dur) var(--ease-out); pointer-events: auto; max-width: min(520px, calc(100vw - 32px)); }
 

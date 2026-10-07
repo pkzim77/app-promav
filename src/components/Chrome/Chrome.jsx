@@ -2,7 +2,7 @@ import './Chrome.css'
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Logo } from '../Logo/Logo.jsx'
-import { Avatar } from '../primitives/primitives.jsx'
+import { Avatar, useFecharFora } from '../primitives/primitives.jsx'
 import { TimeClock } from '../TimeTracker/TimeTracker.jsx'
 import { PROJECT_COLORS, NOTIF_KINDS, NOTIF_KIND_MAP } from '../../data/store.js'
 // App chrome: left sidebar + top bar with search and user selector.
@@ -12,14 +12,10 @@ import { PROJECT_COLORS, NOTIF_KINDS, NOTIF_KIND_MAP } from '../../data/store.js
 function FolderMenu({ folder, onNewProject, onNewSubfolder, onRename, onDelete }) {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef(null)
-  React.useEffect(() => {
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
+  useFecharFora(ref, () => setOpen(false), open)
   return (
     <div className={'sb-folder-menu' + (open ? ' open' : '')} ref={ref}>
-      <button className="sb-folder-menu-btn" title="Opções da pasta" onClick={() => setOpen(o => !o)}>
+      <button className="sb-folder-menu-btn" title="Opções da pasta" aria-expanded={open} aria-haspopup="true" onClick={() => setOpen(o => !o)}>
         <Icon name="more" size={17} />
       </button>
       {open && (
@@ -46,14 +42,10 @@ function FolderMenu({ folder, onNewProject, onNewSubfolder, onRename, onDelete }
 function ProjectMenu({ project, onRename, onEdit, onDelete }) {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef(null)
-  React.useEffect(() => {
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
+  useFecharFora(ref, () => setOpen(false), open)
   return (
     <div className={'sb-folder-menu' + (open ? ' open' : '')} ref={ref}>
-      <button className="sb-folder-menu-btn" title="Opções do projeto"
+      <button className="sb-folder-menu-btn" title="Opções do projeto" aria-expanded={open} aria-haspopup="true"
         onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}>
         <Icon name="more" size={17} />
       </button>
@@ -74,7 +66,7 @@ function ProjectMenu({ project, onRename, onEdit, onDelete }) {
   )
 }
 
-export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAdmin = false, collapsed: navCollapsed = false, mobileOpen = false, onToggleCollapse, onCloseMobile, onNewFolder, onRenameFolder, onDeleteFolder, onNewProjectInFolder, onMoveFolder, onMoveProject, onRenameProject, onEditProject, onDeleteProject }) {
+export function Sidebar({ route, onNavigate, projects, folders = [], isAdmin = false, collapsed: navCollapsed = false, mobileOpen = false, onToggleCollapse, onCloseMobile, onNewFolder, onRenameFolder, onDeleteFolder, onNewProjectInFolder, onMoveFolder, onMoveProject, onRenameProject, onEditProject, onDeleteProject }) {
   // Guardamos quais pastas estão ABERTAS. Começa vazio → todas fechadas.
   const [expanded, setExpanded] = React.useState(() => new Set())
   const toggle = (id) => setExpanded(prev => {
@@ -109,14 +101,19 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
     if (!isAdmin || !drag) return
     if (drag.type === 'folder' && drag.id === f.id) return
     e.preventDefault(); e.stopPropagation()
-    setHint({ key: 'f:' + f.id, mode: folderMode(e, e.currentTarget) })
+    // key e mode saem do evento ANTES do set: o React zera currentTarget ao
+    // fim do listener. Devolver o mesmo objeto quando nada mudou poupa a
+    // sidebar de re-renderizar nas dezenas de dragover por segundo.
+    const key = 'f:' + f.id, mode = folderMode(e, e.currentTarget)
+    setHint(h => (h && h.key === key && h.mode === mode) ? h : { key, mode })
   }
   const overProj = (p) => (e) => {
     if (!isAdmin || drag?.type !== 'project' || drag.id === p.id) return
     e.preventDefault(); e.stopPropagation()
-    setHint({ key: 'p:' + p.id, mode: projMode(e, e.currentTarget) })
+    const key = 'p:' + p.id, mode = projMode(e, e.currentTarget)
+    setHint(h => (h && h.key === key && h.mode === mode) ? h : { key, mode })
   }
-  const overRoot = (e) => { if (!isAdmin || !drag) return; e.preventDefault(); setHint({ key: 'root', mode: 'into' }) }
+  const overRoot = (e) => { if (!isAdmin || !drag) return; e.preventDefault(); setHint(h => (h && h.key === 'root' && h.mode === 'into') ? h : { key: 'root', mode: 'into' }) }
 
   const dropFolder = (f) => (e) => {
     if (!isAdmin || !drag) return
@@ -158,13 +155,13 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
   const nav = [
     { id: 'hub', label: 'Visão geral', icon: 'hub' },
     ...(isAdmin ? [{ id: 'people', label: 'Profissionais', icon: 'users' }] : []),
-    { id: 'reports', label: 'Relatórios Dos Projetos', icon: 'trendingUp' },
-    { id: 'team', label: 'Relatórios Da Equipe', icon: 'users' },
+    { id: 'reports', label: 'Relatórios dos projetos', icon: 'trendingUp' },
+    { id: 'team', label: 'Relatórios da equipe', icon: 'users' },
     // Quem escreve vê o próprio relatório; quem recebe vê o de todo mundo. São
     // telas diferentes de verdade, não a mesma com permissão diferente.
     ...(isAdmin
-      ? [{ id: 'weeklyreports', label: 'Relatórios Individuais', icon: 'file' }]
-      : [{ id: 'myreport', label: 'Meu Relatório', icon: 'file' }]),
+      ? [{ id: 'weeklyreports', label: 'Relatórios individuais', icon: 'file' }]
+      : [{ id: 'myreport', label: 'Meu relatório', icon: 'file' }]),
   ]
 
   // Um botão de projeto (a "lista de tarefas"), reutilizado dentro e fora das pastas.
@@ -207,7 +204,7 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
           onDragOver={overFolder(f)}
           onDrop={dropFolder(f)}>
           <button className="sb-folder-head" title={f.name} onClick={() => toggle(f.id)}>
-            <Icon name={open ? 'chevronDown' : 'chevronRight'} size={15} className="sb-folder-chevron" />
+            <Icon name={open ? 'chevronDown' : 'chevronRight'} size={15} />
             <Icon name="folder" size={16} />
             <span className="sb-folder-name" title={f.name}>{f.name}</span>
           </button>
@@ -237,13 +234,14 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
         </button>
       </div>
       {nav.map(n => (
-        <button key={n.id} className={'sb-item' + (route.view === n.id ? ' active' : '')} title={n.label} onClick={() => go({ view: n.id })}>
+        <button key={n.id} className={'sb-item' + (route.view === n.id ? ' active' : '')} title={n.label}
+          aria-current={route.view === n.id ? 'page' : undefined} onClick={() => go({ view: n.id })}>
           <Icon name={n.icon} size={19} /><span className="sb-label">{n.label}</span>
         </button>
       ))}
 
       <div className="sb-section">
-        <span className="sb-section-text">Projetos</span>
+        <span>Projetos</span>
         {isAdmin && (
           <button className="sb-section-btn" title="Nova pasta" onClick={onNewFolder}>
             <Icon name="plus" size={15} stroke={2.4} />
@@ -269,15 +267,11 @@ export function Sidebar({ route, onNavigate, projects, tasks, folders = [], isAd
 export function UserMenu({ user, onChangePassword, onMySector, onLogout }) {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef(null)
-  React.useEffect(() => {
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
+  useFecharFora(ref, () => setOpen(false), open)
   if (!user) return null
   return (
     <div className="userselect" ref={ref}>
-      <button className="userselect-btn" onClick={() => setOpen(o => !o)}>
+      <button className="userselect-btn" aria-expanded={open} aria-haspopup="true" onClick={() => setOpen(o => !o)}>
         <Avatar user={user} size={26} />{user.name.split(' ')[0]}
         <Icon name="chevronDown" size={15} style={{ color: 'var(--fg-3)' }} />
       </button>
@@ -310,18 +304,36 @@ export function UserMenu({ user, onChangePassword, onMySector, onLogout }) {
 export function NewsPanel({ open, items = [], readIds = new Set(), onClose, onMarkRead, onMarkAllRead, onOpenNotification, onDismiss, onDismissAll, avisos = { som: true, navegador: false }, onToggleSom, onToggleNavegador }) {
   const [filter, setFilter] = React.useState('all')
 
+  // Foco entra no X ao abrir e volta ao sino ao fechar; Esc fecha — mas não
+  // quando há um Modal por cima (confirm de excluir notificação): o Modal ouve
+  // keydown no window e fecharia junto.
+  // Sem `aria-modal` no painel: o Tab não fica preso aqui (ao contrário do Modal
+  // de primitives) e nada marca o fundo como inerte, então declarar modalidade
+  // mentiria para o leitor de tela quando o foco sair para a barra de topo.
+  React.useEffect(() => {
+    if (!open) return
+    document.querySelector('.news-close')?.focus()
+    const tecla = (e) => { if (e.key !== 'Escape' || document.querySelector('.scrim')) return; onClose?.() }
+    document.addEventListener('keydown', tecla)
+    return () => { document.removeEventListener('keydown', tecla); document.querySelector('.tb-bell')?.focus() }
+  }, [open])
+
   if (!open) return null
 
   // Os filtros seguem a ordem de NOTIF_KINDS (não a ordem de chegada dos
   // itens), e só aparecem os tipos que existem na lista.
   const presentes = new Set(items.map(i => i.kind))
   const kinds = NOTIF_KINDS.filter(k => presentes.has(k.id))
-  const filtered = filter === 'all' ? items : items.filter(i => i.kind === filter)
-  const filtroLabel = NOTIF_KIND_MAP[filter]?.label || filter
+  // O tipo escolhido pode zerar (lido + limpo, mudança decidida) com o painel
+  // fechado ou aberto; nesse caso o filtro efetivo volta a 'Todas', senão a
+  // lista fica vazia sem nenhum chip marcado — e sem barra se sobrar 1 tipo.
+  const filtroAtivo = filter !== 'all' && presentes.has(filter) ? filter : 'all'
+  const filtered = filtroAtivo === 'all' ? items : items.filter(i => i.kind === filtroAtivo)
+  const filtroLabel = NOTIF_KIND_MAP[filtroAtivo]?.label || filtroAtivo
 
   return (
     <div className="news-overlay" onClick={onClose}>
-      <aside className="news-panel" onClick={(e) => e.stopPropagation()}>
+      <aside className="news-panel" role="dialog" aria-label="Novidades" onClick={(e) => e.stopPropagation()}>
         <div className="news-header">
           <div className="news-title"><Icon name="bell" size={17} />Novidades</div>
           <button
@@ -356,11 +368,11 @@ export function NewsPanel({ open, items = [], readIds = new Set(), onClose, onMa
         )}
         {kinds.length > 1 && (
           <div className="news-filters">
-            <button className={`news-filter-btn ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
+            <button className={`news-filter-btn ${filtroAtivo === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
               Todas
             </button>
             {kinds.map(k => {
-              const on = filter === k.id
+              const on = filtroAtivo === k.id
               return (
                 <button
                   key={k.id}
@@ -381,7 +393,7 @@ export function NewsPanel({ open, items = [], readIds = new Set(), onClose, onMa
         )}
         <div className="news-body">
           {filtered.length === 0 ? (
-            <div className="news-empty">{filter === 'all' ? 'Nenhuma novidade por enquanto.' : `Nenhuma novidade de "${filtroLabel}".`}</div>
+            <div className="news-empty">{filtroAtivo === 'all' ? 'Nenhuma novidade por enquanto.' : `Nenhuma novidade de "${filtroLabel}".`}</div>
           ) : (
             filtered.map(item => {
               const unread = !readIds.has(item.id)
@@ -394,10 +406,7 @@ export function NewsPanel({ open, items = [], readIds = new Set(), onClose, onMa
                   key={item.id}
                   className={'news-item' + (unread ? ' unread' : '') + (item.target ? ' clickable' : '')}
                   style={{ borderLeft: `3px solid ${cor}` }}
-                  role={item.target ? 'button' : undefined}
-                  tabIndex={item.target ? 0 : undefined}
-                  onClick={() => (item.target ? abrir() : !unread && onMarkRead?.(item.id))}
-                  onKeyDown={(e) => { if (item.target && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); abrir() } }}>
+                  onClick={item.target ? abrir : undefined}>
                   <div className="news-item-top">
                     <span className="news-tag" style={{ color: cor, background: cor + '1a' }}>{item.tag}</span>
                     <span className="news-time">{item.time}</span>
@@ -409,7 +418,11 @@ export function NewsPanel({ open, items = [], readIds = new Set(), onClose, onMa
                       <Icon name="trash" size={14} />
                     </button>
                   </div>
-                  <h4>{item.title}</h4>
+                  <h4>
+                    {/* stopPropagation: sem ele o onClick do card chamaria abrir() de novo. */}
+                    <button type="button" className="news-item-title" disabled={!item.target}
+                      onClick={(e) => { e.stopPropagation(); abrir() }}>{item.title}</button>
+                  </h4>
                   <p>{item.text}</p>
                   {unread && (
                     <button className="news-read" onClick={(e) => { e.stopPropagation(); onMarkRead?.(item.id) }}>
@@ -449,7 +462,7 @@ export function TopBar({ title, currentUser, canNewProject = true, onToggleMobil
           </button>
         )}
         <div className="topbar-actions">
-          <button className="tb-bell" onClick={() => setNewsOpen(o => !o)} aria-label="Abrir novidades">
+          <button className="tb-bell" onClick={() => setNewsOpen(o => !o)} aria-expanded={newsOpen} aria-haspopup="dialog" aria-label="Abrir novidades">
             <Icon name="bell" size={18} />
             {unreadCount > 0 && <span className="tb-bell-badge">{unreadCount}</span>}
           </button>

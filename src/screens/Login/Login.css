@@ -2,8 +2,8 @@
 
 /* ---------- Login ---------- */
 
-.login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; background:
-  radial-gradient(1100px 520px at 50% -10%, var(--brand-soft) 0%, transparent 60%), var(--bg-app, var(--surface-2)); }
+.login-wrap { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 24px; background:
+  radial-gradient(1100px 520px at 50% -10%, var(--brand-soft) 0%, transparent 60%), var(--surface-2); }
 
 .login-card { width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-xl); box-shadow: var(--shadow-lg); padding: 32px 28px; animation: rise var(--dur-slow) var(--ease-out); }
@@ -16,9 +16,7 @@
 
 .login-card .field { margin-bottom: 14px; }
 
-.login-error { display: flex; align-items: center; gap: 6px; color: var(--prio-high, #c5333a);
-  background: var(--prio-high-soft, #fdecec); border-radius: var(--r-sm); padding: 9px 11px; font-size: 13px; margin-bottom: 14px; }
+.login-error { display: flex; align-items: center; gap: 6px; color: var(--prio-high);
+  background: var(--prio-high-soft); border-radius: var(--r-sm); padding: 9px 11px; font-size: 13px; margin-bottom: 14px; }
 
 .login-submit { width: 100%; justify-content: center; margin-top: 4px; }
-
-.login-submit:disabled { opacity: .55; cursor: not-allowed; }

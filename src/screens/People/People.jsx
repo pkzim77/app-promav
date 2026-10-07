@@ -1,7 +1,7 @@
 import './People.css'
 import React from 'react'
 import { AgGridReact } from 'ag-grid-react'
-import { ModuleRegistry, ClientSideRowModelModule, TextFilterModule, RenderApiModule, ValidationModule, themeQuartz } from 'ag-grid-community'
+import { ModuleRegistry, ClientSideRowModelModule, TextFilterModule, RenderApiModule, LocaleModule, ValidationModule, themeQuartz } from 'ag-grid-community'
 import { Avatar } from '../../components/primitives/primitives.jsx'
 import { Icon } from '../../components/Icon.jsx'
 import { taskMembers, sectorLabel } from '../../data/store.js'
@@ -20,13 +20,43 @@ import { taskMembers, sectorLabel } from '../../data/store.js'
 //   RenderApi → api.refreshCells(), usado para forçar o redesenho do avatar
 //               quando só a cor/iniciais mudam (o campo da coluna, `name`,
 //               continua igual e o grid não percebe sozinho).
-const modulos = [ClientSideRowModelModule, TextFilterModule, RenderApiModule]
+//   Locale    → localeText; é ele que fornece o LocaleService, e sem o módulo
+//               a tradução do filtro e dos rótulos ARIA é descartada.
+const modulos = [ClientSideRowModelModule, TextFilterModule, RenderApiModule, LocaleModule]
 
 // Em desenvolvimento, o ValidationModule troca falhas silenciosas por uma
 // mensagem dizendo qual módulo falta. Em produção ele sai no build.
 if (import.meta.env.DEV) modulos.push(ValidationModule)
 
 ModuleRegistry.registerModules(modulos)
+
+// Fora do componente porque o grid refaz os textos quando a referência muda.
+// Só as chaves que esta tela usa: filtro de texto e leitor de tela.
+const LOCALE_PT_BR = {
+  filterOoo: 'Filtrar…',
+  contains: 'Contém',
+  notContains: 'Não contém',
+  equals: 'Igual a',
+  notEqual: 'Diferente de',
+  startsWith: 'Começa com',
+  endsWith: 'Termina com',
+  blank: 'Vazio',
+  notBlank: 'Preenchido',
+  andCondition: 'E',
+  orCondition: 'OU',
+  resetFilter: 'Limpar',
+  ariaSortableColumn: 'Pressione Enter para ordenar',
+  ariaFilterColumn: 'Pressione Ctrl+Enter para abrir o filtro',
+  ariaColumnFiltered: 'Coluna filtrada',
+  ariaFilterMenuOpen: 'Abrir menu de filtro',
+  ariaFilterInput: 'Campo de filtro',
+  ariaFilterValue: 'Valor do filtro',
+  ariaFilteringOperator: 'Operador do filtro',
+}
+
+// getRowId só é lido na inicialização: uma função nova a cada render faz o
+// grid avisar que uma propriedade imutável mudou.
+const getRowId = (params) => params.data.id
 
 // Cores espelhadas de src/styles/tokens.css — a Theming API do AG Grid não lê
 // custom properties, então os valores precisam ser mantidos em sincronia à mão.
@@ -161,6 +191,35 @@ function ActionsCell({ data, context }) {
   )
 }
 
+// Projetos em que a pessoa aparece (equipe, responsabilidade ou atividade) e
+// quantas atividades dela estão em aberto. Fora do componente para não entrar
+// como dependência do useMemo que monta as linhas da grade.
+function resumoDoUsuario(user, tasks, projects) {
+  const projectIds = new Set()
+  const openActivities = tasks.filter((task) => {
+    const involved = taskMembers(task).includes(user.id)
+    const open = task.status !== 'done'
+    if (involved && open) {
+      projectIds.add(task.projectId)
+      return true
+    }
+    return false
+  }).length
+
+  projects.forEach((project) => {
+    const memberMatch = (project.members || []).some((member) => member.userId === user.id)
+    const responsibleMatch = (project.responsibleIds || []).includes(user.id)
+    if (memberMatch || responsibleMatch) {
+      projectIds.add(project.id)
+    }
+  })
+
+  return {
+    projectCount: projectIds.size,
+    openActivities,
+  }
+}
+
 export function People({ users = [], projects = [], tasks = [], currentUserId = null, onNewPerson, onOpenPerson, onEditPerson, onDeletePerson }) {
   const gridRef = React.useRef(null)
   const gridWrapRef = React.useRef(null)
@@ -190,33 +249,12 @@ export function People({ users = [], projects = [], tasks = [], currentUserId = 
     return () => wrap.removeEventListener('wheel', onWheel)
   }, [])
 
-  const getUserSummary = (user) => {
-    const projectIds = new Set()
-    const openActivities = tasks.filter((task) => {
-      const involved = taskMembers(task).includes(user.id)
-      const open = task.status !== 'done'
-      if (involved && open) {
-        projectIds.add(task.projectId)
-        return true
-      }
-      return false
-    }).length
-
-    projects.forEach((project) => {
-      const memberMatch = (project.members || []).some((member) => member.userId === user.id)
-      const responsibleMatch = (project.responsibleIds || []).includes(user.id)
-      if (memberMatch || responsibleMatch) {
-        projectIds.add(project.id)
-      }
-    })
-
-    return {
-      projectCount: projectIds.size,
-      openActivities,
-    }
-  }
-
-  const people = users.map((user) => ({ ...user, ...getUserSummary(user) }))
+  // Recalcular o resumo a cada tique do cronômetro do pai trocava a referência
+  // de rowData e fazia o AG Grid refazer todas as linhas sem nada ter mudado.
+  const people = React.useMemo(
+    () => users.map((user) => ({ ...user, ...resumoDoUsuario(user, tasks, projects) })),
+    [users, tasks, projects],
+  )
 
   // As referências de onEditPerson/onDeletePerson podem mudar a cada render do
   // componente pai. Colocá-las em `context` (em vez de como dependência do
@@ -288,7 +326,7 @@ export function People({ users = [], projects = [], tasks = [], currentUserId = 
     if (onEditPerson || onDeletePerson) {
       cols.push({
         colId: 'actions',
-        headerName: '',
+        headerName: 'Ações',
         sortable: false,
         resizable: false,
         suppressMovable: true,
@@ -348,7 +386,8 @@ export function People({ users = [], projects = [], tasks = [], currentUserId = 
             defaultColDef={defaultColDef}
             context={gridContext}
             onRowClicked={handleRowClicked}
-            getRowId={(params) => params.data.id}
+            getRowId={getRowId}
+            localeText={LOCALE_PT_BR}
             domLayout="autoHeight"
             rowHeight={58}
             headerHeight={40}

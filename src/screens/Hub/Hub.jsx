@@ -30,6 +30,9 @@ function HubNav({ icon, title, onClick }) {
 // O que espera por você. Sai da tela inteira quando não há nada — um painel
 // vazio dizendo "nada pendente" ocupa a melhor área para não informar nada.
 function PrecisaDeVoce({ atrasadas, ciencias, relatorio, projetoDe, onNavigate }) {
+  // A lista cresce aqui dentro em vez de mandar para a Lista: lá não há
+  // recorte de atraso, e "minhas" é estado global que grudaria no Kanban.
+  const [todas, setTodas] = React.useState(false)
   const hoje = todayISO()
   if (!atrasadas.length && !ciencias.length && !relatorio) return null
 
@@ -43,7 +46,7 @@ function PrecisaDeVoce({ atrasadas, ciencias, relatorio, projetoDe, onNavigate }
             <b>{atrasadas.length}</b> atividade{atrasadas.length === 1 ? '' : 's'} atrasada{atrasadas.length === 1 ? '' : 's'}
           </div>
           <ul className="pend-lista">
-            {atrasadas.slice(0, 5).map(t => {
+            {atrasadas.slice(0, todas ? atrasadas.length : 5).map(t => {
               const dias = dayDiff(t.end, hoje) ?? 0
               return (
                 <li key={t.id}>
@@ -58,8 +61,8 @@ function PrecisaDeVoce({ atrasadas, ciencias, relatorio, projetoDe, onNavigate }
             })}
           </ul>
           {atrasadas.length > 5 && (
-            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate({ view: 'list' })}>
-              Ver as {atrasadas.length - 5} restantes<Icon name="arrowRight" size={14} />
+            <button className="btn btn-ghost btn-sm" onClick={() => setTodas(v => !v)}>
+              {todas ? 'Mostrar menos' : `Ver as ${atrasadas.length - 5} restantes`}
             </button>
           )}
         </div>
@@ -102,7 +105,7 @@ function PrecisaDeVoce({ atrasadas, ciencias, relatorio, projetoDe, onNavigate }
   )
 }
 
-export function Hub({ projects, recentProjects: searchedProjects = projects, tasks, changes = [],
+export function Hub({ projects, tasks, changes = [],
                       onNavigate, sessions, currentUserId, authUser, relatorioSemana = 'enviado', now }) {
   // Agrupa uma vez; os cards abaixo pegam as suas por id em vez de cada um
   // varrer a lista inteira duas vezes.
@@ -118,7 +121,7 @@ export function Hub({ projects, recentProjects: searchedProjects = projects, tas
   // Aqui entra quem tem vínculo de qualquer natureza (equipe, responsabilidade
   // ou atividade sua), e quem tem trabalho em aberto vem primeiro.
   const meusProjetos = React.useMemo(() => {
-    const comPeso = (searchedProjects || []).map(p => {
+    const comPeso = projects.map(p => {
       const minhas = (porProjeto.get(p.id) || SEM_ATIVIDADES).filter(t => taskMembers(t).includes(currentUserId))
       return {
         p,
@@ -136,7 +139,7 @@ export function Hub({ projects, recentProjects: searchedProjects = projects, tas
         || a.p.name.localeCompare(b.p.name, 'pt-BR'))
       .slice(0, 8)
       .map(x => x.p)
-  }, [searchedProjects, porProjeto, currentUserId])
+  }, [projects, porProjeto, currentUserId])
 
   const hoje = todayISO()
   const minhasAtrasadas = React.useMemo(() => tasks
@@ -170,9 +173,9 @@ export function Hub({ projects, recentProjects: searchedProjects = projects, tas
       <h1 className="hub-titulo">{primeiroNome ? `Olá, ${primeiroNome}` : 'Sua semana na Promav'}</h1>
 
       <div className="hub-stats">
-        <StatCard num={projects.length} label="Projetos ativos" />
-        <StatCard num={inProgress} label="Tarefas em andamento" />
-        <StatCard num={done} label="Tarefas concluídas" />
+        <StatCard num={projects.filter(p => p.status !== 'concluido').length} label="Projetos ativos" />
+        <StatCard num={inProgress} label="Atividades em andamento" />
+        <StatCard num={done} label="Atividades concluídas" />
         <StatCard num={fmtDur(todayMs)} label="Tempo registrado hoje" />
       </div>
 

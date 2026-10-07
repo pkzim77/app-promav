@@ -59,7 +59,7 @@
 
 .rel-sugestao { align-self: flex-start; margin-top: 8px; }
 
-.rel-acoes { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 4px; border-top: 1px solid var(--border); margin-top: 2px; padding-top: 18px; }
+.rel-acoes { display: flex; flex-wrap: wrap; gap: 10px; border-top: 1px solid var(--border); margin-top: 2px; padding-top: 18px; }
 
 /* Botão desabilitado precisa dizer o que falta — apagado e mudo é adivinhação. */
 .rel-falta { margin: 0; font-size: 13px; color: var(--fg-3); }
@@ -119,36 +119,36 @@
 /* Poppins é a fonte institucional, a mesma das propostas entregues ao cliente —
    já está nos tokens como --font-brand. O documento inteiro usa ela, e não a
    fonte das telas: é papel timbrado, não interface. */
-.rel-doc { font-family: var(--font-brand); color: #16150F; font-size: 11pt; line-height: 1.5; }
+.rel-doc { font-family: var(--font-brand); color: var(--fg-1); font-size: 11pt; line-height: 1.5; }
 
 .rel-doc-marca { display: flex; align-items: baseline; gap: 8px; padding-bottom: 14px; border-bottom: 2px solid var(--accent-strong); }
 
 .rel-doc-logo { font-size: 20pt; font-weight: 700; letter-spacing: -0.02em; }
 
-.rel-doc-logo b { color: #16150F; }
+.rel-doc-logo b { color: var(--fg-1); }
 
 .rel-doc-logo em { color: var(--accent-strong); font-style: normal; }
 
-.rel-doc-eng { font-size: 10pt; font-weight: 500; letter-spacing: 0.12em; color: #55503F; }
+.rel-doc-eng { font-size: 10pt; font-weight: 500; letter-spacing: 0.12em; color: var(--fg-2); }
 
 .rel-doc-h1 { margin: 22px 0 2px; font-size: 21pt; font-weight: 700; letter-spacing: -0.01em; }
 
-.rel-doc-data { margin: 0 0 18px; font-size: 10pt; color: #7A7361; }
+.rel-doc-data { margin: 0 0 18px; font-size: 10pt; color: var(--fg-3); }
 
 .rel-doc-tabela { width: 100%; border-collapse: collapse; margin-bottom: 22px; }
 
-.rel-doc-tabela th, .rel-doc-tabela td { border: 1px solid #E4DED1; padding: 8px 12px; text-align: left; font-size: 10.5pt; vertical-align: top; }
+.rel-doc-tabela th, .rel-doc-tabela td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; font-size: 10.5pt; vertical-align: top; }
 
-.rel-doc-tabela th { width: 140px; font-weight: 600; color: #55503F; }
+.rel-doc-tabela th { width: 140px; font-weight: 600; color: var(--fg-2); }
 
 .rel-doc-h2 { margin: 18px 0 8px; font-size: 10.5pt; font-weight: 700; letter-spacing: 0.02em; }
 
 /* Um bloco por projeto: nome, status e o que foi feito. Não quebra no meio. */
 .rel-doc-proj { break-inside: avoid; margin-bottom: 14px; }
 
-.rel-doc-proj .rel-doc-h2 { margin-top: 0; padding-bottom: 4px; border-bottom: 1px solid #E4DED1; }
+.rel-doc-proj .rel-doc-h2 { margin-top: 0; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
 
-.rel-doc-status { margin: 0 0 6px; font-size: 10pt; color: #55503F; }
+.rel-doc-status { margin: 0 0 6px; font-size: 10pt; color: var(--fg-2); }
 
 .rel-doc-lista { margin: 0; padding-left: 18px; list-style: none; }
 
@@ -169,6 +169,8 @@
 
 /* Fora da impressão o documento não aparece — a prévia o renderiza à parte. */
 .rel-impressao { display: none; }
+
+.rel-sem-fila { font-family: var(--font-brand); font-size: 11pt; }
 
 @page { size: A4; margin: 18mm 16mm; }
 

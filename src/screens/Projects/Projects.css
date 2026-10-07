@@ -12,7 +12,7 @@
 
 .proj-crumb:disabled { color: var(--fg-1); cursor: default; }
 
-.proj-explorer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.proj-explorer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 16px; }
 
 .proj-folder-card { display: flex; align-items: center; gap: 18px; padding: 18px 20px; min-height: 116px; text-align: left; width: 100%; transition: border-color var(--dur), box-shadow var(--dur), transform var(--dur); }
 
@@ -32,7 +32,7 @@
 
 /* Card do projeto: o card inteiro é clicável */
 
-.proj-card { cursor: pointer; transition: border-color var(--dur), box-shadow var(--dur), transform var(--dur); }
+.proj-card { cursor: pointer; padding: 22px; display: flex; flex-direction: column; min-height: 200px; transition: border-color var(--dur), box-shadow var(--dur), transform var(--dur); }
 
 .proj-card:hover { border-color: var(--brand); box-shadow: var(--shadow-sm); transform: translateY(-2px); }
 
@@ -42,27 +42,31 @@
 
 .proj-folder-meta { font-size: 13px; color: var(--fg-3); margin-top: 4px; }
 
-/* ---------- Tables / task list ---------- */
+.proj-card-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
 
-.tasktable { width: 100%; border-collapse: collapse; }
+.proj-card-cor { width: 34px; height: 34px; border-radius: var(--r-md); flex-shrink: 0; }
 
-.tasktable th { text-align: left; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--fg-4); padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.proj-card-txt { flex: 1; min-width: 0; }
 
-.tasktable td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 14px; color: var(--fg-2); vertical-align: middle; }
+/* Nome e descrição são texto livre: sem o clamp, um projeto de nome longo
+   estica o card e desalinha a barra de progresso dos vizinhos na grade. */
+.proj-card-nome { font: var(--text-h4); color: var(--fg-1); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 
-.tasktable tr:last-child td { border-bottom: none; }
+.proj-card-desc { font-size: 13px; color: var(--fg-3); margin: 3px 0 0; line-height: 1.45; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
 
-.tasktable tbody tr { transition: background var(--dur); }
+.proj-card-acoes { display: flex; gap: 2px; }
 
-.tasktable tbody tr:hover { background: var(--bg-subtle); }
+.proj-card-datas { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--fg-3); margin-bottom: 14px; }
 
-.task-title { font-weight: 600; color: var(--fg-1); }
+/* margin-top auto empurra o progresso para o pé do card, para que a barra
+   fique na mesma altura em cards de conteúdo desigual. */
+.proj-card-foot { margin-top: auto; }
 
-.row-actions { display: flex; gap: 4px; opacity: 0; transition: opacity var(--dur); }
+.proj-card-foot-linha { display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px; }
 
-.tasktable tbody tr:hover .row-actions { opacity: 1; }
+.proj-card-conta { font-size: 12.5px; color: var(--fg-3); }
 
-.tasktable tbody .task-row-clickable { cursor: pointer; }
+.proj-card-pct { font-family: var(--font-mono); font-weight: 600; font-size: 13px; color: var(--fg-2); }
 
 /* ---------- Project "about" panel (detail screen) ---------- */
 
@@ -86,7 +90,7 @@
 
 .res-thumb-cap { display: block; font-size: 12px; color: var(--fg-3); padding: 7px 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.res-thumb-del { position: absolute; top: 7px; right: 7px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--r-sm); background: rgba(15, 23, 42, .62); color: #fff; opacity: 0; transition: opacity var(--dur), background var(--dur); }
+.res-thumb-del { position: absolute; top: 7px; right: 7px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--r-sm); background: rgba(22, 21, 15, .62); color: #fff; opacity: 0; transition: opacity var(--dur), background var(--dur); }
 
 .res-thumb:hover .res-thumb-del { opacity: 1; }
 
@@ -104,7 +108,7 @@
 
 .res-col-head svg { color: var(--fg-3); }
 
-.res-col-count { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--fg-3); background: var(--bg-muted); padding: 1px 9px; border-radius: var(--r-full); }
+.res-col-count { margin-left: auto; color: var(--fg-3); padding: 1px 9px; }
 
 .res-col-empty { font-size: 13px; color: var(--fg-4); margin: 4px 0 2px; }
 
@@ -146,14 +150,6 @@
 
 .bookmark-url { text-overflow: ellipsis; max-width: 55ch; font-size: 12px; color: var(--fg-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Permissões / papéis */
-
-.role-badge { align-self: center; font-size: 12px; font-weight: 600; color: var(--fg-3); background: var(--bg-muted); padding: 5px 11px; border-radius: var(--r-full); white-space: nowrap; }
-
-.task-title-btn { text-align: left; padding: 0; color: var(--fg-1); }
-
-.task-title-btn:hover { color: var(--brand); text-decoration: underline; }
-
 /* Botão "+" no cabeçalho da coluna de documentos/links */
 
 .res-col-add { width: 26px; height: 26px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: var(--r-sm); color: var(--fg-3); border: 1px solid var(--border); background: var(--surface); transition: background var(--dur), color var(--dur), border-color var(--dur); }
@@ -188,7 +184,7 @@
 
 .proj-tab.on:hover { background: var(--brand-soft-2); }
 
-/* ---------- Capa do projeto (aba "Dados do projeto") ---------- */
+/* ---------- Capa do projeto (aba "Panorama") ---------- */
 
 .proj-cover { display: flex; flex-direction: column; gap: 16px; }
 
@@ -264,7 +260,7 @@
 
 .fact { padding: 20px; display: flex; gap: 14px; align-items: flex-start; transition: border-color var(--dur), box-shadow var(--dur); }
 
-.fact:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm, 0 1px 3px rgba(22,21,15,.06)); }
+.fact:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
 
 .fact-ic { width: 38px; height: 38px; flex-shrink: 0; border-radius: var(--r-md); background: var(--brand-soft); color: var(--brand); display: flex; align-items: center; justify-content: center; }
 
@@ -272,15 +268,11 @@
 
 .fact-value { font-size: 16px; font-weight: 600; color: var(--fg-1); line-height: 1.35; overflow-wrap: anywhere; }
 
-.fact-value.mono { font-family: var(--font-mono); font-size: 13.5px; font-weight: 600; }
-
 .fact-sub { font-size: 12.5px; color: var(--fg-3); margin-top: 4px; }
 
 .cover-block { padding: 22px; }
 
 .cover-block h3 { font: var(--text-h4); margin: 0 0 14px; color: var(--fg-1); }
-
-.cover-empty { margin: 0; font-size: 13.5px; color: var(--fg-4); }
 
 .ds-people { display: flex; flex-wrap: wrap; gap: 9px; }
 
@@ -339,15 +331,12 @@
 
 .tech-section-head p { margin: 4px 0 0; font-size: 13px; color: var(--fg-3); }
 
-/* Espaço reservado para os campos técnicos ainda não definidos. */
+/* Moldura tracejada para o que ainda não foi anexado. */
 .tech-empty { display: flex; gap: 13px; align-items: flex-start; padding: 18px; border: 1.5px dashed var(--border-strong); border-radius: var(--r-md); background: var(--bg-subtle); color: var(--fg-4); }
 
 .tech-empty strong { display: block; font-size: 13.5px; color: var(--fg-2); margin-bottom: 4px; }
 
 .tech-empty p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--fg-3); max-width: 62ch; }
-
-/* Grade para os campos técnicos, quando existirem (mesmo padrão do Panorama). */
-.tech-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 18px 26px; }
 
 /* ---------- Mapa da obra (piçarramento / pavimentação) ----------
    O visualizador (.kmz-*) é o mesmo do modal, em Modals.css; aqui só o que
@@ -368,20 +357,7 @@
   .tech-mapa .kmz-side { max-height: 220px; } /* painel abaixo do mapa, como no modal */
 }
 
-/* ---------- Cores do gráfico de progresso ----------
-   Paleta própria do gráfico (cinza / laranja / verde), separada dos tokens de
-   status do Kanban: aqui as fatias vêm do CHECKLIST, não da coluna do quadro.
-   Alinhadas à identidade da PROMAV: o dourado #AD8A5C é o oficial das propostas,
-   sem alteração; cinza e verde vêm da família neutra/terrosa da marca. A marca é
-   propositalmente monocromática (bege/dourado/preto) — ótima em documento, mas
-   num gráfico exige afastar o cinza do dourado, senão as fatias se confundem.
-   Validadas: pior par adjacente em ΔE 17,4 (visão normal) e 8,1 (protanopia),
-   com rótulo escrito, número dentro e filete de 2px separando as cores. */
-:root {
-  --chart-todo:  #5F5C56;  /* A fazer      — cinza profundo da paleta neutra */
-  --chart-doing: #AD8A5C;  /* Em andamento — DOURADO OFICIAL da PROMAV       */
-  --chart-done:  #2E7D52;  /* Concluído    — verde profundo, tom terroso     */
-}
+/* As cores do gráfico de progresso (--chart-todo/doing/done) são tokens: src/styles/tokens.css. */
 
 /* ---------- Cronograma: prazo decorrido × executado ---------- */
 
@@ -395,8 +371,7 @@
 
 .crono-row { display: flex; align-items: center; gap: 14px; }
 
-/* Largura fixa nos rótulos e nos números: as duas barras começam e terminam
-   no mesmo x, que é o que permite comparar uma com a outra de relance. */
+/* Largura fixa no rótulo: barra e número alinham no mesmo x. */
 .crono-lab { flex: 0 0 118px; font-size: 12.5px; color: var(--fg-3); }
 
 .crono-track { flex: 1; height: 10px; border-radius: var(--r-full); background: var(--bg-muted); overflow: hidden; }
@@ -411,7 +386,7 @@
 
 .crono-foot span { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); }
 
-.crono-foot-mid { font-family: var(--font-sans) !important; font-weight: 600; color: var(--fg-2); }
+.crono-foot .crono-foot-mid { font-family: var(--font-sans); font-weight: 600; color: var(--fg-2); }
 
 @media (max-width: 620px) {
   .crono-lab { flex-basis: 92px; font-size: 12px; }
@@ -448,9 +423,8 @@
 
 .mud-ack.ok { color: var(--chart-done); background: var(--success-soft); }
 
-.mud-ack.late { color: var(--danger); background: var(--danger-soft, #FDECEC); }
+.mud-ack.late { color: var(--danger); background: var(--danger-soft); }
 
-/* Histórico: escolher uma mudança anterior para comparar. */
 /* Selo de tipo: requisição obriga, sugestão propõe. */
 .mud-selo.tipo-requisicao { color: var(--kind-requisicao); background: var(--success-soft); }
 
@@ -478,7 +452,7 @@
 
 .mud-decisao.pendente { border: 1px dashed var(--border-strong); background: var(--bg-subtle); color: var(--fg-2); }
 
-.mud-decisao.recusada { background: var(--danger-soft, #FDECEC); color: #9A4F32; }
+.mud-decisao.recusada { background: var(--danger-soft); color: #9A4F32; }
 
 /* ---------- Registro de mudanças: lista corrida, mais recente no topo ---------- */
 
@@ -499,7 +473,7 @@
 
 .mud-titulo { font: var(--text-h4); margin: 0 0 8px; color: var(--fg-1); letter-spacing: var(--tracking-snug); }
 
-.mud-decisao.aceita { background: var(--success-soft); color: #276B46; }
+.mud-decisao.aceita { background: var(--success-soft); color: var(--kind-requisicao); }
 
 /* Destaque temporário do item aberto a partir de uma notificação.
    Aplicado/removido por JS em ProjectDetail (ver focusId). */
@@ -510,13 +484,6 @@
 }
 
 .is-focused { animation: promav-focus-pulse 1.4s ease-out 2; border-color: var(--accent-strong) !important; }
-
-/* Numa <tr> o box-shadow não pinta: destaca o fundo das células. */
-tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
-
-@media (prefers-reduced-motion: reduce) {
-  .is-focused { animation: none; }
-}
 
 /* ---------- Aba Etapas ---------- */
 
@@ -553,8 +520,6 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
 
 .et-barra-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
-.et-barra-acoes .et-nova { margin-left: auto; }
-
 /* O filtro é um chip que abre menu. `.msel` já dá o position: relative que a
    lista usa para se ancorar; o que muda aqui é a largura — a lista do msel
    cola nas duas bordas do botão, e este é estreito demais para caber
@@ -578,30 +543,26 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
    ser espremida a quase nada quando o contêiner tem altura restrita. */
 .et-lista { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface); flex-shrink: 0; }
 
-.et-item { display: block; }
-
 /* O estado pinta a linha inteira: fundo tingido a 8% da cor do status e faixa
    na cor cheia à esquerda. A faixa carrega a leitura à distância sem escurecer
    a área de texto, onde o contraste é limitado. */
-.et-item { border-bottom: 1px solid var(--border); border-left: 4px solid var(--border-strong); background: #F6F4F2; }
+.et-item { display: block; border-bottom: 1px solid var(--border); border-left: 4px solid var(--border-strong); background: #F6F4F2; }
 
 .et-item:last-child { border-bottom: 0; }
 
-.et-item.et-done { background: #EDF8F3; border-left-color: var(--status-done); }
+.et-item.et-done { background: color-mix(in srgb, var(--status-done) 8%, var(--surface)); border-left-color: var(--status-done); }
 
-.et-item.et-prog { background: #EEF5FF; border-left-color: var(--status-progress); }
+.et-item.et-prog { background: color-mix(in srgb, var(--status-progress) 8%, var(--surface)); border-left-color: var(--status-progress); }
 
-/* flex, e não grid: <button> como contêiner de grid tem histórico de colapsar
-   a altura em alguns navegadores (o box anônimo interno do botão). Com flex o
-   comportamento é o mesmo visualmente e não depende disso.
-   O min-height garante a altura mesmo se o contêiner interno for ignorado. */
+.et-item.et-review { background: color-mix(in srgb, var(--status-review) 8%, var(--surface)); border-left-color: var(--status-review); }
+
+.et-item.et-dilig { background: color-mix(in srgb, var(--status-diligence) 8%, var(--surface)); border-left-color: var(--status-diligence); }
+
 /* O cabeçalho virou linha com três controles: caixa de seleção, o botão que
    abre a etapa e a lixeira. Só o do meio estica. */
 .et-cab-linha { display: flex; align-items: center; }
 
 .et-marca { display: flex; align-items: center; padding: 0 0 0 14px; cursor: pointer; }
-
-.et-marca input { width: 17px; height: 17px; accent-color: var(--brand); cursor: pointer; }
 
 .et-item.et-marcada { background: var(--brand-soft); }
 
@@ -630,6 +591,10 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
 
 @media (hover: none) { .et-ck-lixo { opacity: 1; } }
 
+/* flex, e não grid: <button> como contêiner de grid tem histórico de colapsar
+   a altura em alguns navegadores (o box anônimo interno do botão). Com flex o
+   comportamento é o mesmo visualmente e não depende disso.
+   O min-height garante a altura mesmo se o contêiner interno for ignorado. */
 .et-cab { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 60px; padding: 13px 18px 13px 14px; background: none; text-align: left; font-family: inherit; }
 
 .et-cab > .et-num { flex-shrink: 0; }
@@ -643,6 +608,10 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
 .et-item.et-done .et-num { background: var(--status-done-soft); color: var(--status-done); border-color: var(--status-done); }
 
 .et-item.et-prog .et-num { background: var(--status-progress-soft); color: var(--status-progress); border-color: var(--status-progress); }
+
+.et-item.et-review .et-num { background: var(--status-review-soft); color: var(--status-review); border-color: var(--status-review); }
+
+.et-item.et-dilig .et-num { background: var(--status-diligence-soft); color: var(--status-diligence); border-color: var(--status-diligence); }
 
 .et-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 34px; }
 
@@ -660,6 +629,10 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
 
 .et-selo.et-prog { background: var(--status-progress-soft); color: var(--status-progress); }
 
+.et-selo.et-review { background: var(--status-review-soft); color: var(--status-review); }
+
+.et-selo.et-dilig { background: var(--status-diligence-soft); color: var(--status-diligence); }
+
 .et-selo-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 
 .et-conta { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--fg-3); padding: 2px 9px; border-radius: var(--r-full); background: var(--surface); border: 1px solid var(--border); }
@@ -676,6 +649,13 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
 
 .et-task + .et-task { padding-top: 12px; border-top: 1px dashed var(--border-strong); }
 
+/* O destaque da notificação cai na task, não na etapa (ver ProjectStages): o
+   id fica em .et-task para alcançar as avulsas e cada cópia duplicada.
+   `.is-focused` só troca border-color e .et-task não tem borda nenhuma, logo
+   o anel vem de outline — que não entra no box model e não empurra o conteúdo
+   da etapa aberta durante os 2,8 s do destaque. */
+.et-task.is-focused { outline: 2px solid var(--accent-strong); outline-offset: 4px; border-radius: var(--r-sm); }
+
 .et-task-tit { font-size: 13px; font-weight: 600; color: var(--fg-2); font-family: var(--font-mono); display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 
 .et-vazio { margin: 0; font-size: 13px; color: var(--fg-3); }
@@ -684,9 +664,9 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
 
 .et-ck { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 
-.et-ck li { border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); }
+.et-ck li { display: flex; align-items: center; gap: 10px; padding: 0 10px 0 11px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); }
 
-.et-ck-texto { padding: 8px 0; font-size: 13.5px; color: var(--fg-2); }
+.et-ck-texto { flex: 1; min-width: 0; padding: 8px 0; font-size: 13.5px; color: var(--fg-2); }
 
 
 .et-ck-editar { flex: 1; min-width: 0; padding: 5px 9px; font-size: 13.5px; }
@@ -733,10 +713,6 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
 
 /* Responsável por item do checklist. Com um só responsável na atividade o
    nome aparece fixo (é dedução, não escolha); com mais de um vira seletor. */
-.et-ck li { display: flex; align-items: center; gap: 10px; padding: 0 10px 0 11px; }
-
-.et-ck-texto { flex: 1; min-width: 0; }
-
 .et-ck-dono { flex-shrink: 0; font-family: inherit; font-size: 12px; font-weight: 600; color: var(--fg-2); background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--r-full); padding: 4px 10px; max-width: 150px; cursor: pointer; }
 
 .et-ck-dono:hover { border-color: var(--border-strong); }
@@ -773,7 +749,7 @@ tr.is-focused > td { background: rgba(180, 165, 135, 0.18); }
 .proj-visoes { display: inline-flex; gap: 2px; padding: 3px; background: var(--bg-muted); border-radius: var(--r-md); flex-shrink: 0; margin-left: auto; }
 .proj-visao { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: none; background: none; border-radius: calc(var(--r-md) - 2px); font: inherit; font-size: 13px; font-weight: 600; color: var(--fg-3); cursor: pointer; transition: background var(--dur), color var(--dur); }
 .proj-visao:hover { color: var(--fg-1); }
-.proj-visao.on { background: var(--surface); color: var(--fg-1); box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,.08)); }
+.proj-visao.on { background: var(--surface); color: var(--fg-1); box-shadow: var(--shadow-sm); }
 .proj-visoes + .proj-head-editar { margin-left: 0; }
 
 /* Kanban/Lista/Gantt dentro do projeto: o projeto já está escolhido. */

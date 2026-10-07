@@ -14,7 +14,7 @@
 
 .col-head .name { font-size: 13.5px; font-weight: 700; color: var(--fg-1); }
 
-.col-head .count { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--fg-3); background: var(--surface); border-radius: var(--r-full); padding: 1px 8px; }
+.col-head .count { font-weight: 600; color: var(--fg-3); background: var(--surface); }
 
 .col-add { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--fg-3); padding: 8px 10px; border-radius: var(--r-md); transition: background var(--dur), color var(--dur); }
 
@@ -28,7 +28,9 @@
 
 .kcard .kc-proj { margin-bottom: 8px; }
 
-.kcard .kc-title { font-size: 14px; font-weight: 600; color: var(--fg-1); line-height: 1.4; margin: 0 0 12px; }
+.kcard .kc-title { display: block; width: 100%; text-align: left; padding: 0; font-size: 14px; font-weight: 600; color: var(--fg-1); line-height: 1.4; margin: 0 0 12px; }
+
+.kcard .kc-title:focus-visible { outline: none; box-shadow: var(--shadow-focus); border-radius: var(--r-xs); }
 
 .kc-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 
