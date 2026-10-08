@@ -9,6 +9,7 @@ import { ProjectList, ProjectDetail } from './screens/Projects/Projects.jsx'
 import { Kanban } from './screens/Kanban/Kanban.jsx'
 import { TaskListView } from './screens/List/List.jsx'
 import { Gantt } from './screens/Gantt/Gantt.jsx'
+import { Relatorios } from './screens/Relatorios/Relatorios.jsx'
 import { Login } from './screens/Login/Login.jsx'
 import { api } from './data/api.js'
 import { usePersistido } from './data/usePersistido.js'
@@ -30,7 +31,7 @@ const ChangeModal = lazyComAviso(() => import('./components/Modals/ChangeModal.j
 const PersonCard = lazyComAviso(() => import('./components/Modals/PersonCard.jsx').then(m => ({ default: m.PersonCard })))
 const PeopleModal = lazyComAviso(() => import('./components/Modals/PeopleModal.jsx').then(m => ({ default: m.PeopleModal })))
 
-const TITLES ={ hub: 'Visão geral', projects: 'Projetos', list: 'Lista', kanban: 'Kanban', gantt: 'Gantt', people: 'Profissionais', reports: 'Relatórios', team: 'Equipe', myreport: 'Meu relatório', weeklyreports: 'Relatórios individuais' }
+const TITLES ={ hub: 'Visão geral', projects: 'Projetos', list: 'Lista', kanban: 'Kanban', gantt: 'Gantt', people: 'Profissionais', relatorios: 'Relatórios', reports: 'Relatórios', team: 'Equipe', myreport: 'Meu relatório', weeklyreports: 'Relatórios individuais' }
 
 // "Meu setor" (a pessoa escolhendo o próprio setor no menu da conta) está
 // pausado: entra numa próxima leva, junto do resto da gestão de setores.
@@ -40,6 +41,12 @@ const TITLES ={ hub: 'Visão geral', projects: 'Projetos', list: 'Lista', kanban
 // painel "Setores" da tela de Equipe — que é o que a aba de Mudanças precisa
 // para endereçar uma mudança a um setor inteiro.
 const MY_SECTOR_ENABLED = false
+
+// Faixa em que a barra lateral fixa de 288px aperta o conteúdo: acima de
+// 860px ela deixa de ser gaveta, e até 1200px o que sobra não dá as telas
+// largas (Lista, Kanban, Gantt). Nessa faixa ela começa recolhida.
+const NAV_COMECA_RECOLHIDA = typeof window !== 'undefined'
+  && !!window.matchMedia?.('(min-width: 861px) and (max-width: 1200px)').matches
 
 // Quanto tempo uma atividade que a própria pessoa criou para si precisa ficar
 // parada (sem edição e sem ser aberta) antes de virar notificação para ela.
@@ -85,8 +92,16 @@ export default function App() {
   const [mine, setMine] = React.useState(false)
   const [modal, setModal] = React.useState(null)
   const [toast, setToast] = React.useState(null)
-  const [navCollapsed, setNavCollapsed] = React.useState(false)  // rail só de ícones (desktop)
+  // Em tablet a barra lateral nasce recolhida. Com os 288px fixos, um iPad de
+  // 1024px em retrato fica com 664px de conteúdo — menos do que um iPad mini de
+  // 744px, onde ela é gaveta. A escolha da pessoa vence o padrão e fica salva
+  // por conta, neste navegador.
+  const navKey = authUser ? `promav-nav-recolhida-${authUser.id}` : null
+  const [navCollapsed, setNavCollapsed] = usePersistido(navKey, NAV_COMECA_RECOLHIDA)
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false) // drawer (celular)
+  // Aba escolhida na tela de Relatórios do admin. Fica aqui, e não dentro da
+  // tela, para não voltar à primeira cada vez que se sai e se volta.
+  const [abaRelatorios, setAbaRelatorios] = React.useState('projetos')
   const [sessions, setSessions] = React.useState([])
   const [now, setNow] = React.useState(Date.now())
   const [dataReady, setDataReady] = React.useState(false)
@@ -289,7 +304,11 @@ export default function App() {
   const navigate = (r) => {
     // A aba e o item a destacar vêm das pendências do Hub: sem repassá-los, o
     // clique abria o projeto no Panorama, longe da etapa que motivou o clique.
-    setRoute({ view: r.view, projectId: r.projectId, tab: r.tab, focusId: r.focusId, focusNonce: r.focusId ? Date.now() : undefined })
+    // 'navNonce' marca CADA navegação. É por ele que o projeto volta ao
+    // Panorama quando se clica nele na barra lateral já estando dentro dele,
+    // em outra aba. Separado do 'focusNonce' porque aquele remonta as etapas,
+    // e isso só se justifica no clique de uma notificação.
+    setRoute({ view: r.view, projectId: r.projectId, tab: r.tab, focusId: r.focusId, focusNonce: r.focusId ? Date.now() : undefined, navNonce: Date.now() })
     // Ao abrir a Lista a partir de um projeto, já filtra por ele.
     if (r.view === 'list') setFilterProject(r.projectId || null)
     if (r.view === 'kanban') setMine(!!r.mine)
@@ -365,7 +384,7 @@ export default function App() {
   const openNewPerson = () => setModal({ type: 'personEdit' })
   const openPerson = (user) => setModal({ type: 'person', user })
   const openEditPerson = (user) => setModal({ type: 'personEdit', user })
-  const openProjectFromPerson = (projectId) => { setModal(null); setRoute({ view: 'projects', projectId }) }
+  const openProjectFromPerson = (projectId) => { setModal(null); navigate({ view: 'projects', projectId }) }
   // `tab` escolhe a aba com que o modal abre: a Ficha técnica manda para
   // 'tipo' quando a pessoa quer lançar a execução dos trechos do mapa.
   const openEditProject = (project, tab = 'geral') => setModal({ type: 'project', project, tab })
@@ -1062,7 +1081,7 @@ export default function App() {
   const isAdmin = !!authUser?.isAdmin
   // Telas de admin acessadas por quem não é admin caem na visão geral. A rota
   // pode chegar por link antigo ou por quem perdeu o papel desde que entrou.
-  const soAdmin = route.view === 'people' || route.view === 'weeklyreports'
+  const soAdmin = route.view === 'people' || route.view === 'weeklyreports' || route.view === 'relatorios'
   const effectiveRoute = soAdmin && !isAdmin ? { view: 'hub' } : route
   const currentProject = effectiveRoute.projectId ? projects.find(p => p.id === effectiveRoute.projectId) : null
   // Papel efetivo do usuário no projeto aberto (admin/full/view).
@@ -1089,7 +1108,7 @@ export default function App() {
     screen = <ProjectDetail project={currentProject} tasks={tasks} users={users} changes={changes}
       sessions={sessions} currentUserId={currentUserId} now={now} onStartTimer={startTimer} onStopTimer={stopTimer}
       canEdit={canEditCurrent} role={currentRole}
-      initialTab={route.tab} focusId={route.focusId} focusNonce={route.focusNonce}
+      initialTab={route.tab} focusId={route.focusId} focusNonce={route.focusNonce} navNonce={route.navNonce}
       // Voltar leva à pasta DO PROJETO, não à última que estava aberta nem à
       // raiz: quem chegou aqui pela barra lateral ou pela busca nunca navegou
       // por pasta nenhuma, e ainda assim é ali que ele quer continuar.
@@ -1107,7 +1126,7 @@ export default function App() {
   } else if (effectiveRoute.view === 'projects') {
     screen = <ProjectList projects={projects} tasks={tasks} folders={folders} authUser={authUser} canCreate={isAdmin}
       openId={pastaAberta} onOpenFolder={setPastaAberta}
-      onOpen={(id) => setRoute({ view: 'projects', projectId: id })}
+      onOpen={(id) => navigate({ view: 'projects', projectId: id })}
       onEdit={openEditProject} onDelete={askDeleteProject} onNew={openNewProject} onMoveProject={moveProject} onMoveFolder={moveFolder} onNewSubfolder={createFolder} onDeleteFolder={askDeleteFolder} />
   } else if (effectiveRoute.view === 'list') {
     screen = telaDeTarefas('list', filterProject)
@@ -1118,6 +1137,19 @@ export default function App() {
   } else if (effectiveRoute.view === 'people' && isAdmin) {
     screen = <People users={users} projects={projects} tasks={tasks} currentUserId={currentUserId}
       onNewPerson={openNewPerson} onOpenPerson={openPerson} onEditPerson={openEditPerson} onDeletePerson={askDeletePerson} />
+  } else if (effectiveRoute.view === 'relatorios' && isAdmin) {
+    // As três telas de relatório do admin, uma faixa de abas e uma rota só.
+    // Os componentes de dentro são os mesmos das rotas soltas abaixo, que
+    // continuam valendo para quem não é admin.
+    screen = (
+      <Relatorios aba={abaRelatorios} onAba={setAbaRelatorios}>
+        {abaRelatorios === 'equipe'
+          ? <TeamReport users={users} tasks={tasks} projects={projects} sessions={sessions} now={now} isAdmin={isAdmin} onSetSector={setUserSector} />
+          : abaRelatorios === 'individuais'
+            ? <AdminWeeklyReports users={users} projects={projects} />
+            : <Reports projects={projects} tasks={tasks} users={users} />}
+      </Relatorios>
+    )
   } else if (effectiveRoute.view === 'reports') {
     screen = <Reports projects={projects} tasks={tasks} users={users} />
   } else if (effectiveRoute.view === 'team') {
@@ -1224,7 +1256,7 @@ export default function App() {
         })()}
         {searchOpen && (
           <ProjectSearchModal query={projectSearch} onQueryChange={setProjectSearch} projects={projects}
-            onOpen={(id) => { setSearchOpen(false); setProjectSearch(''); setRoute({ view: 'projects', projectId: id }) }}
+            onOpen={(id) => { setSearchOpen(false); setProjectSearch(''); navigate({ view: 'projects', projectId: id }) }}
             onClose={() => { setSearchOpen(false); setProjectSearch('') }} />
         )}
         {modal?.type === 'mysector' && (

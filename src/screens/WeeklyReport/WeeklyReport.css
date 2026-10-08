@@ -11,6 +11,8 @@
 
 .ed-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--r-sm); color: var(--fg-2); font-size: 13px; }
 
+@media (pointer: coarse) { .ed-btn { width: 40px; height: 40px; } }
+
 .ed-btn:hover { background: var(--bg-muted); color: var(--fg-1); }
 
 .ed-corpo { min-height: 96px; padding: 10px 12px; font-size: 14px; line-height: 1.55; color: var(--fg-1); outline: none; }

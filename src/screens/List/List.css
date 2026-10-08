@@ -4,11 +4,33 @@
 
 .listview { overflow-x: auto; }
 
-.lv-scroll { min-width: 680px; }
+/* 1018px = as seis colunas (930) + 5 vãos de 12 + o padding de 14 de cada
+   lado da linha. Estava declarado 680px, 338px a menos do que a grade
+   ocupa: o fundo, a borda e o hover da linha paravam nos 680px e o resto
+   da linha rolava sem eles. */
+.lv-scroll { min-width: 1018px; }
 
 /* colunas: Nome | Projeto | Responsável | Vencimento | Prioridade | Status */
 
 .lv-row { display: grid; grid-template-columns: minmax(220px, 1fr) 170px 150px 130px 120px 140px; align-items: center; gap: 12px; padding: 0 14px; }
+
+/* Em tela estreita a Lista perde colunas em vez de virar rolagem lateral de
+   300px. Primeiro sai Status: as linhas já vêm agrupadas por status, com o
+   estado escrito no cabeçalho do grupo, e a bolinha ao lado do nome repete a
+   cor — a coluna não acrescenta nada. Depois sai Projeto, que o filtro acima
+   da tabela já resolve. As duas valem para o cabeçalho e para as linhas de
+   uma vez porque ambos têm os mesmos seis filhos, na mesma ordem. */
+@media (max-width: 1400px) {
+  .lv-scroll { min-width: 846px; }
+  .lv-row { grid-template-columns: minmax(200px, 1fr) 170px 150px 130px 120px; }
+  .lv-row > div:nth-child(6) { display: none; }
+}
+
+@media (max-width: 1024px) {
+  .lv-scroll { min-width: 614px; }
+  .lv-row { grid-template-columns: minmax(160px, 1fr) 150px 130px 110px; }
+  .lv-row > div:nth-child(2) { display: none; }
+}
 
 .lv-head { height: 38px; font-size: 12px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--fg-3); border-bottom: 1px solid var(--border); }
 

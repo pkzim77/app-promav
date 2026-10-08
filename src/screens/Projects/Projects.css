@@ -94,6 +94,9 @@
 
 .res-thumb:hover .res-thumb-del { opacity: 1; }
 
+/* Sem hover (toque), o botão de remover a imagem fica visível. */
+@media (hover: none) { .res-thumb-del { opacity: 1; } }
+
 .res-thumb-del:hover { background: var(--danger); }
 
 /* ---------- Documents + links columns (detail screen) ---------- */
@@ -136,6 +139,9 @@
 
 .doc-row:hover .doc-open { opacity: 1; }
 
+/* Sem hover (toque), o sinal de "abre em outra aba" fica visível. */
+@media (hover: none) { .doc-open { opacity: 1; } }
+
 .bookmark-list { display: flex; flex-direction: column; gap: 8px; }
 
 .bookmark { display: flex; align-items: center; gap: 11px; padding: 11px 13px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); transition: border-color var(--dur), box-shadow var(--dur); }
@@ -163,6 +169,10 @@
 .res-menu-btn { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--r-sm); color: var(--fg-4); opacity: 0; transition: opacity var(--dur), background var(--dur), color var(--dur); }
 
 .doc-row:hover .res-menu-btn, .bookmark:hover .res-menu-btn, .res-menu-btn.on { opacity: 1; }
+
+/* Sem hover (toque), o menu do arquivo/link fica visível — este era o pior
+   dos cinco: sem ele não há como renomear nem excluir pelo tablet. */
+@media (hover: none) { .res-menu-btn { opacity: 1; } }
 
 .res-menu-btn:hover, .res-menu-btn.on { background: var(--bg-muted); color: var(--fg-2); }
 
@@ -317,6 +327,12 @@
   .cover-hero { gap: 22px; }
   .cover-hero-side { padding-left: 0; border-left: 0; border-top: 1px solid var(--border); padding-top: 18px; width: 100%; align-items: flex-start; }
   .cover-money { text-align: left; }
+}
+
+/* ---------- Toque: botões de ícone ganham área ---------- */
+
+@media (pointer: coarse) {
+  .res-col-add, .res-menu-btn, .proj-folder-menu-btn, .res-thumb-del { width: 40px; height: 40px; }
 }
 
 /* ---------- Aba Arquivos (documentos, links e imagens) ---------- */

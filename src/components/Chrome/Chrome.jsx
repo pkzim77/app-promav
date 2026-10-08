@@ -7,9 +7,10 @@ import { TimeClock } from '../TimeTracker/TimeTracker.jsx'
 import { PROJECT_COLORS, NOTIF_KINDS, NOTIF_KIND_MAP } from '../../data/store.js'
 // App chrome: left sidebar + top bar with search and user selector.
 
-// Menu de "três pontinhos" de uma pasta: aparece ao passar o mouse na pasta
-// e abre as opções (novo projeto, renomear, excluir).
-function FolderMenu({ folder, onNewProject, onNewSubfolder, onRename, onDelete }) {
+// Menu de "três pontinhos" de uma pasta: novo projeto, nova subpasta, mover
+// para cima/baixo, renomear e excluir. Aparece com o mouse na pasta e, no
+// toque, fica sempre visível (não há hover para revelá-lo).
+function FolderMenu({ folder, onNewProject, onNewSubfolder, onRename, onDelete, onMoveUp, onMoveDown }) {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef(null)
   useFecharFora(ref, () => setOpen(false), open)
@@ -26,6 +27,16 @@ function FolderMenu({ folder, onNewProject, onNewSubfolder, onRename, onDelete }
           <button className="menu-item" onClick={() => { setOpen(false); onNewSubfolder(folder.id) }}>
             <Icon name="folder" size={16} />Nova subpasta
           </button>
+          {onMoveUp && (
+            <button className="menu-item" onClick={() => { setOpen(false); onMoveUp() }}>
+              <Icon name="chevronUp" size={16} />Mover para cima
+            </button>
+          )}
+          {onMoveDown && (
+            <button className="menu-item" onClick={() => { setOpen(false); onMoveDown() }}>
+              <Icon name="chevronDown" size={16} />Mover para baixo
+            </button>
+          )}
           <button className="menu-item" onClick={() => { setOpen(false); onRename(folder) }}>
             <Icon name="pencil" size={16} />Renomear pasta
           </button>
@@ -38,8 +49,9 @@ function FolderMenu({ folder, onNewProject, onNewSubfolder, onRename, onDelete }
   )
 }
 
-// Menu de "três pontinhos" de um projeto: renomear, editar e excluir.
-function ProjectMenu({ project, onRename, onEdit, onDelete }) {
+// Menu de "três pontinhos" de um projeto: mover para cima/baixo, renomear,
+// editar e excluir. Mover existe porque arrastar não funciona no toque.
+function ProjectMenu({ project, onRename, onEdit, onDelete, onMoveUp, onMoveDown }) {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef(null)
   useFecharFora(ref, () => setOpen(false), open)
@@ -51,6 +63,16 @@ function ProjectMenu({ project, onRename, onEdit, onDelete }) {
       </button>
       {open && (
         <div className="menu">
+          {onMoveUp && (
+            <button className="menu-item" onClick={(e) => { e.stopPropagation(); setOpen(false); onMoveUp() }}>
+              <Icon name="chevronUp" size={16} />Mover para cima
+            </button>
+          )}
+          {onMoveDown && (
+            <button className="menu-item" onClick={(e) => { e.stopPropagation(); setOpen(false); onMoveDown() }}>
+              <Icon name="chevronDown" size={16} />Mover para baixo
+            </button>
+          )}
           <button className="menu-item" onClick={(e) => { e.stopPropagation(); setOpen(false); onRename(project) }}>
             <Icon name="pencil" size={16} />Renomear projeto
           </button>
@@ -149,23 +171,45 @@ export function Sidebar({ route, onNavigate, projects, folders = [], isAdmin = f
   }
   const hintClass = (key) => hint?.key === key ? ' drop-' + hint.mode : ''
 
+  // "Mover para cima/baixo" dentro do grupo que está na tela. É a única forma
+  // de reordenar sem arrastar, e arrastar não existe no toque: nem o Safari do
+  // iPadOS nem o Chrome do Android disparam eventos de drag a partir do dedo.
+  // `lista` é exatamente o grupo renderizado, então o que se vê é o que move.
+  // Devolve null quando o item já está na ponta, e o menu omite a opção.
+  const movimentos = (lista, id, mover, destino) => {
+    const i = lista.findIndex(x => x.id === id)
+    return {
+      onMoveUp: i > 0 ? () => mover(id, destino, lista[i - 1].id) : null,
+      // O alvo é quem vem DEPOIS do próximo: é isso que põe o item entre os
+      // dois. Sem ninguém depois, o null manda para o fim da lista.
+      onMoveDown: i >= 0 && i < lista.length - 1 ? () => mover(id, destino, lista[i + 2]?.id || null) : null,
+    }
+  }
+
   // Navegar sempre fecha o menu no celular (drawer).
   const go = (r) => { onNavigate(r); onCloseMobile && onCloseMobile() }
 
   const nav = [
     { id: 'hub', label: 'Visão geral', icon: 'hub' },
     ...(isAdmin ? [{ id: 'people', label: 'Profissionais', icon: 'users' }] : []),
-    { id: 'reports', label: 'Relatórios dos projetos', icon: 'trendingUp' },
-    { id: 'team', label: 'Relatórios da equipe', icon: 'users' },
-    // Quem escreve vê o próprio relatório; quem recebe vê o de todo mundo. São
-    // telas diferentes de verdade, não a mesma com permissão diferente.
+    // O admin tem um item só: os três relatórios viram abas dentro dele. Quem
+    // não é admin segue com os itens soltos, porque "Meu relatório" é tela de
+    // escrever o próprio, não de consultar os outros — não é o mesmo grupo.
+    // (Quem escreve vê o próprio; quem recebe vê o de todo mundo. São telas
+    // diferentes de verdade, não a mesma com permissão diferente.)
     ...(isAdmin
-      ? [{ id: 'weeklyreports', label: 'Relatórios individuais', icon: 'file' }]
-      : [{ id: 'myreport', label: 'Meu relatório', icon: 'file' }]),
+      ? [{ id: 'relatorios', label: 'Relatórios', icon: 'trendingUp' }]
+      : [
+          { id: 'reports', label: 'Relatórios dos projetos', icon: 'trendingUp' },
+          { id: 'team', label: 'Relatórios da equipe', icon: 'users' },
+          { id: 'myreport', label: 'Meu relatório', icon: 'file' },
+        ]),
   ]
 
-  // Um botão de projeto (a "lista de tarefas"), reutilizado dentro e fora das pastas.
-  const projItem = (p) => (
+  // Um botão de projeto, reutilizado dentro e fora das pastas. O clique abre a
+  // tela do projeto (Panorama), não a lista de tarefas filtrada por ele — a
+  // lista continua a um clique, nas visões do próprio projeto.
+  const projItem = (p, irmaos = [], pastaId = null) => (
     <div key={p.id}
       className={'sb-proj-row' + (drag?.id === p.id ? ' dragging' : '') + hintClass('p:' + p.id)}
       draggable={isAdmin}
@@ -174,11 +218,12 @@ export function Sidebar({ route, onNavigate, projects, folders = [], isAdmin = f
       onDragOver={overProj(p)}
       onDrop={dropProj(p)}>
       <button className={'sb-proj' + (route.projectId === p.id ? ' active' : '')} title={p.name}
-        onClick={() => go({ view: 'list', projectId: p.id })}>
+        onClick={() => go({ view: 'projects', projectId: p.id })}>
         <Icon name="list" size={16} style={{ color: PROJECT_COLORS[p.color], flexShrink: 0 }} />
         <span className="sb-proj-name" title={p.name}>{p.name}</span>
       </button>
-      {isAdmin && <ProjectMenu project={p} onRename={onRenameProject} onEdit={onEditProject} onDelete={onDeleteProject} />}
+      {isAdmin && <ProjectMenu project={p} onRename={onRenameProject} onEdit={onEditProject} onDelete={onDeleteProject}
+        {...movimentos(irmaos, p.id, onMoveProject, pastaId)} />}
     </div>
   )
 
@@ -190,8 +235,12 @@ export function Sidebar({ route, onNavigate, projects, folders = [], isAdmin = f
   const childrenOf = (parentId) => folders.filter(f =>
     parentId == null ? (!f.parentId || !folderIds.has(f.parentId)) : f.parentId === parentId)
 
+  // Guardado em variável porque a lista é passada a cada pasta raiz: é o grupo
+  // dentro do qual "mover para cima/baixo" procura o vizinho.
+  const pastasRaiz = childrenOf(null)
+
   // Renderiza uma pasta com seus projetos e suas subpastas (aninhamento ilimitado).
-  const renderFolder = (f, depth = 0) => {
+  const renderFolder = (f, depth = 0, irmaos = [], paiId = null) => {
     const inside = projects.filter(p => p.folderId === f.id)
     const subfolders = childrenOf(f.id)
     const open = expanded.has(f.id)
@@ -210,13 +259,14 @@ export function Sidebar({ route, onNavigate, projects, folders = [], isAdmin = f
           </button>
           {isAdmin && (
             <FolderMenu folder={f} onNewProject={onNewProjectInFolder} onNewSubfolder={onNewFolder}
-              onRename={onRenameFolder} onDelete={onDeleteFolder} />
+              onRename={onRenameFolder} onDelete={onDeleteFolder}
+              {...movimentos(irmaos, f.id, onMoveFolder, paiId)} />
           )}
         </div>
         {open && (
           <div className="sb-folder-body">
-            {subfolders.map(sf => renderFolder(sf, depth + 1))}
-            {inside.length ? inside.map(projItem)
+            {subfolders.map(sf => renderFolder(sf, depth + 1, subfolders, f.id))}
+            {inside.length ? inside.map(p => projItem(p, inside, f.id))
               : (!subfolders.length && <div className="sb-folder-empty">Sem projetos ainda</div>)}
           </div>
         )}
@@ -249,9 +299,9 @@ export function Sidebar({ route, onNavigate, projects, folders = [], isAdmin = f
         )}
       </div>
 
-      {childrenOf(null).map(f => renderFolder(f))}
+      {pastasRaiz.map(f => renderFolder(f, 0, pastasRaiz, null))}
 
-      {loose.map(projItem)}
+      {loose.map(p => projItem(p, loose, null))}
 
       {isAdmin && (
         <div className={'sb-root-drop' + (drag ? ' active' : '') + hintClass('root')}
@@ -450,15 +500,21 @@ export function TopBar({ title, currentUser, canNewProject = true, onToggleMobil
         </button>
         <h1 className="tb-title">{title}</h1>
         <div className="tb-spacer" />
-        <div className="search">
+        {/* <label> e não <div>: em tela estreita a busca fica reduzida ao ícone e
+            só abre ao receber foco, e é o label que faz o toque em qualquer ponto
+            da caixa chegar ao input, que ali tem poucos pixels de largura. */}
+        <label className="search">
           <Icon name="search" size={17} />
           <input value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} aria-label="Buscar projetos" placeholder="Buscar projetos" />
-        </div>
+        </label>
         <TimeClock currentUser={currentUser} tasks={tasks} projects={projects} sessions={sessions} now={now}
           onStart={onStartTimer} onStop={onStopTimer} onOpenTask={onOpenTask} />
+        {/* O rótulo do botão sai em tela estreita e sobra o "+". O aria-label
+            fica no botão porque `display: none` tira o texto da árvore de
+            acessibilidade: sem ele o botão ficaria sem nome nenhum. */}
         {canNewProject && (
-          <button className="btn btn-primary" onClick={onNewProject}>
-            <Icon name="plus" size={17} stroke={2.2} />Novo projeto
+          <button className="btn btn-primary" onClick={onNewProject} aria-label="Novo projeto" title="Novo projeto">
+            <Icon name="plus" size={17} stroke={2.2} /><span className="btn-rotulo">Novo projeto</span>
           </button>
         )}
         <div className="topbar-actions">
