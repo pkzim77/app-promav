@@ -64,6 +64,9 @@
 
 .ck-edit-row:hover .ck-del { opacity: 1; }
 
+/* Sem hover (toque), a lixeira do item fica sempre visível. */
+@media (hover: none) { .ck-del { opacity: 1; } }
+
 /* As caixas ocupam a altura de um .control para a linha bater com o campo ao
    lado (Setor). Sem isso a coluna da direita subia e as duas ficavam tortas. */
 .marcas { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; min-height: 38px; }
@@ -252,6 +255,9 @@
 .res-del { opacity: 0; padding: 5px; flex-shrink: 0; }
 
 .res-edit-row:hover .res-del { opacity: 1; }
+
+/* Idem para remover arquivo ou link no cadastro do projeto. */
+@media (hover: none) { .res-del { opacity: 1; } }
 
 .ro-hint { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-3); background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; margin: 0 0 16px; }
 
@@ -466,6 +472,8 @@
 .kmz-edit-file .res-del { opacity: 1; color: var(--fg-4); }
 .kmz-edit-file .res-del:hover { color: var(--danger); }
 .kmz-edit { padding: 10px 8px 4px; }
+
+@media (pointer: coarse) { .kmz-edit-del { width: 40px; height: 40px; } }
 
 .kmz-edit-totais { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 10px; font-size: 12px; color: var(--fg-4); }
 .kmz-edit-totais strong { color: var(--fg-1); font-variant-numeric: tabular-nums; }

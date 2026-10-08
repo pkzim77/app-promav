@@ -6,19 +6,21 @@ import { ProjectTechSheet } from './ProjectTechSheet.jsx'
 import { ProjectStages } from './ProjectStages.jsx'
 import { ProjectChanges } from './ProjectChanges.jsx'
 
-export function ProjectDetail({ project, tasks, users, sessions, changes = [], currentUserId, now, canEdit = true, role, initialTab, focusId, focusNonce, onAssignChecklist, onSetChecklistState, onEditChecklistItem, onExcluirChecklistItem, onDeleteStages, onMoveTask, onNewStageItem, onNewStage, onCreateStages, onStartTimer, onStopTimer, onBack, onEdit, renderVisao, onEditTask, onDeleteTask, onCopyResource, onDeleteResource, onAddResource, onNewChange, onEditChange, onAckChange, onDecideChange }) {
+export function ProjectDetail({ project, tasks, users, sessions, changes = [], currentUserId, now, canEdit = true, role, initialTab, focusId, focusNonce, navNonce, onAssignChecklist, onSetChecklistState, onEditChecklistItem, onExcluirChecklistItem, onDeleteStages, onMoveTask, onNewStageItem, onNewStage, onCreateStages, onStartTimer, onStopTimer, onBack, onEdit, renderVisao, onEditTask, onDeleteTask, onCopyResource, onDeleteResource, onAddResource, onNewChange, onEditChange, onAckChange, onDecideChange }) {
   // O Panorama abre primeiro: é o que se mostra numa reunião com o cliente.
   // Uma notificação clicada entra com a aba já escolhida em 'initialTab'.
   const [visao, setVisao] = React.useState('projeto') // 'projeto' | 'kanban' | 'list' | 'gantt'
   React.useEffect(() => { setVisao('projeto') }, [project.id])
   const [tab, setTab] = React.useState(initialTab || 'panorama') // 'panorama' | 'etapas' | 'arquivos' | 'mudancas'
 
-  // Vindo de uma notificação: troca a aba. O 'focusNonce' entra nas dependências
-  // para funcionar também quando a mesma notificação é clicada de novo depois
-  // de o usuário ter mudado de aba na mão.
+  // Cada navegação até aqui reabre a aba que a rota pediu (notificação, pendência
+  // do Hub) e o Panorama quando ela não pediu nenhuma — é o que faz a barra
+  // lateral, a busca e a lista de projetos caírem sempre na tela do projeto.
+  // 'focusNonce' e 'navNonce' entram nas dependências para valer também quando o
+  // destino é o mesmo de antes e o usuário já havia trocado de aba na mão.
   React.useEffect(() => {
-    if (initialTab) setTab(initialTab)
-  }, [initialTab, focusNonce])
+    setTab(initialTab || 'panorama')
+  }, [project.id, initialTab, focusNonce, navNonce])
 
   // Rola até o item da notificação e o destaca por alguns segundos. Depende de
   // 'tab' porque o elemento só existe depois que a aba certa renderiza.
