@@ -87,9 +87,15 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
   const jobTitleErr = touched && !jobTitle.trim() ? 'Informe o cargo.' : null
   const sectorErr = touched && !sector ? 'Selecione o setor.' : null
   // Terceirizado não entra no sistema, então não tem senha para definir.
-  const pedeSenha = !editing && !outsourced
-  const passwordErr = touched && pedeSenha && initialPassword.trim().length < 6
-    ? 'A senha inicial precisa ter ao menos 6 caracteres.' : null
+  // Ao CRIAR, a senha é obrigatória. Ao EDITAR, o campo aparece igual mas é
+  // opcional: vazio quer dizer "não trocar", e preenchido redefine a senha —
+  // é assim que o administrador tira do ar uma senha compartilhada. O servidor
+  // já marca a conta para troca obrigatória quando recebe senha daqui.
+  const mostraSenha = !outsourced
+  const senhaObrigatoria = !editing && !outsourced
+  const senhaCurta = initialPassword.trim().length > 0 && initialPassword.trim().length < 6
+  const passwordErr = touched && mostraSenha && (senhaObrigatoria ? initialPassword.trim().length < 6 : senhaCurta)
+    ? 'A senha precisa ter ao menos 6 caracteres.' : null
 
   // Projetos em que a pessoa participa e o papel em cada um — só leitura; a
   // permissão em si se edita na ficha do projeto, não se duplica aqui.
@@ -138,7 +144,10 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
     // Telefone não entra: é contato, não identidade. Exigir travava o cadastro
     // de quem ainda não tinha o número à mão, e ele pode ser preenchido depois.
     if (!shortName.trim() || !jobTitle.trim() || !sector) return
-    if (pedeSenha && initialPassword.trim().length < 6) return
+    if (senhaObrigatoria && initialPassword.trim().length < 6) return
+    // Ao editar, senha pela metade também trava: o campo vazio é que significa
+    // "deixa como está".
+    if (senhaCurta) return
     setSaving(true)
     try {
       await onSave({
@@ -156,7 +165,7 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
         isAdmin,
         isOutsourced: outsourced,
         isActive,
-        initialPassword: pedeSenha ? (initialPassword || undefined) : undefined,
+        initialPassword: mostraSenha ? (initialPassword.trim() || undefined) : undefined,
       })
     } finally { setSaving(false) }
   }
@@ -368,11 +377,11 @@ export function PeopleModal({ user, currentUserId, users = [], projects = [], ta
         </Field>
       </div>
 
-      {pedeSenha && (
-        <Field label="Senha inicial">
+      {mostraSenha && (
+        <Field label={senhaObrigatoria ? 'Senha inicial' : 'Redefinir senha'}>
           <div className="password-field">
             <input className="control" type={revealPassword ? 'text' : 'password'} value={initialPassword}
-              placeholder="Mínimo de 6 caracteres"
+              placeholder={senhaObrigatoria ? 'Mínimo de 6 caracteres' : 'Deixe em branco para manter a senha atual'}
               onChange={e => { setInitialPassword(e.target.value); setCopied(false) }} />
             <button type="button" className="btn-icon" onClick={() => setRevealPassword(v => !v)}
               aria-label={revealPassword ? 'Ocultar senha' : 'Mostrar senha'} title={revealPassword ? 'Ocultar senha' : 'Mostrar senha'}>

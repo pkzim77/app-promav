@@ -20,9 +20,33 @@ function urlHost(url) {
   try { return new URL(url).hostname.replace(/^www\./, '') } catch { return url }
 }
 
-// URL para abrir/baixar um recurso: arquivo do banco (via fileId) ou link externo.
-function resourceUrl(r) {
-  return r.fileId ? api.fileUrl(r.fileId) : r.url
+// URL para abrir/baixar um recurso: arquivo do banco (do lote de tokens) ou
+// link externo. Vem indefinida enquanto o lote não chega.
+function resourceUrl(r, urls) {
+  return r.fileId ? urls[r.fileId] : r.url
+}
+
+// URLs dos arquivos da aba, pedidas em lote ao abrir. Cada uma carrega um token
+// próprio, que abre só aquele arquivo: antes a URL era montada aqui com o token
+// de SESSÃO, e bastava alguém receber um link copiado para entrar na conta de
+// quem copiou. Em lote porque a galeria tem N imagens, e um pedido por imagem
+// seria uma rajada a cada abertura da aba.
+function useUrlsDeArquivo(recursos) {
+  const [urls, setUrls] = React.useState({})
+  // A dependência é a lista de ids ordenada, e não o objeto `recursos`, que é
+  // remontado a cada render: assim o lote só é refeito quando entra ou sai
+  // arquivo da aba.
+  const chave = [...new Set([...recursos.docs, ...recursos.maps, ...recursos.images]
+    .map(r => r.fileId).filter(Boolean))].sort().join(',')
+  React.useEffect(() => {
+    if (!chave) { setUrls({}); return }
+    let vivo = true
+    api.fileTokens(chave.split(','))
+      .then(ts => { if (vivo) setUrls(Object.fromEntries(Object.entries(ts).map(([id, t]) => [id, api.linkDeArquivo(id, t)]))) })
+      .catch(() => { if (vivo) setUrls({}) })
+    return () => { vivo = false }
+  }, [chave])
+  return urls
 }
 // Título e subtítulo a exibir para um documento/imagem (arquivo enviado ou link).
 function resourceTitle(r) {
@@ -53,7 +77,7 @@ function separarRecursos(project) {
 }
 
 // Menu de 3 pontinhos no canto de cada documento/link: copiar link ou excluir.
-function ResourceMenu({ resource, onCopy, onDelete, canDelete = true }) {
+function ResourceMenu({ resource, url, onCopy, onDelete, canDelete = true }) {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef(null)
   useFecharFora(ref, () => setOpen(false), open)
@@ -66,7 +90,7 @@ function ResourceMenu({ resource, onCopy, onDelete, canDelete = true }) {
       </button>
       {open && (
         <div className="menu">
-          <button className="menu-item" onClick={(e) => { stop(e); setOpen(false); onCopy(resource) }}>
+          <button className="menu-item" onClick={(e) => { stop(e); setOpen(false); onCopy(resource, url) }}>
             <Icon name="copy" size={16} />Copiar link
           </button>
           {canDelete && (
@@ -105,20 +129,20 @@ function ResourceColumn({ icon, title, count, empty, addLabel, onAdd, style, chi
 }
 
 // Coluna de documentos: cada doc é uma linha com ícone + nome.
-function DocsColumn({ docs, onCopy, onDelete, onAdd, canDelete }) {
+function DocsColumn({ docs, urls, onCopy, onDelete, onAdd, canDelete }) {
   return (
     <ResourceColumn icon="file" title="Documentos" count={docs.length}
       empty="Nenhum documento ainda." addLabel="Adicionar documento" onAdd={() => onAdd('doc')}>
       <div className="doc-list">
         {docs.map(r => (
-          <a key={r.id} className="doc-row" href={resourceUrl(r)} target="_blank" rel="noreferrer">
+          <a key={r.id} className="doc-row" href={resourceUrl(r, urls)} target="_blank" rel="noreferrer">
             <span className="doc-ic"><Icon name="file" size={17} /></span>
             <span className="doc-info">
               <span className="doc-name">{resourceTitle(r)}</span>
               <span className="doc-sub">{resourceSub(r)}</span>
             </span>
             <Icon name="externalLink" size={14} className="doc-open" />
-            <ResourceMenu resource={r} onCopy={onCopy} onDelete={onDelete} canDelete={canDelete} />
+            <ResourceMenu resource={r} url={urls[r.fileId]} onCopy={onCopy} onDelete={onDelete} canDelete={canDelete} />
           </a>
         ))}
       </div>
@@ -150,7 +174,7 @@ function LinksColumn({ links, onCopy, onDelete, onAdd, canDelete }) {
 // Coluna de arquivos .kmz (área/trecho georreferenciado) — só aparece para
 // projetos de piçarramento/pavimentação (ver TIPOS_COM_KMZ em store.js).
 // Clicar numa linha mostra esse arquivo no mapa do topo da aba.
-function MapsColumn({ maps, onCopy, onDelete, onAdd, onView, canDelete }) {
+function MapsColumn({ maps, urls, onCopy, onDelete, onAdd, onView, canDelete }) {
   return (
     <ResourceColumn icon="map" title="Mapas (.kmz)" count={maps.length}
       empty="Nenhum arquivo .kmz ainda." addLabel="Adicionar arquivo .kmz" onAdd={() => onAdd('kmz')}>
@@ -169,7 +193,7 @@ function MapsColumn({ maps, onCopy, onDelete, onAdd, onView, canDelete }) {
               <span className="doc-sub">{resourceSub(r)}</span>
             </span>
             <Icon name="map" size={14} className="doc-open" />
-            <ResourceMenu resource={r} onCopy={onCopy} onDelete={onDelete} canDelete={canDelete} />
+            <ResourceMenu resource={r} url={urls[r.fileId]} onCopy={onCopy} onDelete={onDelete} canDelete={canDelete} />
           </div>
         ))}
       </div>
@@ -181,12 +205,13 @@ function MapsColumn({ maps, onCopy, onDelete, onAdd, onView, canDelete }) {
 // (As anotações ficam no Panorama — são o texto que se mostra ao cliente.)
 function ProjectAbout({ recursos, canDelete, onCopyResource, onDeleteResource, onAddResource, onViewMap }) {
   const { aceitaKmz, maps, docs, links, images } = recursos
+  const urls = useUrlsDeArquivo(recursos)
   return (
     <div style={{ marginBottom: 22 }}>
       <div className="res-grid">
-        <DocsColumn docs={docs} onCopy={onCopyResource} onDelete={onDeleteResource} onAdd={onAddResource} canDelete={canDelete} />
+        <DocsColumn docs={docs} urls={urls} onCopy={onCopyResource} onDelete={onDeleteResource} onAdd={onAddResource} canDelete={canDelete} />
         <LinksColumn links={links} onCopy={onCopyResource} onDelete={onDeleteResource} onAdd={onAddResource} canDelete={canDelete} />
-        {aceitaKmz && <MapsColumn maps={maps} onCopy={onCopyResource} onDelete={onDeleteResource} onAdd={onAddResource} onView={onViewMap} canDelete={canDelete} />}
+        {aceitaKmz && <MapsColumn maps={maps} urls={urls} onCopy={onCopyResource} onDelete={onDeleteResource} onAdd={onAddResource} onView={onViewMap} canDelete={canDelete} />}
       </div>
 
       {/* Fora do `.res-grid`: a galeria ocupa a largura toda, então o card
@@ -195,8 +220,8 @@ function ProjectAbout({ recursos, canDelete, onCopyResource, onDeleteResource, o
         empty="Nenhuma imagem ainda." addLabel="Adicionar imagem" onAdd={() => onAddResource('image')}>
         <div className="res-gallery">
           {images.map(r => (
-            <a key={r.id} className="res-thumb" href={resourceUrl(r)} target="_blank" rel="noreferrer" title={r.label || r.filename || ''}>
-              <img src={resourceUrl(r)} alt={r.label || r.filename || ''} loading="lazy" />
+            <a key={r.id} className="res-thumb" href={resourceUrl(r, urls)} target="_blank" rel="noreferrer" title={r.label || r.filename || ''}>
+              {resourceUrl(r, urls) && <img src={resourceUrl(r, urls)} alt={r.label || r.filename || ''} loading="lazy" />}
               {r.label && <span className="res-thumb-cap">{r.label}</span>}
               {canDelete && (
                 <button type="button" className="res-thumb-del"
