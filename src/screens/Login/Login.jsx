@@ -2,9 +2,11 @@ import './Login.css'
 import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
 import { Logo } from '../../components/Logo/Logo.jsx'
-// Tela de login — email + senha. Chama onLogin(email, password) que rejeita em caso de erro.
+import { Field } from '../../components/primitives/primitives.jsx'
+// Tela de login — email + senha. Chama onLogin(email, password) que rejeita em
+// caso de erro. `motivo` explica por que esta tela voltou (sessão vencida).
 
-export function Login({ onLogin }) {
+export function Login({ onLogin, motivo }) {
   const [email, setEmail] = React.useState('')
   const [password, setPassword] = React.useState('')
   const [error, setError] = React.useState(null)
@@ -32,18 +34,20 @@ export function Login({ onLogin }) {
         <h1 className="login-title">Entrar</h1>
         <p className="login-sub">Acesse com seu email e senha.</p>
 
-        <div className="field">
-          <label>Email</label>
+        {/* Vem antes dos campos: a pessoa precisa saber que não errou nada —
+            foi o tempo de sessão que acabou. */}
+        {motivo && <div className="login-error"><Icon name="lock" size={14} stroke={2.5} />{motivo}</div>}
+
+        <Field label="Email">
           <input className="control" type="email" autoFocus autoComplete="username" placeholder="voce@promav.app"
             value={email} onChange={e => setEmail(e.target.value)} />
-        </div>
-        <div className="field">
-          <label>Senha</label>
+        </Field>
+        <Field label="Senha">
           <input className="control" type="password" autoComplete="current-password" placeholder="••••••••"
             value={password} onChange={e => setPassword(e.target.value)} />
-        </div>
+        </Field>
 
-        {error && <div className="login-error"><Icon name="x" size={14} stroke={2.5} />{error}</div>}
+        {error && <div className="login-error" role="alert"><Icon name="x" size={14} stroke={2.5} />{error}</div>}
 
         <button className="btn btn-primary login-submit" type="submit" disabled={busy || !email || !password}>
           {busy ? 'Entrando…' : 'Entrar'}

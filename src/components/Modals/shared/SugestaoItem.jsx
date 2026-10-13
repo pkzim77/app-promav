@@ -98,7 +98,7 @@ export function SugestaoItem({ value, onChange, onEnter, etapa = null, jaUsados 
     <div className="sug">
       <input className="control" value={value} autoFocus={autoFocus} placeholder={placeholder}
         role="combobox" aria-expanded={mostrar} aria-controls={listaId} aria-autocomplete="list"
-        aria-label={ariaLabel}
+        aria-label={ariaLabel} aria-activedescendant={marcado >= 0 ? listaId + '-' + marcado : undefined}
         onChange={(e) => { onChange(e.target.value); setAberto(true); setMarcado(-1) }}
         onFocus={() => setAberto(true)}
         onBlur={() => { setAberto(false); setMarcado(-1) }}
@@ -107,7 +107,7 @@ export function SugestaoItem({ value, onChange, onEnter, etapa = null, jaUsados 
       {mostrar && (
         <ul className="sug-lista" id={listaId} role="listbox">
           {lista.map((s, i) => (
-            <li key={s.text} role="option" aria-selected={i === marcado}
+            <li key={s.text} id={listaId + '-' + i} role="option" aria-selected={i === marcado}
               className={'sug-item' + (i === marcado ? ' on' : '')}
               // mousedown em vez de click, e com preventDefault: o clique
               // tiraria o foco do campo antes de disparar, o blur fecharia a

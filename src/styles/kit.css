@@ -1,9 +1,4 @@
-/* Promav UI kit — estilos COMPARTILHADOS (base, layout, botões, formulários, menus, cards...). Estilos de um único componente vivem no .css ao lado do respectivo .jsx. */
-
-/* ============================================================
-   Promav app UI kit — layout & component styles
-   Tokens come from ../../colors_and_type.css
-   ============================================================ */
+/* Promav UI kit — estilos COMPARTILHADOS (base, layout, botões, formulários, menus, cards...). Estilos de um único componente vivem no .css ao lado do respectivo .jsx. Tokens em ./tokens.css, importado antes deste em src/main.jsx. */
 
 * { box-sizing: border-box; }
 
@@ -21,7 +16,10 @@ input, textarea, select { font-family: inherit; }
 
 /* ---------- App shell ---------- */
 
-.app { display: flex; height: 100vh; overflow: hidden; }
+/* dvh desconta a barra do navegador móvel; com 100vh a faixa de baixo ficava
+   atrás dela e a última linha das listas não se alcançava. O 100vh antes é a
+   reserva para navegador que não entende dvh. */
+.app { display: flex; height: 100vh; height: 100dvh; overflow: hidden; }
 
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 
@@ -29,7 +27,8 @@ input, textarea, select { font-family: inherit; }
 
 .page { padding: 28px 36px 48px; max-width: 1280px; margin: 0 auto; }
 
-.page-wide { padding: 24px 28px 40px; }
+/* Celular: gutter de 16px; 620px é o ponto de quebra já usado em Hub/Projects/WeeklyReport. */
+@media (max-width: 620px) { .page { padding: 16px 16px 32px; } }
 
 .dragging { opacity: .4; }
 
@@ -44,8 +43,6 @@ input, textarea, select { font-family: inherit; }
 .menu-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-sm); width: 100%; text-align: left; font-size: 14px; color: var(--fg-1); }
 
 .menu-item:hover { background: var(--bg-muted); }
-
-.menu-item .check { margin-left: auto; color: var(--brand); }
 
 /* ---------- Avatar ---------- */
 
@@ -93,9 +90,16 @@ input, textarea, select { font-family: inherit; }
 
 .btn-sm { padding: 6px 11px; font-size: 13px; }
 
-.proj-pill { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--fg-2); }
+.proj-pill { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--fg-2); }
 
 .proj-pill .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* ---------- Caixa de marcação nativa ---------- */
+
+/* A mesma caixa aparece em modais, na seleção múltipla e na seleção de
+   etapas. Estava copiada em três .css, e quem mexia em um deixava os
+   outros para trás. */
+.ck-nativo { width: 17px; height: 17px; flex-shrink: 0; accent-color: var(--brand); cursor: pointer; }
 
 /* ---------- Seleção múltipla (lista suspensa com caixas) ---------- */
 
@@ -118,8 +122,6 @@ input, textarea, select { font-family: inherit; }
 .msel-item:hover { background: var(--bg-subtle); }
 
 .msel-item.on { background: var(--brand-soft); }
-
-.msel-item input { width: 17px; height: 17px; flex-shrink: 0; accent-color: var(--brand); cursor: pointer; }
 
 .msel-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -161,6 +163,14 @@ input, textarea, select { font-family: inherit; }
 .chip:hover { border-color: var(--fg-4); }
 
 .chip.active { background: var(--brand-soft); border-color: transparent; color: var(--brand); }
+
+/* Chip que começa com um avatar: o retrato já afasta o texto da borda, então
+   o recuo daquele lado encolhe para o chip não ficar alongado. */
+.chip-av { padding: 4px 11px 4px 4px; }
+
+/* Responsável aparece como chip marcado mas não se desmarca por ali: troca-se
+   no campo de responsável. Depois de .chip.active para vencer o fundo dele. */
+.chip.resp { background: var(--brand-soft-2); cursor: default; }
 
 .chip .dot { width: 8px; height: 8px; border-radius: 50%; }
 
@@ -232,6 +242,10 @@ textarea.control { resize: vertical; min-height: 70px; line-height: 1.5; }
 .empty h3 { font: var(--text-h3); margin: 0; color: var(--fg-1); }
 
 .empty p { font-size: 14px; color: var(--fg-3); margin: 0; max-width: 360px; line-height: 1.55; }
+
+/* Caixa de marcar item: 19px é pequeno demais para o dedo. Vai a 26px só no
+   toque — como quadrado com borda, ampliar além disso descaracteriza. */
+@media (pointer: coarse) { .ck-box { width: 26px; height: 26px; } }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 

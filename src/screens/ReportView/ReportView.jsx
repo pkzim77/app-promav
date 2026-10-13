@@ -2,8 +2,8 @@ import './ReportView.css'
 import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
 import { Logo } from '../../components/Logo/Logo.jsx'
-import { AvatarStack, StatusTag } from '../../components/primitives/primitives.jsx'
-import { PROJECT_COLORS, checklistStats, taskProgress, taskMembers, parseDate, fmtFull, fmtMed, todayISO } from '../../data/store.js'
+import { AvatarStack, StatusTag, ProgressBar } from '../../components/primitives/primitives.jsx'
+import { PROJECT_COLORS, checklistStats, estadoDoItem, taskProgress, taskMembers, parseDate, fmtFull, fmtMed, fmtPeriodo, todayISO } from '../../data/store.js'
 // ReportView — o relatório gerado: resumo geral + rollup por projeto + detalhe por atividade.
 
 function donut(pct, size = 76, stroke = 9, color = 'var(--brand)') {
@@ -28,7 +28,7 @@ export function ReportView({ report, projects, users, onBack }) {
   const doneCount = tasks.filter(t => t.status === 'done').length
   const overall = total ? Math.round(tasks.reduce((s, t) => s + taskProgress(t), 0) / total) : 0
   const allItems = tasks.reduce((s, t) => s + (t.checklist || []).length, 0)
-  const doneItems = tasks.reduce((s, t) => s + (t.checklist || []).filter(i => i.done).length, 0)
+  const doneItems = tasks.reduce((s, t) => s + checklistStats(t).done, 0)
 
   // group by project
   const byProject = {}
@@ -47,7 +47,7 @@ export function ReportView({ report, projects, users, onBack }) {
         <button className="btn btn-ghost btn-sm" onClick={onBack} style={{ marginLeft: -8 }}>
           <Icon name="chevronLeft" size={16} />Voltar à seleção
         </button>
-        <button className="btn btn-secondary" onClick={print}><Icon name="history" size={16} />Imprimir / PDF</button>
+        <button className="btn btn-secondary" onClick={print}><Icon name="printer" size={16} />Imprimir / PDF</button>
       </div>
 
       {/* header */}
@@ -91,7 +91,7 @@ export function ReportView({ report, projects, users, onBack }) {
             <span className="rep-count">{g.list.length} ativ.</span>
             <div style={{ flex: 1 }} />
             <div style={{ width: 160, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <RepBar value={g.pct} color={PROJECT_COLORS[g.project.color]} />
+              <ProgressBar value={g.pct} color={PROJECT_COLORS[g.project.color]} style={{ flex: 1 }} />
               <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 14, color: 'var(--fg-1)', width: 38 }}>{g.pct}%</span>
             </div>
           </div>
@@ -116,7 +116,7 @@ export function ReportView({ report, projects, users, onBack }) {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, fontSize: 12.5, color: 'var(--fg-3)' }}>
                         <AvatarStack users={taskMembers(t).map(id => userOf(id))} size={20} max={4} />
-                        {(() => { const m = taskMembers(t).map(id => userOf(id)).filter(Boolean); const first = m[0]?.name.split(' ')[0] || '—'; return m.length > 1 ? `${first} +${m.length - 1}` : first })()} · {fmtMed(t.start)} – {fmtMed(t.end)}
+                        {(() => { const m = taskMembers(t).map(id => userOf(id)).filter(Boolean); const first = m[0]?.name.split(' ')[0] || '—'; return m.length > 1 ? `${first} +${m.length - 1}` : first })()} · {fmtPeriodo(t.start, t.end, fmtMed) ?? 'Sem prazo definido'}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
@@ -124,15 +124,18 @@ export function ReportView({ report, projects, users, onBack }) {
                       <div style={{ fontSize: 12, color: 'var(--fg-4)' }}>{cs.total ? `${cs.done}/${cs.total} itens` : 'sem checklist'}</div>
                     </div>
                   </div>
-                  <div className="progress" style={{ margin: '10px 0 0' }}><div style={{ width: pct + '%', background: pct === 100 ? 'var(--success)' : 'var(--brand)' }} /></div>
+                  <ProgressBar value={pct} color={pct === 100 ? 'var(--success)' : 'var(--brand)'} style={{ margin: '10px 0 0' }} />
                   {cs.total > 0 && (
                     <div className="report-checklist">
-                      {(t.checklist || []).map(it => (
-                        <div key={it.id} className={'report-ck-item' + (it.done ? ' done' : '')}>
-                          <span className="report-ck-box">{it.done ? <Icon name="check" size={11} stroke={3} /> : null}</span>
-                          {it.text}
-                        </div>
-                      ))}
+                      {(t.checklist || []).map(it => {
+                        const feito = estadoDoItem(it) === 'done'
+                        return (
+                          <div key={it.id} className={'report-ck-item' + (feito ? ' done' : '')}>
+                            <span className="report-ck-box">{feito ? <Icon name="check" size={11} stroke={3} /> : null}</span>
+                            {it.text}
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
@@ -143,8 +146,4 @@ export function ReportView({ report, projects, users, onBack }) {
       ))}
     </div>
   )
-}
-
-function RepBar({ value, color }) {
-  return <div className="progress" style={{ flex: 1 }}><div style={{ width: value + '%', background: color }} /></div>
 }

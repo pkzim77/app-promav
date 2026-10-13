@@ -2,27 +2,35 @@
 
 /* ---------- Lista (tabela de atividades) ---------- */
 
-/* ----- subtarefas (aninhamento de um nível) ----- */
-/* setinha de expandir/recolher; o "spacer" mantém os títulos alinhados. */
-.lv-twist { display: grid; place-items: center; width: 18px; height: 18px; flex-shrink: 0; border-radius: var(--r-xs); color: var(--fg-3); }
-.lv-twist:hover { background: var(--bg-muted); color: var(--fg-1); }
-.lv-twist-spacer { width: 18px; flex-shrink: 0; }
-/* linha da subtarefa: um filete à esquerda marca o aninhamento. */
-.lv-sub { background: var(--bg-subtle); }
-.lv-sub .lv-title { font-weight: 500; color: var(--fg-2); }
-.lv-subcount { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--fg-3); background: var(--bg-muted); padding: 0 7px; border-radius: var(--r-full); flex-shrink: 0; }
-/* botão "+ subtarefa": aparece só ao passar o mouse na linha da mãe. */
-.lv-addsub { display: grid; place-items: center; width: 20px; height: 20px; flex-shrink: 0; border-radius: var(--r-xs); color: var(--fg-4); opacity: 0; transition: opacity var(--dur), background var(--dur), color var(--dur); }
-.lv-item:hover .lv-addsub { opacity: 1; }
-.lv-addsub:hover { background: var(--brand-soft); color: var(--brand); }
-
 .listview { overflow-x: auto; }
 
-.lv-scroll { min-width: 680px; }
+/* 1018px = as seis colunas (930) + 5 vãos de 12 + o padding de 14 de cada
+   lado da linha. Estava declarado 680px, 338px a menos do que a grade
+   ocupa: o fundo, a borda e o hover da linha paravam nos 680px e o resto
+   da linha rolava sem eles. */
+.lv-scroll { min-width: 1018px; }
 
 /* colunas: Nome | Projeto | Responsável | Vencimento | Prioridade | Status */
 
 .lv-row { display: grid; grid-template-columns: minmax(220px, 1fr) 170px 150px 130px 120px 140px; align-items: center; gap: 12px; padding: 0 14px; }
+
+/* Em tela estreita a Lista perde colunas em vez de virar rolagem lateral de
+   300px. Primeiro sai Status: as linhas já vêm agrupadas por status, com o
+   estado escrito no cabeçalho do grupo, e a bolinha ao lado do nome repete a
+   cor — a coluna não acrescenta nada. Depois sai Projeto, que o filtro acima
+   da tabela já resolve. As duas valem para o cabeçalho e para as linhas de
+   uma vez porque ambos têm os mesmos seis filhos, na mesma ordem. */
+@media (max-width: 1400px) {
+  .lv-scroll { min-width: 846px; }
+  .lv-row { grid-template-columns: minmax(200px, 1fr) 170px 150px 130px 120px; }
+  .lv-row > div:nth-child(6) { display: none; }
+}
+
+@media (max-width: 1024px) {
+  .lv-scroll { min-width: 614px; }
+  .lv-row { grid-template-columns: minmax(160px, 1fr) 150px 130px 110px; }
+  .lv-row > div:nth-child(2) { display: none; }
+}
 
 .lv-head { height: 38px; font-size: 12px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--fg-3); border-bottom: 1px solid var(--border); }
 
@@ -31,8 +39,6 @@
 .lv-group.dragover { background: var(--brand-soft); box-shadow: inset 0 0 0 2px var(--brand); }
 
 .lv-item[draggable="true"] { cursor: grab; }
-
-.lv-item.dragging { opacity: .4; }
 
 .lv-group-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 14px 8px; color: var(--fg-2); }
 
@@ -45,6 +51,8 @@
 .lv-item { height: 46px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background var(--dur); }
 
 .lv-item:hover { background: var(--bg-muted); }
+
+.lv-item:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--brand); }
 
 .lv-c-name { display: flex; align-items: center; gap: 9px; min-width: 0; }
 

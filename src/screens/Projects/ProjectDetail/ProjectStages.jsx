@@ -1,6 +1,6 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
-import { AvatarStack, SegControl, SemResponsavel, AvisoPendencias } from '../../../components/primitives/primitives.jsx'
+import { AvatarStack, SegControl, SemResponsavel, AvisoPendencias, useFecharFora } from '../../../components/primitives/primitives.jsx'
 import { TaskTimerButton } from '../../../components/TimeTracker/TimeTracker.jsx'
 import { STATUSES, STATUS_MAP, CHECK_STATES, estadoDoItem, calcularProgresso, checklistStats, taskMembers, pendenciasDaEtapa } from '../../../data/store.js'
 import { EmptyState } from '../shared/EmptyState.jsx'
@@ -30,7 +30,17 @@ const OPCOES_STATUS = STATUSES.map(s => ({ ...s, label: ROTULO_BOTAO[s.id] }))
 // O status NÃO vira nome de classe direto. 'progress' colidia com a .progress
 // global do kit (a barra de progresso: height 7px, overflow hidden), e a linha
 // da etapa em andamento era achatada para 7px de altura. Prefixo próprio.
-const CLASSE_STATUS = { todo: 'et-todo', progress: 'et-prog', done: 'et-done' }
+const CLASSE_STATUS = { todo: 'et-todo', progress: 'et-prog', review: 'et-review', diligence: 'et-dilig', done: 'et-done' }
+
+// Quantas etapas há em cada status. Parte de STATUSES para que todo status
+// exista com zero: o menu de filtro lê `contagem[f.id]`, e um status sem
+// etapa nenhuma mostraria `undefined` no lugar do número.
+const contarPorStatus = (lista) => {
+  const c = { all: lista.length }
+  for (const s of STATUSES) c[s.id] = 0
+  for (const e of lista) c[e.status] = (c[e.status] || 0) + 1
+  return c
+}
 
 // Uma etapa pode ter mais de uma task quando o template foi recriado duas
 // vezes (acontece: "9 · Diligências" está duplicada em três projetos). Em vez
@@ -66,7 +76,7 @@ const checklistDaEtapa = (tasks) => tasks.reduce((acc, t) => {
 
 function SeloEtapa({ status }) {
   return (
-    <span className={'et-selo ' + CLASSE_STATUS[status]}>
+    <span className={'et-selo ' + (CLASSE_STATUS[status] || '')}>
       <span className="et-selo-dot" />{ROTULO_STATUS[status]}
     </span>
   )
@@ -180,7 +190,9 @@ function CorpoDaTask({ task, users, sessions, currentUserId, now, canEdit, mostr
   const membros = taskMembers(task).map(id => users.find(u => u.id === id)).filter(Boolean)
   const semChecklist = !(task.checklist || []).length
   return (
-    <div className="et-task">
+    // O id é a âncora do clique na notificação (ver ProjectDetail). Fica na
+    // task, não na etapa, para alcançar as avulsas e cada cópia duplicada.
+    <div className="et-task" id={'task-' + task.id}>
       {mostrarTitulo && (
         <div className="et-task-tit">
           {task.title}
@@ -228,13 +240,12 @@ function CorpoDaTask({ task, users, sessions, currentUserId, now, canEdit, mostr
 // desmancha a marcação e o clique passa a cair em qualquer um dos dois.
 function Etapa({ etapa, aberta, onToggleAberta, selecionando, selecionada, onSelecionar, onExcluirEtapa, canEdit, ...resto }) {
   const duplicada = etapa.tasks.length > 1
-  const primeira = etapa.tasks[0]
   return (
-    <li id={'task-' + primeira.id} className={'et-item ' + CLASSE_STATUS[etapa.status] + (selecionada ? ' et-marcada' : '')}>
+    <li id={'etapa-' + etapa.n} className={'et-item ' + (CLASSE_STATUS[etapa.status] || '') + (selecionada ? ' et-marcada' : '')}>
       <div className="et-cab-linha">
         {selecionando && (
           <label className="et-marca" onClick={e => e.stopPropagation()}>
-            <input type="checkbox" checked={selecionada}
+            <input type="checkbox" className="ck-nativo" checked={selecionada}
               aria-label={`Selecionar a etapa ${etapa.n} · ${etapa.nome}`}
               onChange={() => onSelecionar(etapa)} />
           </label>
@@ -325,17 +336,7 @@ function FiltroEstado({ valor, contagem, onEscolher }) {
   const [aberto, setAberto] = React.useState(false)
   const caixa = React.useRef(null)
 
-  React.useEffect(() => {
-    if (!aberto) return
-    const fora = (e) => { if (!caixa.current?.contains(e.target)) setAberto(false) }
-    const tecla = (e) => { if (e.key === 'Escape') setAberto(false) }
-    document.addEventListener('mousedown', fora)
-    document.addEventListener('keydown', tecla)
-    return () => {
-      document.removeEventListener('mousedown', fora)
-      document.removeEventListener('keydown', tecla)
-    }
-  }, [aberto])
+  useFecharFora(caixa, () => setAberto(false), aberto)
 
   const atual = FILTROS.find(f => f.id === valor) || FILTROS[0]
   return (
@@ -373,12 +374,19 @@ function FiltroEstado({ valor, contagem, onEscolher }) {
 const etapaDaPessoa = (etapa, userId) => !!userId && etapa.tasks.some(t =>
   taskMembers(t).includes(userId) || (t.checklist || []).some(i => i.assigneeId === userId))
 
-export function ProjectStages({ project, tasks, users, sessions, currentUserId, now, canEdit = true, isAdmin = false,
+export function ProjectStages({ project, tasks, users, sessions, currentUserId, now, canEdit = true, isAdmin = false, focusId,
                                onAssignChecklist, onSetChecklistState, onEditChecklistItem, onExcluirChecklistItem,
-                               onMoveTask, onNewTask, onNewStageItem, onNewStage, onCreateStages,
+                               onMoveTask, onNewStageItem, onNewStage, onCreateStages,
                                onEditTask, onDeleteTask, onDeleteStages, onStartTimer, onStopTimer }) {
   const doProjeto = React.useMemo(() => tasks.filter(t => t.projectId === project.id), [tasks, project.id])
   const { etapas, avulsas } = React.useMemo(() => agruparEtapas(doProjeto), [doProjeto])
+
+  // Task apontada pela notificação ('task-<id>'). Os ids são strings (genId do
+  // servidor), então só o prefixo sai. A etapa dela precisa nascer aberta — e
+  // o bloco de avulsas também — senão o pai não acha o elemento para rolar e
+  // destacar; o pai remonta este componente a cada clique em notificação.
+  const focoId = String(focusId || '').replace(/^task-/, '') || null
+  const etapaFoco = focoId ? etapas.find(e => e.tasks.some(t => t.id === focoId)) : null
 
   const [filtro, setFiltro] = React.useState('all')
   // Seleção em massa: a lista só ganha caixas quando o modo está ligado. Caixas
@@ -387,12 +395,13 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
   const [selecionando, setSelecionando] = React.useState(false)
   const [selecionadas, setSelecionadas] = React.useState([])
   const [somenteMinhas, setSomenteMinhas] = React.useState(false)
-  // Abre sozinhas as etapas em andamento: é onde o trabalho está agora.
+  // Abre sozinhas as etapas em andamento — é onde o trabalho está agora — e a
+  // da notificação, quando há uma.
   // Reaproveita o `etapas` do useMemo acima — o inicializador do useState
   // refazia o agrupamento inteiro por conta própria, calculando duas vezes a
   // mesma coisa na montagem.
   const [abertas, setAbertas] = React.useState(
-    () => new Set(etapas.filter(e => e.status === 'progress').map(e => e.n))
+    () => new Set([...etapas.filter(e => e.status === 'progress').map(e => e.n), ...(etapaFoco ? [etapaFoco.n] : [])])
   )
   const alternar = (n) => setAbertas(prev => {
     const s = new Set(prev)
@@ -400,14 +409,7 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
     return s
   })
 
-  const contagem = {
-    all: etapas.length,
-    done: etapas.filter(e => e.status === 'done').length,
-    progress: etapas.filter(e => e.status === 'progress').length,
-    review: etapas.filter(e => e.status === 'review').length,
-    diligence: etapas.filter(e => e.status === 'diligence').length,
-    todo: etapas.filter(e => e.status === 'todo').length,
-  }
+  const contagem = contarPorStatus(etapas)
   // A legenda tem três linhas porque o progresso tem três fatias. Revisão e
   // diligência entram em "em andamento" — é onde o cálculo as põe, e separá-las
   // aqui faria a soma das linhas não bater com o total de etapas.
@@ -434,14 +436,7 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
   const minhas = React.useMemo(
     () => etapas.filter(e => etapaDaPessoa(e, currentUserId)), [etapas, currentUserId])
   const base = somenteMinhas ? minhas : etapas
-  const contagemFiltro = {
-    all: base.length,
-    progress: base.filter(e => e.status === 'progress').length,
-    review: base.filter(e => e.status === 'review').length,
-    diligence: base.filter(e => e.status === 'diligence').length,
-    done: base.filter(e => e.status === 'done').length,
-    todo: base.filter(e => e.status === 'todo').length,
-  }
+  const contagemFiltro = contarPorStatus(base)
   const visiveis = filtro === 'all' ? base : base.filter(e => e.status === filtro)
 
   // Uma etapa duplicada são várias linhas de tarefa com o mesmo número; excluir
@@ -465,9 +460,10 @@ export function ProjectStages({ project, tasks, users, sessions, currentUserId, 
   // lista, fechado. Sem template, é tudo o que o projeto tem — e ficava
   // escondido atrás do aviso de "nenhuma etapa", que saía sozinho e dava a
   // impressão de projeto vazio mesmo com atividades cadastradas. Aqui ele
-  // aparece nos dois casos, já aberto quando é o único conteúdo.
+  // aparece nos dois casos, já aberto quando é o único conteúdo ou quando a
+  // notificação clicada aponta para uma atividade daqui.
   const blocoAvulsas = avulsas.length > 0 && (
-    <details className="et-avulsas" open={semEtapas}>
+    <details className="et-avulsas" open={semEtapas || avulsas.some(t => t.id === focoId)}>
       <summary>
         <Icon name="chevronRight" size={14} className="et-seta" />
         {semEtapas

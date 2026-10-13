@@ -6,9 +6,6 @@ node_modules/
 .env.*.local
 deploy.env.yaml
 
-# Firebase
-.firebase/
-
 # Build output
 dist/
 dist-ssr/

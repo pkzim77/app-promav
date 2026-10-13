@@ -6,6 +6,8 @@ Estruturado como **React + Vite** no frontend e um backend **Express + PostgreSQ
 
 ## Como rodar
 
+Requer **Node 24.x** — a versão fica fixada em `engines` no `package.json`, e o Render usa a mesma no deploy.
+
 ```bash
 npm install      # instala dependências (uma vez)
 cp .env.example .env   # e preencha DATABASE_URL com sua connection string do Neon
@@ -21,6 +23,8 @@ npm run build    # build de produção do frontend em dist/
 npm run preview  # serve a build de produção localmente
 ```
 
+Testes (`*.test.js(x)`, `*.spec.js(x)`) são locais e não versionados — ver a seção "Testes locais" do `.gitignore`; por isso `npm test` passa mesmo sem arquivos de teste no clone.
+
 O Vite faz proxy de `/api` → `http://localhost:3001`, então o front e o back rodam no mesmo `npm run dev`.
 
 ## Deploy grátis no Render (recomendado, sem cartão)
@@ -35,12 +39,13 @@ Forma mais simples e **sem custo** de colocar no ar: **backend** (Express) como 
 2. Em [dashboard.render.com](https://dashboard.render.com) → **New +** → **Blueprint** → conecte o repositório `app-promav`. O Render lê o `render.yaml` e cria os dois serviços.
 3. Quando pedir os valores secretos, preencha:
    - **`DATABASE_URL`** (no serviço `promav-api`): a connection string do Neon (a mesma do seu `.env`).
+   - **`DEV_EMAILS`** (no serviço `promav-api`): e-mails da equipe que mantém o app, separados por vírgula — pode deixar vazio para usar a lista fixa do código.
    - **`VITE_API_URL`** (no serviço `promav-web`): `https://promav-api.onrender.com` (a URL que o backend terá; confira no passo 4 e ajuste se o Render tiver mudado o nome).
 4. Aguarde o deploy do **`promav-api`**. Abra-o e confirme a URL pública (algo como `https://promav-api.onrender.com`). Teste `…/api/health` → deve responder `{ "ok": true }`.
 5. Se a URL real do backend for diferente da que você colocou em `VITE_API_URL`, ajuste no `promav-web` (**Environment**) e clique em **Manual Deploy → Clear build cache & deploy**.
 6. Abra a URL do **`promav-web`** e faça login. Pronto. 🎉
 
-> **Login:** use um usuário que já existe no seu banco Neon. O usuário com e-mail `ADMIN_EMAIL` (padrão `engenharia.promav@gmail.com`) vira administrador automaticamente; se ele não existir, o primeiro usuário do banco é promovido.
+> **Login:** use um usuário que já existe no seu banco Neon. O usuário com e-mail `ADMIN_EMAIL` (padrão `engenharia.promav@gmail.com`) vira administrador automaticamente; se não houver **nenhum** administrador no banco, o primeiro usuário é promovido.
 
 > **CORS:** por padrão o backend libera todas as origens (seguro aqui, pois a autenticação é por token, não por cookie). Para restringir, adicione a env `CORS_ORIGIN` no `promav-api` com a URL do site (`https://promav-web.onrender.com`).
 
@@ -56,92 +61,125 @@ Forma mais simples e **sem custo** de colocar no ar: **backend** (Express) como 
 
 ```
 .
-├── index.html                # entry do Vite
-├── vite.config.js            # inclui proxy /api → backend (dev)
+├── index.html                # entry do Vite + <link> das fontes do Google
+├── vite.config.js            # proxy /api → backend (dev)
 ├── package.json
+├── render.yaml               # Blueprint do deploy no Render (API + site)
 ├── .env.example              # modelo da DATABASE_URL (Neon) + JWT_SECRET
-├── .env.production           # VITE_API_URL p/ o build do frontend (Render)
-├── render.yaml               # Blueprint do deploy no Render (backend + frontend)
+├── .env.production           # VITE_API_URL usado no build do frontend
 ├── server/                   # BACKEND (Express + Neon)
-│   ├── index.js              # rotas REST /api/* + auth + CORS
+│   ├── index.js              # rotas REST /api/*, gates de permissão e ensureSchema
 │   ├── auth.js               # bcrypt + JWT + middleware requireAuth
-│   └── db.js                 # pool de conexão Postgres (pg) + helpers q()/tx()
-├── public/
-│   └── assets/                # logos servidos em /assets/*
-├── src/
-│   ├── main.jsx               # ponto de entrada React (createRoot) + imports de CSS
-│   ├── App.jsx                # raiz: rotas e handlers de CRUD/cronômetro (chamam a API)
-│   ├── data/
-│   │   ├── api.js             # cliente HTTP do backend (/api/*)
-│   │   └── store.js           # paletas, enums e helpers de data/progresso
-│   ├── components/            # blocos reutilizáveis
-│   │   ├── Icon.jsx           # ícones de linha (derivados do Lucide), inline
-│   │   ├── primitives.jsx     # Avatar, StatusTag, PriorityTag, ProgressBar, Modal, Field, Toast…
-│   │   ├── TimeTracker.jsx    # cronômetro por atividade (widget + botão + helpers de tempo)
-│   │   ├── Chrome.jsx         # Sidebar + TopBar + UserSelect
-│   │   └── Modals.jsx         # TaskModal, ProjectModal, ConfirmDialog (com validação)
-│   ├── screens/               # uma tela por arquivo
-│   │   ├── Hub.jsx            # Visão geral
-│   │   ├── Projects.jsx       # lista + detalhe do projeto (tabela de atividades)
-│   │   ├── Kanban.jsx         # board com drag-and-drop
-│   │   ├── Gantt.jsx          # linha do tempo
-│   │   ├── Reports.jsx        # seleção de atividades para o relatório
-│   │   ├── ReportView.jsx     # documento de relatório gerado (donut, rollup, impressão)
-│   │   └── TeamReport.jsx     # tempo por pessoa/atividade (dia/semana/mês)
-│   └── styles/
-│       ├── tokens.css         # FONTE DOS TOKENS (cor, tipografia, espaçamento, elevação)
-│       └── kit.css            # layout e estilo dos componentes (lê os tokens)
+│   ├── db.js                 # pool do Postgres (pg) + helpers q()/tx()
+│   └── schema.sql            # tabelas-base, enums e índices (aplicar uma vez num banco novo)
+└── src/
+    ├── main.jsx              # ponto de entrada React (createRoot) + imports de CSS
+    ├── App.jsx               # raiz: telas, estado global e handlers de CRUD/cronômetro
+    ├── data/
+    │   ├── api.js            # cliente HTTP do backend (/api/*)
+    │   ├── store.js          # paletas, enums, cargos e helpers de data
+    │   ├── progresso.js      # regra única de "item feito" e progresso da etapa
+    │   ├── avisos.js         # avisos do Panorama (relatório da semana, ciências pendentes)
+    │   └── usePersistido.js  # estado espelhado no localStorage, por usuário
+    ├── components/
+    │   ├── ErrorBoundary.jsx # captura erro de render e mostra tela de recuperação
+    │   ├── Icon.jsx          # ícones de linha (derivados do Lucide), inline
+    │   ├── primitives/       # Avatar, StatusTag, PriorityTag, ProgressBar, Modal, Field, Toast…
+    │   ├── Chrome/           # Sidebar + TopBar + busca de projeto
+    │   ├── Logo/             # logo desenhada em texto (não é imagem)
+    │   ├── TimeTracker/      # cronômetro por atividade
+    │   ├── KmzMap/           # traçado do projeto (KMZ) sobre o mapa
+    │   └── Modals/           # um modal por arquivo (projeto, etapa, pessoa, mudança…)
+    │       └── shared/       # pedaços usados por vários modais (validação, KMZ, dinheiro)
+    ├── screens/              # uma pasta por tela, com o CSS ao lado
+    │   ├── Hub/              # Panorama
+    │   ├── Projects/         # lista (ProjectList/) e detalhe (ProjectDetail/) do projeto
+    │   ├── Kanban/           # board com arrastar-e-soltar
+    │   ├── Gantt/            # linha do tempo
+    │   ├── List/             # tabela de atividades
+    │   ├── People/           # profissionais
+    │   ├── Login/
+    │   ├── Reports/          # seleção de atividades para o relatório
+    │   ├── ReportView/       # documento gerado (donut, rollup, impressão)
+    │   ├── TeamReport/       # tempo por pessoa/atividade (dia/semana/mês)
+    │   └── WeeklyReport/     # relatório semanal da pessoa + painel do admin
+    └── styles/
+        ├── tokens.css        # FONTE DOS TOKENS (cor, tipografia, espaçamento, elevação)
+        └── kit.css           # layout e estilo compartilhados (leem os tokens)
 ```
 
 ## API (backend)
 
 Base: `/api` (proxy do Vite para a porta 3001).
 
-> **Autenticação:** todas as rotas (exceto `/health` e `/auth/login`) exigem o header `Authorization: Bearer <token>`. O token é um JWT obtido no login e guardado no `localStorage` do navegador.
+> **Autenticação:** todas as rotas, exceto `/health` e `/auth/login`, exigem o header `Authorization: Bearer <token>`. O token é um JWT obtido no login e guardado no `localStorage` do navegador. Quem foi inativado, virou terceirizado ou foi excluído cai em 401 na requisição seguinte, mesmo com o token ainda válido.
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET    | `/health` | ping do banco (público) |
-| POST   | `/auth/login` | login por email+senha → `{ token, user }` (público) |
-| GET    | `/auth/me` | dados do usuário do token (restaura a sessão) |
-| POST   | `/auth/change-password` | troca a própria senha |
-| GET    | `/bootstrap` | carga inicial: `{ users, projects, tasks, sessions }` |
-| GET    | `/users` | lista usuários |
-| GET/POST | `/projects` | listar / criar projeto |
-| PUT/DELETE | `/projects/:id` | editar / excluir (cascata nas tarefas) |
-| GET/POST | `/tasks` | listar / criar tarefa (com checklist + membros) |
-| PUT/DELETE | `/tasks/:id` | editar / excluir tarefa |
-| PATCH | `/tasks/:id/status` | mover no Kanban |
-| GET | `/sessions` | sessões do cronômetro |
-| POST | `/sessions/start` | inicia (fecha a ativa e abre nova) |
-| POST | `/sessions/stop` | para a sessão ativa do usuário |
-| POST | `/projects/:id/files` | upload de documento/imagem (corpo = arquivo cru; `?kind`, `?filename`, `?label`, `?mime`) → guarda no banco e devolve o projeto |
-| GET | `/files/:id` | baixa/serve um arquivo (aceita `?token=` para `<img>`/`<a>`) |
+A coluna **Quem pode** resume o gate de cada rota: **público** (sem token), **logado** (qualquer pessoa da equipe), **admin** (`requireAdmin`) e **projeto: …** (papel da pessoa naquele projeto — _leve_ mexe no dia a dia, _editar_ cria e exclui, _publicar_ publica mudanças, _admin_ é só do administrador).
+
+| Método | Rota | Quem pode | O que faz |
+|--------|------|-----------|-----------|
+| GET | `/health` | público | ping do banco → `{ ok: true, now }` |
+| POST | `/auth/login` | público | email + senha → `{ token, user }` (com limite de tentativas por IP) |
+| GET | `/pulse` | logado | carimbo do estado do banco (~100 bytes); o front só refaz o `/bootstrap` quando ele muda |
+| GET | `/auth/me` | logado | dados do usuário do token (restaura a sessão) |
+| POST | `/auth/change-password` | logado | troca a própria senha |
+| GET | `/bootstrap` | logado | carga inicial: `{ users, projects, tasks, sessions, folders, changes, relatorioSemana }` — só o que a pessoa enxerga |
+| POST | `/users` | admin | cadastra profissional (o admin define a senha inicial) |
+| PUT | `/users/:id` | admin | edita profissional (dados, papel, ativo/terceirizado) |
+| DELETE | `/users/:id` | admin | exclui profissional |
+| POST | `/projects` | admin | cria projeto |
+| PUT | `/projects/reorder` | admin | move e reordena projetos entre pastas |
+| PUT | `/projects/:id` | projeto: editar | edita o projeto |
+| DELETE | `/projects/:id` | projeto: admin | exclui o projeto (cascata nas atividades) |
+| POST | `/projects/:id/resources` | projeto: leve | adiciona um material (link) |
+| DELETE | `/projects/:id/resources/:rid` | projeto: editar | remove um material |
+| POST | `/folders` | admin | cria pasta da sidebar |
+| PUT | `/folders/reorder` | admin | move e reordena pastas |
+| PUT | `/folders/:id` | admin | renomeia pasta |
+| DELETE | `/folders/:id` | admin | exclui pasta |
+| POST | `/projects/:id/files` | projeto: leve | upload de documento/imagem/KMZ (corpo = arquivo cru; `?kind`, `?filename`, `?label`, `?mime`) → devolve o projeto |
+| GET | `/files/:id` | projeto: leve | baixa/serve um arquivo; aceita `?token=` (só aqui) para `<img>`/`<a>` |
+| POST | `/tasks` | projeto: editar | cria atividade (com checklist + membros) |
+| PUT | `/tasks/:id` | projeto: editar | edita a atividade |
+| PATCH | `/tasks/:id/status` | projeto: leve | move no Kanban |
+| PATCH | `/tasks/:id/checklist` | projeto: leve | marca, move o estado ou atribui itens que já existem |
+| POST | `/tasks/:id/membership` | projeto: leve | a pessoa entra ou sai da atividade |
+| POST | `/projects/:id/stages` | projeto: admin | cria as etapas do template que ainda faltam |
+| POST | `/tasks/:id/checklist` | projeto: editar | acrescenta um ou vários itens ao checklist |
+| POST | `/tasks/:id/view` | projeto: leve | registra que a pessoa abriu a atividade |
+| DELETE | `/tasks/:id/checklist/:itemId` | projeto: editar | remove item do checklist |
+| POST | `/tasks/bulk-delete` | projeto: editar | exclui várias etapas; falta de permissão em uma derruba a operação inteira |
+| DELETE | `/tasks/:id` | projeto: editar | exclui a atividade |
+| POST | `/sessions/start` | projeto: leve | inicia o cronômetro (fecha a ativa e abre nova) → `{ fechadas, aberta }` |
+| POST | `/sessions/stop` | logado | para a própria sessão ativa → `{ fechadas, aberta: null }` |
+| POST | `/projects/:id/changes` | projeto: publicar | publica uma mudança: grava, cria o item na etapa e abre a ciência da equipe |
+| PUT | `/changes/:id` | projeto: editar | edita a mudança e reabre a ciência de todo mundo |
+| POST | `/changes/:id/decide` | projeto: leve | aceita ou recusa uma sugestão — só o destinatário (recusar exige motivo) |
+| PUT | `/users/:id/sector` | admin | define o setor de uma pessoa |
+| POST | `/auth/sector` | logado | a própria pessoa declara seu setor |
+| POST | `/changes/:id/ack` | projeto: leve | confirma a ciência ("eu vi") da própria pessoa |
+| GET | `/checklist-suggestions` | logado | textos de checklist já usados, agrupados pelo número da etapa |
+| GET | `/weekly-reports/me` | logado | o próprio relatório da semana + sugestão a partir das atividades |
+| PUT | `/weekly-reports/me` | logado | salva o rascunho ou envia |
+| GET | `/weekly-reports` | admin | painel do admin: o que foi enviado na semana e quem falta |
 
 ### Banco (Neon / Postgres)
 
-Tabelas: `users`, `projects`, `tasks`, `task_members` (N:N), `checklist_items`, `time_sessions`, `files`.
-Enums: `task_status` (todo/progress/done), `task_priority` (low/medium/high), `project_color`.
-Excluir um projeto remove em cascata suas tarefas → checklist, membros, sessões e arquivos. Há índice único parcial garantindo **um cronômetro ativo por usuário**.
+São **13 tabelas**. As seis **base** ficam versionadas em [`server/schema.sql`](server/schema.sql) e precisam ser aplicadas **uma vez** num banco novo (psql ou console do Neon): `users`, `projects`, `tasks`, `task_members` (N:N), `checklist_items` e `time_sessions` — junto com os enums `task_status` (todo/progress/review/diligence/done), `task_priority` (low/medium/high) e `project_color`.
+
+As outras sete são criadas pelo `ensureSchema`, na subida do backend: `files`, `folders`, `changes`, `change_acks`, `task_views`, `project_members` e `weekly_reports`. Ele é idempotente e, além dessas tabelas, aplica os `ALTER TABLE … IF NOT EXISTS` das colunas novas, normaliza dados legados (setor, estado do checklist, responsáveis órfãos) e garante que exista ao menos um administrador (`ADMIN_EMAIL`).
+
+Excluir um projeto remove em cascata suas tarefas → checklist, membros, sessões e arquivos. O índice único parcial `idx_sessions_one_active_per_user` garante **um cronômetro ativo por usuário**.
 
 **Arquivos (`files`):** documentos e imagens enviados pela tela do projeto são guardados como `bytea` no Postgres (até **25 MB**, qualquer tipo). A tabela é criada automaticamente na subida do backend (`ensureSchema`, idempotente). Cada upload também adiciona um item em `projects.resources` no formato `{ id, type, fileId, filename, mime, size, label }`; **links** continuam como `{ id, type, url, label }` (URL externa). Ao remover um documento/imagem, o arquivo órfão é apagado do banco.
 
-### Login (usuários de exemplo)
-
-Todos os usuários começam com a senha **`promav123`** (troque pela opção "Trocar senha" no menu do usuário):
-
-| Email | Nome |
-|-------|------|
-| `marina@promav.app` | Marina Souza |
-| `lucas@promav.app`  | Lucas Rocha |
-| `camila@promav.app` | Camila Alves |
-| `joao@promav.app`   | João Pereira |
-| `rafael@promav.app` | Rafael Brito |
+### Login
 
 Senhas são guardadas com **bcrypt**; a sessão usa **JWT** assinado com `JWT_SECRET` (definido no `.env`).
+
+Usuários são cadastrados pelo administrador na tela **Profissionais**, que define a senha inicial; cada pessoa troca a senha em **Trocar senha**, no menu do usuário.
 
 ## Notas
 
 - Os dados agora são persistidos no **Neon**; a `DATABASE_URL` fica no `.env` (não versionado).
-- "Hoje" é fixo (`2026-05-26` em `store.js`) para manter os exemplos estáveis nas telas.
-- Fontes (Plus Jakarta Sans + JetBrains Mono) carregam via Google Fonts (`@import` no topo de `tokens.css`).
+- Fontes (Plus Jakarta Sans, JetBrains Mono e Poppins) carregam do Google Fonts por `<link>` no `index.html`; as famílias ficam em tokens no `tokens.css`.

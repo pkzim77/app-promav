@@ -2,21 +2,11 @@ import './TeamReport.css'
 import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
 import { Avatar } from '../../components/primitives/primitives.jsx'
-import { PROJECT_COLORS , SECTORS, sectorLabel } from '../../data/store.js'
+import { fmtDur } from '../../components/TimeTracker/TimeTracker.jsx'
+import { PROJECT_COLORS , SECTORS, sectorLabel, MONTHS_PT, MESES_EXTENSO } from '../../data/store.js'
 // Relatório da equipe — tempo gasto por pessoa em cada atividade, com filtro dia/semana/mês.
 
-const MS_MIN = 60000
-const MONTHS_FULL = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
 const DAYS_FULL = ['domingo','segunda','terça','quarta','quinta','sexta','sábado']
-
-function fmtH(ms) {
-  const min = Math.round(ms / MS_MIN)
-  if (min < 1) return '0min'
-  const h = Math.floor(min / 60), m = min % 60
-  if (h && m) return `${h}h ${m}min`
-  if (h) return `${h}h`
-  return `${m}min`
-}
 function startOfDay(ts) { const d = new Date(ts); d.setHours(0,0,0,0); return d.getTime() }
 function periodBounds(anchor, mode) {
   const d = new Date(anchor)
@@ -42,15 +32,15 @@ function periodLabel(anchor, mode) {
   const sd = new Date(s), ed = new Date(e - 1)
   if (mode === 'day') {
     const isToday = startOfDay(Date.now()) === s
-    return `${DAYS_FULL[sd.getDay()]}, ${sd.getDate()} de ${MONTHS_FULL[sd.getMonth()]}${isToday ? ' · hoje' : ''}`
+    return `${DAYS_FULL[sd.getDay()]}, ${sd.getDate()} de ${MESES_EXTENSO[sd.getMonth()]}${isToday ? ' · hoje' : ''}`
   }
   if (mode === 'week') {
     const sameMonth = sd.getMonth() === ed.getMonth()
     return sameMonth
-      ? `${sd.getDate()}–${ed.getDate()} de ${MONTHS_FULL[sd.getMonth()]}`
-      : `${sd.getDate()} ${MONTHS_FULL[sd.getMonth()].slice(0,3)} – ${ed.getDate()} ${MONTHS_FULL[ed.getMonth()].slice(0,3)}`
+      ? `${sd.getDate()}–${ed.getDate()} de ${MESES_EXTENSO[sd.getMonth()]}`
+      : `${sd.getDate()} ${MONTHS_PT[sd.getMonth()]} – ${ed.getDate()} ${MONTHS_PT[ed.getMonth()]}`
   }
-  return `${MONTHS_FULL[sd.getMonth()]} de ${sd.getFullYear()}`
+  return `${MESES_EXTENSO[sd.getMonth()]} de ${sd.getFullYear()}`
 }
 // tempo (ms) de uma sessão dentro da janela [s,e)
 function clip(sess, s, e, now) {
@@ -71,10 +61,11 @@ function SetoresDaEquipe({ users, isAdmin, onSetSector }) {
       <div className="team-setores-list">
         {users.map(u => (
           <div className="team-setor-row" key={u.id}>
-            <span className="av" style={{ width: 26, height: 26, background: u.color, fontSize: 10 }}>{u.initials}</span>
+            <Avatar user={u} size={26} />
             <span className="team-setor-nome">{u.name}</span>
             {isAdmin ? (
               <select className="control team-setor-select" value={u.sector || ''}
+                aria-label={`Setor de ${u.name}`}
                 onChange={e => onSetSector(u, e.target.value || null)}>
                 <option value="">Sem setor</option>
                 {SECTORS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
@@ -97,22 +88,28 @@ export function TeamReport({ users: todosUsers, tasks, projects, sessions, now, 
   const [anchor, setAnchor] = React.useState(Date.now())
   const [projFilter, setProjFilter] = React.useState(null)
 
-  const taskOf = (id) => tasks.find(t => t.id === id)
   const projOf = (id) => projects.find(p => p.id === id)
   const [s, e] = periodBounds(anchor, mode)
-  const atStart = mode === 'day' ? startOfDay(Date.now()) : periodBounds(Date.now(), mode)[0]
-  const isCurrent = s === atStart
+  const isCurrent = s === periodBounds(Date.now(), mode)[0]
+
+  const taskById = new Map(tasks.map(t => [t.id, t]))
+  // O total do topo tem de ser a soma dos cards: quem não aparece em card
+  // (conta de manutenção) não pode entrar na conta nem nos percentuais.
+  const idsEquipe = new Set(users.map(u => u.id))
 
   // tempo por usuário e por atividade dentro do período
-  const inPeriod = sessions.filter(ss => clip(ss, s, e, now) > 0 && (!projFilter || taskOf(ss.taskId)?.projectId === projFilter))
+  const inPeriod = sessions.filter(ss => {
+    const t = taskById.get(ss.taskId)
+    return t && idsEquipe.has(ss.userId) && clip(ss, s, e, now) > 0 && (!projFilter || t.projectId === projFilter)
+  })
   const totalAll = inPeriod.reduce((sum, ss) => sum + clip(ss, s, e, now), 0)
 
   const perUser = users.map(u => {
     const us = inPeriod.filter(ss => ss.userId === u.id)
     const byTask = {}
     us.forEach(ss => { byTask[ss.taskId] = (byTask[ss.taskId] || 0) + clip(ss, s, e, now) })
-    const rows = Object.keys(byTask).map(tid => ({ task: taskOf(tid), ms: byTask[tid] }))
-      .filter(r => r.task).sort((a, b) => b.ms - a.ms)
+    const rows = Object.keys(byTask).map(tid => ({ task: taskById.get(tid), ms: byTask[tid] }))
+      .sort((a, b) => b.ms - a.ms)
     const total = rows.reduce((sum, r) => sum + r.ms, 0)
     return { user: u, rows, total }
   }).sort((a, b) => b.total - a.total)
@@ -145,7 +142,7 @@ export function TeamReport({ users: todosUsers, tasks, projects, sessions, now, 
         <button className="btn-icon" onClick={() => setAnchor(a => shift(a, mode, 1))} disabled={isCurrent} aria-label="Próximo"><Icon name="chevronRight" size={18} /></button>
         {!isCurrent && <button className="btn btn-ghost btn-sm" onClick={() => setAnchor(Date.now())}>Voltar para o atual</button>}
         <div style={{ flex: 1 }} />
-        <div className="team-total"><span className="lab">Total da equipe</span><span className="val">{fmtH(totalAll)}</span></div>
+        <div className="team-total"><span className="lab">Total da equipe</span><span className="val">{fmtDur(totalAll)}</span></div>
       </div>
 
       {/* filtro de projeto */}
@@ -173,7 +170,7 @@ export function TeamReport({ users: todosUsers, tasks, projects, sessions, now, 
                   <div className="team-name">{user.name}</div>
                   <div className="team-meta">{rows.length} {rows.length === 1 ? 'atividade' : 'atividades'}{total > 0 ? ` · ${Math.round(total / totalAll * 100)}% do total` : ''}</div>
                 </div>
-                <div className="team-card-total">{fmtH(total)}</div>
+                <div className="team-card-total">{fmtDur(total)}</div>
               </div>
               {total === 0 ? (
                 <div className="team-empty">Sem registros neste período.</div>
@@ -194,7 +191,7 @@ export function TeamReport({ users: todosUsers, tasks, projects, sessions, now, 
                         <div className="team-bar-track">
                           <div className="team-bar-fill" style={{ width: Math.max(3, ms / maxUser * 100) + '%', background: color }} />
                         </div>
-                        <span className="team-bar-time">{fmtH(ms)}</span>
+                        <span className="team-bar-time">{fmtDur(ms)}</span>
                       </div>
                     )
                   })}

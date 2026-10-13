@@ -28,23 +28,27 @@ function Campo({ rotulo, valor, largo = false, vazio = false }) {
 }
 
 export function PersonCard({ user, projects = [], tasks = [], onEdit, onClose }) {
-  if (!user) return null
-
+  // O hook vem antes do guard de user ausente: um return antes dele mudaria a
+  // contagem de hooks entre renders, que é o que o React proíbe.
+  const uid = user?.id
   // Os mesmos números da coluna "Alocação" da lista: projetos em que a pessoa
   // está (por equipe, responsabilidade ou atividade) e atividades em aberto.
   const { projetos, emAberto } = React.useMemo(() => {
+    if (!uid) return { projetos: 0, emAberto: 0 }
     const ids = new Set()
     let abertas = 0
     for (const t of tasks) {
-      if (!taskMembers(t).includes(user.id)) continue
+      if (!taskMembers(t).includes(uid)) continue
       ids.add(t.projectId)
       if (t.status !== 'done') abertas++
     }
     for (const p of projects) {
-      if ((p.members || []).some(m => m.userId === user.id) || (p.responsibleIds || []).includes(user.id)) ids.add(p.id)
+      if ((p.members || []).some(m => m.userId === uid) || (p.responsibleIds || []).includes(uid)) ids.add(p.id)
     }
     return { projetos: ids.size, emAberto: abertas }
-  }, [user.id, projects, tasks])
+  }, [uid, projects, tasks])
+
+  if (!user) return null
 
   const conselho = conselhoDe(user)
   const inativo = user.isActive === false

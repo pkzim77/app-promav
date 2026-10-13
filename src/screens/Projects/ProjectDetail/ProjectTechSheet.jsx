@@ -1,15 +1,17 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
+import { useFecharFora } from '../../../components/primitives/primitives.jsx'
 import { formatBytes, TIPOS_COM_KMZ, PROJECT_TYPE_MAP } from '../../../data/store.js'
 import { api } from '../../../data/api.js'
 import { ehArquivoKmz } from '../../../components/Modals/shared/kmzGeo.js'
+import { ErrorBoundary, lazyComAviso } from '../../../components/ErrorBoundary.jsx'
 // Carregados sob demanda: o visualizador arrasta o Leaflet junto (~150 KB) e
-// só serve em projeto com .kmz — não faz sentido pesar a Ficha técnica dos
+// só serve em projeto com .kmz — não faz sentido pesar a aba Arquivos dos
 // demais tipos de obra.
-const KmzViewerModal = React.lazy(() =>
+const KmzViewerModal = lazyComAviso(() =>
   import('../../../components/Modals/KmzViewerModal.jsx').then(m => ({ default: m.KmzViewerModal }))
 )
-const KmzMapView = React.lazy(() =>
+const KmzMapView = lazyComAviso(() =>
   import('../../../components/KmzMap/KmzMapView.jsx').then(m => ({ default: m.KmzMapView }))
 )
 
@@ -18,9 +20,33 @@ function urlHost(url) {
   try { return new URL(url).hostname.replace(/^www\./, '') } catch { return url }
 }
 
-// URL para abrir/baixar um recurso: arquivo do banco (via fileId) ou link externo.
-function resourceUrl(r) {
-  return r.fileId ? api.fileUrl(r.fileId) : r.url
+// URL para abrir/baixar um recurso: arquivo do banco (do lote de tokens) ou
+// link externo. Vem indefinida enquanto o lote não chega.
+function resourceUrl(r, urls) {
+  return r.fileId ? urls[r.fileId] : r.url
+}
+
+// URLs dos arquivos da aba, pedidas em lote ao abrir. Cada uma carrega um token
+// próprio, que abre só aquele arquivo: antes a URL era montada aqui com o token
+// de SESSÃO, e bastava alguém receber um link copiado para entrar na conta de
+// quem copiou. Em lote porque a galeria tem N imagens, e um pedido por imagem
+// seria uma rajada a cada abertura da aba.
+function useUrlsDeArquivo(recursos) {
+  const [urls, setUrls] = React.useState({})
+  // A dependência é a lista de ids ordenada, e não o objeto `recursos`, que é
+  // remontado a cada render: assim o lote só é refeito quando entra ou sai
+  // arquivo da aba.
+  const chave = [...new Set([...recursos.docs, ...recursos.maps, ...recursos.images]
+    .map(r => r.fileId).filter(Boolean))].sort().join(',')
+  React.useEffect(() => {
+    if (!chave) { setUrls({}); return }
+    let vivo = true
+    api.fileTokens(chave.split(','))
+      .then(ts => { if (vivo) setUrls(Object.fromEntries(Object.entries(ts).map(([id, t]) => [id, api.linkDeArquivo(id, t)]))) })
+      .catch(() => { if (vivo) setUrls({}) })
+    return () => { vivo = false }
+  }, [chave])
+  return urls
 }
 // Título e subtítulo a exibir para um documento/imagem (arquivo enviado ou link).
 function resourceTitle(r) {
@@ -51,14 +77,10 @@ function separarRecursos(project) {
 }
 
 // Menu de 3 pontinhos no canto de cada documento/link: copiar link ou excluir.
-function ResourceMenu({ resource, onCopy, onDelete, canDelete = true }) {
+function ResourceMenu({ resource, url, onCopy, onDelete, canDelete = true }) {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef(null)
-  React.useEffect(() => {
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
+  useFecharFora(ref, () => setOpen(false), open)
   // Os itens ficam dentro de um <a>, então impedimos navegação ao interagir com o menu.
   const stop = (e) => { e.preventDefault(); e.stopPropagation() }
   return (
@@ -68,7 +90,7 @@ function ResourceMenu({ resource, onCopy, onDelete, canDelete = true }) {
       </button>
       {open && (
         <div className="menu">
-          <button className="menu-item" onClick={(e) => { stop(e); setOpen(false); onCopy(resource) }}>
+          <button className="menu-item" onClick={(e) => { stop(e); setOpen(false); onCopy(resource, url) }}>
             <Icon name="copy" size={16} />Copiar link
           </button>
           {canDelete && (
@@ -91,143 +113,127 @@ function ColAddButton({ label, onClick }) {
   )
 }
 
-// Coluna de documentos: cada doc é uma linha com ícone + nome.
-function DocsColumn({ docs, onCopy, onDelete, onAdd, canDelete }) {
+// Moldura comum das colunas de materiais: cabeçalho com ícone, título,
+// contador e o "+", e o texto de vazio no lugar da lista quando não há nada.
+function ResourceColumn({ icon, title, count, empty, addLabel, onAdd, style, children }) {
   return (
-    <div className="res-col card">
+    <div className="res-col card" style={style}>
       <div className="res-col-head">
-        <Icon name="file" size={16} /><h3>Documentos</h3>
-        <span className="res-col-count">{docs.length}</span>
-        <ColAddButton label="Adicionar documento" onClick={() => onAdd('doc')} />
+        {icon && <Icon name={icon} size={16} />}<h3>{title}</h3>
+        <span className="rep-count res-col-count">{count}</span>
+        <ColAddButton label={addLabel} onClick={onAdd} />
       </div>
-      {docs.length === 0 ? (
-        <p className="res-col-empty">Nenhum documento ainda.</p>
-      ) : (
-        <div className="doc-list">
-          {docs.map(r => (
-            <a key={r.id} className="doc-row" href={resourceUrl(r)} target="_blank" rel="noreferrer">
-              <span className="doc-ic"><Icon name="file" size={17} /></span>
-              <span className="doc-info">
-                <span className="doc-name">{resourceTitle(r)}</span>
-                <span className="doc-sub">{resourceSub(r)}</span>
-              </span>
-              <Icon name="externalLink" size={14} className="doc-open" />
-              <ResourceMenu resource={r} onCopy={onCopy} onDelete={onDelete} canDelete={canDelete} />
-            </a>
-          ))}
-        </div>
-      )}
+      {count === 0 ? <p className="res-col-empty">{empty}</p> : children}
     </div>
+  )
+}
+
+// Coluna de documentos: cada doc é uma linha com ícone + nome.
+function DocsColumn({ docs, urls, onCopy, onDelete, onAdd, canDelete }) {
+  return (
+    <ResourceColumn icon="file" title="Documentos" count={docs.length}
+      empty="Nenhum documento ainda." addLabel="Adicionar documento" onAdd={() => onAdd('doc')}>
+      <div className="doc-list">
+        {docs.map(r => (
+          <a key={r.id} className="doc-row" href={resourceUrl(r, urls)} target="_blank" rel="noreferrer">
+            <span className="doc-ic"><Icon name="file" size={17} /></span>
+            <span className="doc-info">
+              <span className="doc-name">{resourceTitle(r)}</span>
+              <span className="doc-sub">{resourceSub(r)}</span>
+            </span>
+            <Icon name="externalLink" size={14} className="doc-open" />
+            <ResourceMenu resource={r} url={urls[r.fileId]} onCopy={onCopy} onDelete={onDelete} canDelete={canDelete} />
+          </a>
+        ))}
+      </div>
+    </ResourceColumn>
   )
 }
 
 // Coluna de links/bookmarks: cada link é um cartão clicável.
 function LinksColumn({ links, onCopy, onDelete, onAdd, canDelete }) {
   return (
-    <div className="res-col card">
-      <div className="res-col-head">
-        <Icon name="link" size={16} /><h3>Links</h3>
-        <span className="res-col-count">{links.length}</span>
-        <ColAddButton label="Adicionar link" onClick={() => onAdd('link')} />
+    <ResourceColumn icon="link" title="Links" count={links.length}
+      empty="Nenhum link ainda." addLabel="Adicionar link" onAdd={() => onAdd('link')}>
+      <div className="bookmark-list">
+        {links.map(r => (
+          <a key={r.id} className="bookmark" href={r.url} target="_blank" rel="noreferrer">
+            <span className="bookmark-ic"><Icon name="link" size={16} /></span>
+            <span className="bookmark-info">
+              <span className="bookmark-title">{r.label || urlHost(r.url)}</span>
+              <span className="bookmark-url">{r.url}</span>
+            </span>
+            <ResourceMenu resource={r} onCopy={onCopy} onDelete={onDelete} canDelete={canDelete} />
+          </a>
+        ))}
       </div>
-      {links.length === 0 ? (
-        <p className="res-col-empty">Nenhum link ainda.</p>
-      ) : (
-        <div className="bookmark-list">
-          {links.map(r => (
-            <a key={r.id} className="bookmark" href={r.url} target="_blank" rel="noreferrer">
-              <span className="bookmark-ic"><Icon name="link" size={16} /></span>
-              <span className="bookmark-info">
-                <span className="bookmark-title">{r.label || urlHost(r.url)}</span>
-                <span className="bookmark-url">{r.url}</span>
-              </span>
-              <ResourceMenu resource={r} onCopy={onCopy} onDelete={onDelete} canDelete={canDelete} />
-            </a>
-          ))}
-        </div>
-      )}
-    </div>
+    </ResourceColumn>
   )
 }
 
 // Coluna de arquivos .kmz (área/trecho georreferenciado) — só aparece para
 // projetos de piçarramento/pavimentação (ver TIPOS_COM_KMZ em store.js).
 // Clicar numa linha mostra esse arquivo no mapa do topo da aba.
-function MapsColumn({ maps, onCopy, onDelete, onAdd, onView, canDelete }) {
+function MapsColumn({ maps, urls, onCopy, onDelete, onAdd, onView, canDelete }) {
   return (
-    <div className="res-col card">
-      <div className="res-col-head">
-        <Icon name="map" size={16} /><h3>Mapas (.kmz)</h3>
-        <span className="res-col-count">{maps.length}</span>
-        <ColAddButton label="Adicionar arquivo .kmz" onClick={() => onAdd('kmz')} />
+    <ResourceColumn icon="map" title="Mapas (.kmz)" count={maps.length}
+      empty="Nenhum arquivo .kmz ainda." addLabel="Adicionar arquivo .kmz" onAdd={() => onAdd('kmz')}>
+      <div className="doc-list">
+        {maps.map(r => (
+          // Não é link: o navegador não renderiza .kmz — abrir a URL só
+          // baixaria o arquivo. Quem desenha o traçado é o mapa lá em cima.
+          // (div com role=button porque a linha já contém o menu de opções,
+          // e <button> dentro de <button> é HTML inválido.)
+          <div key={r.id} className="doc-row doc-row-action" role="button" tabIndex={0}
+            onClick={() => onView(r)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onView(r) } }}>
+            <span className="doc-ic"><Icon name="map" size={17} /></span>
+            <span className="doc-info">
+              <span className="doc-name">{resourceTitle(r)}</span>
+              <span className="doc-sub">{resourceSub(r)}</span>
+            </span>
+            <Icon name="map" size={14} className="doc-open" />
+            <ResourceMenu resource={r} url={urls[r.fileId]} onCopy={onCopy} onDelete={onDelete} canDelete={canDelete} />
+          </div>
+        ))}
       </div>
-      {maps.length === 0 ? (
-        <p className="res-col-empty">Nenhum arquivo .kmz ainda.</p>
-      ) : (
-        <div className="doc-list">
-          {maps.map(r => (
-            // Não é link: o navegador não renderiza .kmz — abrir a URL só
-            // baixaria o arquivo. Quem desenha o traçado é o mapa lá em cima.
-            // (div com role=button porque a linha já contém o menu de opções,
-            // e <button> dentro de <button> é HTML inválido.)
-            <div key={r.id} className="doc-row doc-row-action" role="button" tabIndex={0}
-              onClick={() => onView(r)}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onView(r) } }}>
-              <span className="doc-ic"><Icon name="map" size={17} /></span>
-              <span className="doc-info">
-                <span className="doc-name">{resourceTitle(r)}</span>
-                <span className="doc-sub">{resourceSub(r)}</span>
-              </span>
-              <Icon name="map" size={14} className="doc-open" />
-              <ResourceMenu resource={r} onCopy={onCopy} onDelete={onDelete} canDelete={canDelete} />
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    </ResourceColumn>
   )
 }
 
-// Materiais do projeto: documentos/links + imagens. Vive na Ficha técnica.
+// Materiais do projeto: documentos/links + imagens. Vive na aba Arquivos.
 // (As anotações ficam no Panorama — são o texto que se mostra ao cliente.)
 function ProjectAbout({ recursos, canDelete, onCopyResource, onDeleteResource, onAddResource, onViewMap }) {
   const { aceitaKmz, maps, docs, links, images } = recursos
+  const urls = useUrlsDeArquivo(recursos)
   return (
     <div style={{ marginBottom: 22 }}>
       <div className="res-grid">
-        <DocsColumn docs={docs} onCopy={onCopyResource} onDelete={onDeleteResource} onAdd={onAddResource} canDelete={canDelete} />
+        <DocsColumn docs={docs} urls={urls} onCopy={onCopyResource} onDelete={onDeleteResource} onAdd={onAddResource} canDelete={canDelete} />
         <LinksColumn links={links} onCopy={onCopyResource} onDelete={onDeleteResource} onAdd={onAddResource} canDelete={canDelete} />
-        {aceitaKmz && <MapsColumn maps={maps} onCopy={onCopyResource} onDelete={onDeleteResource} onAdd={onAddResource} onView={onViewMap} canDelete={canDelete} />}
+        {aceitaKmz && <MapsColumn maps={maps} urls={urls} onCopy={onCopyResource} onDelete={onDeleteResource} onAdd={onAddResource} onView={onViewMap} canDelete={canDelete} />}
       </div>
 
-      <div className="card" style={{ padding: 20, marginTop: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14 }}>
-          <h3 style={{ font: 'var(--text-h4)', margin: 0, color: 'var(--fg-1)' }}>Imagens</h3>
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16 }}>
-            <span className="res-col-count">{images.length}</span>
-            <ColAddButton label="Adicionar imagem" onClick={() => onAddResource('image')} />
-          </div>
+      {/* Fora do `.res-grid`: a galeria ocupa a largura toda, então o card
+          fica abaixo das colunas em vez de dividir a grade com elas. */}
+      <ResourceColumn icon="image" title="Imagens" count={images.length} style={{ marginTop: 16 }}
+        empty="Nenhuma imagem ainda." addLabel="Adicionar imagem" onAdd={() => onAddResource('image')}>
+        <div className="res-gallery">
+          {images.map(r => (
+            <a key={r.id} className="res-thumb" href={resourceUrl(r, urls)} target="_blank" rel="noreferrer" title={r.label || r.filename || ''}>
+              {resourceUrl(r, urls) && <img src={resourceUrl(r, urls)} alt={r.label || r.filename || ''} loading="lazy" />}
+              {r.label && <span className="res-thumb-cap">{r.label}</span>}
+              {canDelete && (
+                <button type="button" className="res-thumb-del"
+                  title="Excluir imagem" aria-label="Excluir imagem"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDeleteResource(r) }}>
+                  <Icon name="trash" size={15} />
+                </button>
+              )}
+            </a>
+          ))}
         </div>
-        {images.length === 0 ? (
-          <p className="res-col-empty">Nenhuma imagem ainda.</p>
-        ) : (
-          <div className="res-gallery">
-            {images.map(r => (
-              <a key={r.id} className="res-thumb" href={resourceUrl(r)} target="_blank" rel="noreferrer" title={r.label || r.filename || ''}>
-                <img src={resourceUrl(r)} alt={r.label || r.filename || ''} loading="lazy" />
-                {r.label && <span className="res-thumb-cap">{r.label}</span>}
-                {canDelete && (
-                  <button type="button" className="res-thumb-del"
-                    title="Excluir imagem" aria-label="Excluir imagem"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDeleteResource(r) }}>
-                    <Icon name="trash" size={15} />
-                  </button>
-                )}
-              </a>
-            ))}
-          </div>
-        )}
-      </div>
+      </ResourceColumn>
     </div>
   )
 }
@@ -236,13 +242,7 @@ function ProjectAbout({ recursos, canDelete, onCopyResource, onDeleteResource, o
 // a campo quer ver num piçarramento ou pavimentação: o traçado, o que já foi
 // feito e o que falta. Antes o mapa só existia atrás de um clique na lista de
 // materiais, num modal.
-//
-// Só monta o visualizador no navegador: ele arrasta o Leaflet, que precisa de
-// DOM. Num render estático (testes, servidor) os efeitos não rodam e fica o
-// texto de carregamento no lugar — o comportamento correto para os dois casos.
 function MapaDaObra({ project, maps, ativo, onAtivar, canEdit, onAddResource, onEditSegments, onAmpliar }) {
-  const [noNavegador, setNoNavegador] = React.useState(false)
-  React.useEffect(() => { setNoNavegador(true) }, [])
   const atual = maps.find(m => m.id === ativo) || maps[0] || null
   const tipo = PROJECT_TYPE_MAP[project.tipo]?.label
 
@@ -276,11 +276,11 @@ function MapaDaObra({ project, maps, ativo, onAtivar, canEdit, onAddResource, on
             <strong>Nenhum traçado anexado</strong>
             <p>Anexe o .kmz do Google Earth com os trechos do serviço e o mapa aparece aqui,
               com a extensão de cada trecho já medida.</p>
-            {canEdit && (
-              <button type="button" className="btn btn-primary btn-sm" style={{ marginTop: 12 }} onClick={() => onAddResource('kmz')}>
-                <Icon name="plus" size={15} stroke={2.2} />Anexar .kmz
-              </button>
-            )}
+            {/* Sem gate de canEdit, igual ao "+" da coluna Mapas: anexar material
+                é CAN.light no servidor, liberado também a quem só visualiza. */}
+            <button type="button" className="btn btn-primary btn-sm" style={{ marginTop: 12 }} onClick={() => onAddResource('kmz')}>
+              <Icon name="plus" size={15} stroke={2.2} />Anexar .kmz
+            </button>
           </div>
         </div>
       ) : (
@@ -296,23 +296,20 @@ function MapaDaObra({ project, maps, ativo, onAtivar, canEdit, onAddResource, on
               ))}
             </div>
           )}
-          {noNavegador ? (
+          <ErrorBoundary fallback={(erro) => <p className="kmz-msg kmz-msg-error">{erro.message || 'Não foi possível abrir o mapa.'}</p>}>
             <React.Suspense fallback={<p className="kmz-msg">Carregando o mapa…</p>}>
               <KmzMapView key={atual.id} resource={atual} equipe />
             </React.Suspense>
-          ) : (
-            <p className="kmz-msg">Carregando o mapa…</p>
-          )}
+          </ErrorBoundary>
         </>
       )}
     </div>
   )
 }
 
-// Ficha técnica — aba de trabalho da equipe: o detalhamento que sustenta o
-// Panorama (identificação da obra, convênio, medições) e todos os materiais.
-// A seção de identificação ainda não tem campos definidos; quando existirem,
-// entram no mesmo padrão do bloco `tech-grid` abaixo.
+// Arquivos do projeto — documentos, links, imagens e, nos tipos com .kmz, o
+// mapa da obra. Era a antiga Ficha técnica; os campos do convênio entram
+// quando a lista deles for fechada.
 export function ProjectTechSheet({ project, canEdit, onCopyResource, onDeleteResource, onAddResource, onEditSegments }) {
   const recursos = React.useMemo(() => separarRecursos(project), [project])
   // Qual .kmz está no mapa do topo (null = o primeiro) e qual está ampliado
@@ -333,32 +330,35 @@ export function ProjectTechSheet({ project, canEdit, onCopyResource, onDeleteRes
           canEdit={canEdit} onAddResource={onAddResource} onEditSegments={onEditSegments} onAmpliar={setAmpliado} />
       )}
 
-      <div className="card tech-section">
-        <div className="tech-section-head">
-          <span className="fact-ic"><Icon name="file" size={18} /></span>
-          <div>
-            <h3>Identificação da obra</h3>
-            <p>Dados contratuais e técnicos que não aparecem no Panorama.</p>
-          </div>
-        </div>
-        <div className="tech-empty">
-          <Icon name="sparkles" size={18} />
-          <div>
-            <strong>Campos ainda não definidos</strong>
-            <p>Aqui entram os dados técnicos do convênio — número, processo, objeto,
-              área de intervenção, contrapartida, vigência e responsabilidade técnica.
-              Assim que a lista for fechada, eles passam a ser preenchidos no cadastro do projeto.</p>
-          </div>
-        </div>
-      </div>
-
       <ProjectAbout recursos={recursos} canDelete={canEdit} onViewMap={verNoMapa}
         onCopyResource={onCopyResource} onDeleteResource={onDeleteResource} onAddResource={onAddResource} />
 
       {ampliado && (
-        <React.Suspense fallback={null}>
-          <KmzViewerModal resource={ampliado} onClose={() => setAmpliado(null)} />
-        </React.Suspense>
+        // Casca de scrim própria, no padrão dos modais de App.jsx: tanto o aviso
+        // de carregamento quanto o erro do chunk aparecem sobre a tela, perto do
+        // "Ampliar" (que fica no topo da aba) — como filho solto de .proj-tech o
+        // texto nascia no pé da página. E `onReset` limpa `ampliado`, senão o erro
+        // ficava sem como fechar, já que o KmzViewerModal (dono do onClose) nem
+        // chegou a montar.
+        <ErrorBoundary onReset={() => setAmpliado(null)}
+          fallback={(erro, reset) => (
+            <div className="scrim" onMouseDown={reset}>
+              <div className="modal" style={{ padding: 24, textAlign: 'center' }}>
+                <p>{erro.message || 'Não foi possível abrir o mapa.'}</p>
+                <button type="button" className="btn btn-primary" onClick={reset}>Fechar</button>
+              </div>
+            </div>
+          )}>
+          <React.Suspense fallback={(
+            <div className="scrim">
+              <div className="modal" style={{ padding: 24, textAlign: 'center' }}>
+                <p style={{ margin: 0, color: 'var(--fg-3)' }}>Abrindo o mapa…</p>
+              </div>
+            </div>
+          )}>
+            <KmzViewerModal resource={ampliado} onClose={() => setAmpliado(null)} />
+          </React.Suspense>
+        </ErrorBoundary>
       )}
     </div>
   )

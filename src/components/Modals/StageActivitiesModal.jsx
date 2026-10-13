@@ -23,7 +23,7 @@ export function StageActivitiesModal({ task, project, users = [], onSetState, on
   const unico = equipe.length === 1 ? equipe[0] : null
 
   return (
-    <Modal className="modal-atividades" title={task?.title || 'Atividades'} onClose={onClose}
+    <Modal title={task?.title || 'Atividades'} onClose={onClose}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose}>Fechar</button>
         {onAbrirEtapa && (

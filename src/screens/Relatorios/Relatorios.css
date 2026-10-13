@@ -1,0 +1,40 @@
+/* Estilos da casca de relatórios (usados só aqui). Compartilhados ficam em src/styles/kit.css */
+
+/* Prefixo `relnav-` e NÃO `rel-`: WeeklyReport.css (a aba "Individuais") já
+   tem 41 classes `rel-`, uma delas `.rel-aba`, que é um cartão em coluna. Como
+   aquela tela carrega sob demanda, a folha dela entra DEPOIS desta e vence o
+   desempate de especificidade: as abas viravam cartões com o ícone em cima do
+   texto, mas só a partir do momento em que se abria aquela aba. */
+
+/* ---------- Faixa de abas acima da tela ---------- */
+
+/* A faixa fica fora da .page e atravessa a largura toda, como a barra de topo;
+   o miolo repete o max-width e o recuo lateral da .page para as abas ficarem
+   alinhadas com o título da tela que aparece abaixo delas. */
+.relnav { background: var(--surface); border-bottom: 1px solid var(--border); }
+
+/* overflow-x: as três abas somam ~420px e não cabem em tela de celular. */
+.relnav-inner { max-width: 1280px; margin: 0 auto; padding: 0 36px; display: flex; gap: 4px; overflow-x: auto; }
+
+/* Mesma medida das abas da tela de projeto (.proj-tab), para as duas faixas de
+   aba do sistema não divergirem.
+   As três têm largura IGUAL: deixadas no tamanho do texto, "Dos projetos"
+   ficava bem mais larga que "Da equipe", e numa faixa de três itens o
+   degrau lê como desalinho. 156px é o rótulo mais longo (12 caracteres em
+   13,5px) mais o ícone, o vão e os recuos, com folga. */
+.relnav-item { display: inline-flex; align-items: center; justify-content: center; gap: 7px; flex-shrink: 0; min-width: 156px; padding: 12px 14px; font-size: 13.5px; font-weight: 600; color: var(--fg-3); border-bottom: 3px solid transparent; margin-bottom: -1px; border-radius: var(--r-sm) var(--r-sm) 0 0; transition: background var(--dur), color var(--dur), border-color var(--dur); }
+
+.relnav-item:hover { color: var(--fg-1); background: var(--bg-subtle); }
+
+.relnav-item.on { color: var(--brand); border-bottom-color: var(--brand); }
+
+.relnav-item:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: -2px; }
+
+/* Espera do chunk da aba. Mesma medida do fallback do App, para a troca de
+   aba não dar um salto de altura diferente do resto do sistema. */
+.relnav-carga { display: grid; place-items: center; min-height: 240px; color: var(--fg-3); }
+
+/* Acompanha o recuo da .page, que cai para 16px nessa largura (kit.css). */
+@media (max-width: 620px) {
+  .relnav-inner { padding: 0 16px; }
+}

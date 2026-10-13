@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Sem favicon: o data URI vazio evita que o navegador busque /favicon.ico e mostre um ícone padrão. -->
   <link rel="icon" href="data:," />
+  <!-- Fontes como <link> no HTML: via @import no CSS o navegador só descobre a fonte depois de baixar o CSS, um round-trip a mais antes da primeira pintura. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&family=Poppins:wght@400;500;600;700&display=swap" />
   <title>Promav — Gestão de projetos</title>
 </head>
 <body>

@@ -4,8 +4,11 @@ import pg from 'pg'
 
 const { Pool } = pg
 
+// Sem a URL o Pool nasceria apontando para lugar nenhum e a API subiria
+// respondendo 500 em tudo — melhor parar aqui, em qualquer ambiente.
 if (!process.env.DATABASE_URL) {
   console.error('\n[promav] DATABASE_URL não definida. Crie um arquivo .env (veja .env.example).\n')
+  process.exit(1)
 }
 
 export const pool = new Pool({

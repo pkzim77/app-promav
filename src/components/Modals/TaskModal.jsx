@@ -1,18 +1,20 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
-import { Modal, Field, SegControl, StatusTag, PriorityTag, PopupPendencias } from '../primitives/primitives.jsx'
+import { Modal, Field, SegControl, StatusTag, PriorityTag, PopupPendencias, ProgressBar } from '../primitives/primitives.jsx'
 import { STATUSES, PRIORITIES, CHECK_STATES, STATUS_MAP, estadoDoItem, paraAtribuir, ETAPAS_PADRAO, tituloDaEtapa, PADRAO_ETAPA, pendenciasDaEtapa } from '../../data/store.js'
 import { dateError } from './shared/formHelpers.js'
 import { SugestaoItem } from './shared/SugestaoItem.jsx'
+import { FieldError } from './shared/FieldError.jsx'
 
 export function TaskModal({ task, projects, tasks = [], users, currentUserId, defaultProjectId, defaultStatus, comoEtapa = false, canEdit = true, onToggleChecklist, onToggleMembership, onSave, onClose }) {
   const editing = !!task
   const ro = !canEdit // somente leitura (papel 'Só exibição'): só checklist + entrar/sair
   const [title, setTitle] = React.useState(task?.title || '')
   const [projectId, setProjectId] = React.useState(task?.projectId || defaultProjectId || projects[0]?.id || '')
-  // O padrão é a primeira pessoa que pode receber trabalho: users[0] é a conta
-  // de manutenção mais antiga, e toda atividade nova nasceria no nome dela.
-  const [assigneeId, setAssigneeId] = React.useState(task?.assigneeId || users.find(u => !u.isDev)?.id || '')
+  // O padrão é a primeira pessoa que pode receber trabalho: conta ativa e fora
+  // da manutenção. users[0] é a conta de manutenção mais antiga, e toda
+  // atividade nova nasceria no nome dela — ou no de alguém já desativado.
+  const [assigneeId, setAssigneeId] = React.useState(task?.assigneeId || users.find(u => !u.isDev && u.isActive !== false)?.id || '')
   const [memberIds, setMemberIds] = React.useState(task?.memberIds ? [...task.memberIds] : [])
   const [status, setStatus] = React.useState(task?.status || defaultStatus || 'todo')
   const [priority, setPriority] = React.useState(task?.priority || 'medium')
@@ -22,6 +24,7 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
   const [newItem, setNewItem] = React.useState('')
   const [touched, setTouched] = React.useState(false)
   const [avisado, setAvisado] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
 
   // Criar pela aba Etapas é criar uma ETAPA do template: o título nasce no
   // padrão "N · Nome", que é o que a aba lê para agrupar. Digitá-lo à mão foi
@@ -81,7 +84,10 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
     const atual = checklist.find(i => i.id === id)
     const feito = estadoDoItem(atual) !== 'done'
     mudarItem(id, { done: feito, state: feito ? 'done' : 'todo' })
-    if (ro && onToggleChecklist && task) onToggleChecklist(task, id)
+    // O valor novo vai junto: `task` aqui é a cópia tirada na abertura do
+    // modal, e recalcular o estado a partir dela reenviaria done:true no
+    // segundo clique no mesmo item.
+    if (ro && onToggleChecklist && task) onToggleChecklist(task, id, feito)
   }
 
   // Escolher "Concluído" no chip marca a caixa, pelo mesmo motivo. O chip só
@@ -105,8 +111,10 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
   const pessoas = paraAtribuir(users, assigneeId, memberIds, task?.assigneeId, task?.memberIds)
 
   // Numa etapa do template ("3 · Orçamento"), o número decide as sugestões.
-  // Atividade avulsa não tem etapa: cai na lista geral.
-  const nEtapa = /^(\d+) · /.exec(task?.title || '')?.[1]
+  // Atividade avulsa não tem etapa: cai na lista geral. Na criação o título
+  // ainda não existe, então o número vem da etapa escolhida — em string, que
+  // é como o servidor indexa as sugestões.
+  const nEtapa = editing ? PADRAO_ETAPA.exec(task?.title || '')?.[1] : (!avulsa && nEtapaNova != null ? String(nEtapaNova) : null)
 
   const dErr = dateError(start, end)
   const titleErr = touched && (avulsa || criandoNova) && !title.trim()
@@ -125,21 +133,29 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
     gravar()
   }
 
-  const gravar = () => {
-    onSave({ ...(task || {}), title: tituloFinal, projectId, assigneeId, memberIds: memberIds.filter(id => id !== assigneeId), status, priority, start: start || null, end: end || null, checklist })
+  // A guarda contra o clique duplo fica aqui, e não em save(): o
+  // PopupPendencias chama gravar() direto.
+  const gravar = async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      await onSave({ ...(task || {}), title: tituloFinal, projectId, assigneeId, memberIds: memberIds.filter(id => id !== assigneeId), status, priority, start: start || null, end: end || null, checklist })
+    } finally { setSaving(false) }
   }
 
+  // Etapa do processo ou atividade avulsa? O modal é o mesmo, mas o nome não:
+  // ele chamava tudo de etapa, inclusive a avulsa que nasce fora do template.
+  // Numa já gravada o título é quem diz, porque `avulsa` só vale na criação.
+  const ehEtapa = editing ? PADRAO_ETAPA.test(task?.title || '') : !avulsa
+
   return (
-    // O que este modal edita é uma ETAPA do processo; o que ele lista dentro é
-    // que são as atividades. O nome antigo chamava as duas coisas de atividade,
-    // e na aba Etapas isso ficou impossível de conversar.
-    <Modal className="project-modal" title={ro ? 'Detalhes da etapa' : editing ? 'Editar etapa' : avulsa ? 'Nova atividade avulsa' : 'Nova etapa'} onClose={onClose}
+    <Modal className="project-modal" title={ro ? (ehEtapa ? 'Detalhes da etapa' : 'Detalhes da atividade') : editing ? (ehEtapa ? 'Editar etapa' : 'Editar atividade') : avulsa ? 'Nova atividade avulsa' : 'Nova etapa'} onClose={onClose}
       footer={ro ? (
         <button className="btn btn-secondary" onClick={onClose}>Fechar</button>
       ) : (<>
-        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-primary" onClick={save}>
-          {editing ? 'Salvar alterações' : avulsa ? 'Criar atividade' : 'Criar etapa'}
+        <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
+        <button className="btn btn-primary" onClick={save} disabled={saving}>
+          {saving ? 'Salvando…' : editing ? 'Salvar alterações' : ehEtapa ? 'Criar etapa' : 'Criar atividade'}
         </button>
       </>)}>
       {ro && (
@@ -154,7 +170,7 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
       {!editing && !ro && (
         <Field label="O que você está criando">
           <label className="marca">
-            <input type="checkbox" checked={avulsa} onChange={e => setAvulsa(e.target.checked)} />
+            <input type="checkbox" className="ck-nativo" checked={avulsa} onChange={e => setAvulsa(e.target.checked)} />
             Atividade avulsa — fora do template de etapas
           </label>
           <span className="marca-nota">
@@ -169,7 +185,7 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
         <Field label={editing ? 'Título' : 'Título da atividade'}>
           <input className="control" value={title} autoFocus={!ro} disabled={ro} placeholder="Ex.: Revisar protótipo"
             onChange={e => setTitle(e.target.value)} />
-          {titleErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{titleErr}</span>}
+          <FieldError>{titleErr}</FieldError>
         </Field>
       ) : (
         <Field label="Etapa do processo">
@@ -188,7 +204,7 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
           {criandoNova ? (<>
             <input className="control" value={title} placeholder="Nome da etapa. Ex.: Complementação de projeto"
               style={{ marginTop: 8 }} onChange={e => setTitle(e.target.value)} />
-            {titleErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{titleErr}</span>}
+            <FieldError>{titleErr}</FieldError>
             <span className="marca-nota">
               Entra como <strong>{tituloFinal || `${proximoNumero} · …`}</strong>, depois
               da última etapa do projeto.
@@ -207,7 +223,7 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
             <option value="" disabled>Selecione</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          {projErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{projErr}</span>}
+          <FieldError>{projErr}</FieldError>
         </Field>
         <Field label="Responsável">
           <select className="control" value={assigneeId} disabled={ro} onChange={e => setAssigneeId(e.target.value)}>
@@ -237,8 +253,8 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
             const on = isResp || memberIds.includes(u.id)
             return (
               <button type="button" key={u.id}
-                className={'member-chip' + (on ? ' on' : '') + (isResp ? ' resp' : '')}
-                disabled={isResp || ro}
+                className={'chip chip-av' + (on ? ' active' : '') + (isResp ? ' resp' : '')}
+                disabled={isResp || ro} aria-pressed={on}
                 title={isResp ? 'Responsável' : (on ? 'Remover' : 'Adicionar')}
                 onClick={() => toggleMember(u.id)}>
                 <span className="av" style={{ width: 22, height: 22, background: u.color, fontSize: 9 }}>{u.initials}</span>
@@ -257,7 +273,7 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
         <Field label="Data de início"><input type="date" className="control" value={start} disabled={ro} onChange={e => setStart(e.target.value)} /></Field>
         <Field label="Data de término"><input type="date" className="control" value={end} disabled={ro} onChange={e => setEnd(e.target.value)} /></Field>
       </div>
-      {dErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{dErr}</span>}
+      <FieldError>{dErr}</FieldError>
 
       <div className="field">
         <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -267,7 +283,7 @@ export function TaskModal({ task, projects, tasks = [], users, currentUserId, de
           )}
         </label>
         {checklist.length > 0 && (
-          <div className="progress" style={{ marginBottom: 4 }}><div style={{ width: ckPct + '%', background: ckPct === 100 ? 'var(--success)' : 'var(--brand)' }} /></div>
+          <ProgressBar value={ckPct} color={ckPct === 100 ? 'var(--success)' : 'var(--brand)'} style={{ marginBottom: 4 }} />
         )}
         <div className="ck-edit-list">
           {checklist.map(item => {

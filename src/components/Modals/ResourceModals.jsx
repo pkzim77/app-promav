@@ -2,16 +2,7 @@ import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field, SegControl } from '../primitives/primitives.jsx'
 import { MAX_FILE_BYTES, formatBytes } from '../../data/store.js'
-
-// Editor de recursos do projeto: documentos, links e imagens (por URL) que
-// ajudam a entender o projeto. Cada item = { id, type: 'doc'|'link'|'image', url, label }.
-const RES_ICON = { doc: 'file', image: 'image', link: 'link', kmz: 'map' }
-const RES_PLACEHOLDER = {
-  doc:   { url: 'URL do documento (Google Docs, PDF…)', label: 'Nome do documento' },
-  link:  { url: 'URL do link (https://…)',              label: 'Texto do link (opcional)' },
-  image: { url: 'URL da imagem (https://…)',            label: 'Legenda (opcional)' },
-}
-const RES_OPTIONS = [{ id: 'doc', label: 'Documento' }, { id: 'link', label: 'Link' }, { id: 'image', label: 'Imagem' }]
+import { FieldError } from './shared/FieldError.jsx'
 
 // Monta um recurso a partir dos campos do formulário (normaliza a URL com https://).
 function buildResource(type, url, label) {
@@ -52,7 +43,7 @@ export function FilePicker({ accept, file, onPick, error }) {
           <span className="filepicker-empty"><Icon name="plus" size={16} stroke={2.2} />Escolher arquivo do computador</span>
         )}
       </button>
-      {error && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{error}</span>}
+      <FieldError>{error}</FieldError>
     </>
   )
 }
@@ -67,6 +58,7 @@ export function DocumentModal({ onSave, onClose }) {
   const onPick = (f, fileErr) => { setFile(fileErr ? null : f); setErr(fileErr) }
 
   const save = async () => {
+    if (saving) return
     if (!file) { setErr('Selecione um arquivo.'); return }
     setSaving(true)
     try { await onSave({ upload: true, file, kind: 'doc', label: name.trim() }) }
@@ -74,7 +66,7 @@ export function DocumentModal({ onSave, onClose }) {
   }
 
   return (
-    <Modal title="Novo documento" onClose={onClose}
+    <Modal title="Novo documento" onClose={onClose} travado={saving}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
         <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Enviando…' : 'Adicionar documento'}</button>
@@ -106,6 +98,7 @@ export function KmzModal({ onSave, onClose }) {
   }
 
   const save = async () => {
+    if (saving) return
     if (!file) { setErr('Selecione um arquivo .kmz.'); return }
     setSaving(true)
     try { await onSave({ upload: true, file, kind: 'kmz', label: name.trim() }) }
@@ -113,7 +106,7 @@ export function KmzModal({ onSave, onClose }) {
   }
 
   return (
-    <Modal title="Novo arquivo .kmz" onClose={onClose}
+    <Modal title="Novo arquivo .kmz" onClose={onClose} travado={saving}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
         <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Enviando…' : 'Adicionar .kmz'}</button>
@@ -135,26 +128,29 @@ export function LinkModal({ onSave, onClose }) {
   const [url, setUrl] = React.useState('')
   const [title, setTitle] = React.useState('')
   const [touched, setTouched] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
   const urlErr = touched && !url.trim() ? 'Informe a URL do link.' : null
 
-  const save = () => {
+  const save = async () => {
+    if (saving) return
     setTouched(true)
     const res = buildResource('link', url, title)
     if (!res) return
-    onSave(res)
+    setSaving(true)
+    try { await onSave(res) } finally { setSaving(false) }
   }
 
   return (
     <Modal title="Novo link" onClose={onClose}
       footer={<>
-        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-primary" onClick={save}>Adicionar link</button>
+        <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
+        <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Salvando…' : 'Adicionar link'}</button>
       </>}>
       <Field label="URL do link">
         <input className="control" value={url} autoFocus placeholder="https://…"
           onChange={e => setUrl(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); save() } }} />
-        {urlErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{urlErr}</span>}
+        <FieldError>{urlErr}</FieldError>
       </Field>
       <Field label="Título do link">
         <input className="control" value={title} placeholder="Texto exibido (opcional)"
@@ -191,6 +187,7 @@ export function ImageModal({ onSave, onClose }) {
   const preview = source === 'file' ? filePreview : (url.trim() ? normUrl : null)
 
   const save = async () => {
+    if (saving) return
     setTouched(true)
     if (source === 'file') {
       if (!file) { setErr('Selecione uma imagem.'); return }
@@ -200,12 +197,13 @@ export function ImageModal({ onSave, onClose }) {
     } else {
       const res = buildResource('image', url, caption)
       if (!res) return
-      await onSave(res)
+      setSaving(true)
+      try { await onSave(res) } finally { setSaving(false) }
     }
   }
 
   return (
-    <Modal title="Nova imagem" onClose={onClose}
+    <Modal title="Nova imagem" onClose={onClose} travado={saving}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
         <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Enviando…' : 'Adicionar imagem'}</button>
@@ -222,7 +220,7 @@ export function ImageModal({ onSave, onClose }) {
           <input className="control" value={url} autoFocus placeholder="https://…/imagem.jpg"
             onChange={e => setUrl(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); save() } }} />
-          {urlErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{urlErr}</span>}
+          <FieldError>{urlErr}</FieldError>
         </Field>
       )}
       {preview && (
@@ -239,54 +237,3 @@ export function ImageModal({ onSave, onClose }) {
   )
 }
 
-// Lista editável de documentos/links dentro do formulário do projeto (ProjectModal).
-export function ResourceEditor({ resources, onChange }) {
-  const [type, setType] = React.useState('doc')
-  const [url, setUrl] = React.useState('')
-  const [label, setLabel] = React.useState('')
-
-  const add = () => {
-    const res = buildResource(type, url, label)
-    if (!res) return
-    onChange([...resources, res])
-    setUrl(''); setLabel('')
-  }
-  const remove = (id) => onChange(resources.filter(r => r.id !== id))
-
-  return (
-    <div className="field">
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        Documentos e links
-        <span style={{ fontWeight: 400, color: 'var(--fg-4)', fontSize: 12.5 }}>materiais de apoio</span>
-      </label>
-
-      {resources.length > 0 && (
-        <div className="res-edit-list">
-          {resources.map(r => (
-            <div className="res-edit-row" key={r.id}>
-              <span className="res-edit-ic"><Icon name={RES_ICON[r.type] || 'link'} size={15} /></span>
-              <span className="res-edit-info">
-                <span className="res-edit-label">{r.label || r.url}</span>
-                <span className="res-edit-url">{r.url}</span>
-              </span>
-              <button type="button" className="btn-icon res-del" onClick={() => remove(r.id)} aria-label="Remover"><Icon name="x" size={14} /></button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="res-add">
-        <SegControl options={RES_OPTIONS} value={type} onChange={setType} />
-        <input className="control" value={url}
-          placeholder={RES_PLACEHOLDER[type].url}
-          onChange={e => setUrl(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add() } }} />
-        <input className="control" value={label}
-          placeholder={RES_PLACEHOLDER[type].label}
-          onChange={e => setLabel(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add() } }} />
-        <button type="button" className="btn btn-secondary btn-sm" onClick={add}><Icon name="plus" size={15} stroke={2.2} />Adicionar</button>
-      </div>
-    </div>
-  )
-}

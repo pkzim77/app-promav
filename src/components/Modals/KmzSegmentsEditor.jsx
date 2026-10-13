@@ -1,12 +1,10 @@
 import React from 'react'
-import JSZip from 'jszip'
-import { kml as kmlToGeoJSON } from '@tmcw/togeojson'
 import { Icon } from '../Icon.jsx'
-import { api } from '../../data/api.js'
 import {
-  extrairKml, montarFeatures, aplicarEdicoes, agruparTrechos, pastasDosPlacemarks, totalizar,
+  aplicarEdicoes, agruparTrechos, totalizar,
   medeExtensao, percentualExecutado, formatarArea, formatarDistancia,
 } from './shared/kmzGeo.js'
+import { lerKmz } from './shared/kmzLoad.js'
 
 // Editor dos trechos de um .kmz: renomear cada trecho (o KML costuma trazer
 // nomes como "kml_4" ou "Caminho sem título"), pô-lo num grupo (a rua ou a
@@ -15,9 +13,9 @@ import {
 // "Tipo de obra" do modal de projeto — quem desenha o traçado no mapa é o
 // KmzMapView, na Ficha técnica.
 //
-// Carrega o próprio arquivo (fetch + JSZip + togeojson) em vez de receber a
-// lista pronta: assim o componente só puxa essas duas libs quando a aba
-// realmente abre, e o modal de projeto — que não é lazy — não fica pesado.
+// Carrega o próprio arquivo (lerKmz) em vez de receber a lista pronta: assim o
+// componente só puxa JSZip e togeojson quando a aba realmente abre, e o modal
+// de projeto — que não é lazy — não fica pesado.
 export function KmzSegmentsEditor({ resource, onChange }) {
   const [status, setStatus] = React.useState('loading') // loading | ok | error
   const [error, setError] = React.useState(null)
@@ -37,16 +35,9 @@ export function KmzSegmentsEditor({ resource, onChange }) {
 
     async function run() {
       try {
-        const res = await fetch(api.fileUrl(resource.fileId))
-        if (!res.ok) throw new Error('Não foi possível baixar o arquivo do servidor.')
-        const buffer = await res.arrayBuffer()
-        const kmlText = await extrairKml(buffer, resource.filename || '', JSZip)
-        const doc = new DOMParser().parseFromString(kmlText, 'text/xml')
-        if (doc.querySelector('parsererror')) throw new Error('O KML dentro do arquivo está corrompido.')
-        const geo = kmlToGeoJSON(doc)
+        const { features } = await lerKmz(resource)
         if (cancelado) return
-        if (!geo.features?.length) throw new Error('O arquivo não tem nenhuma geometria.')
-        setFeatures(montarFeatures(geo, pastasDosPlacemarks(doc)))
+        setFeatures(features)
         setStatus('ok')
       } catch (e) {
         if (!cancelado) { setError(e.message || 'Falha ao ler o arquivo.'); setStatus('error') }

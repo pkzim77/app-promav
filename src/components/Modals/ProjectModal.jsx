@@ -6,13 +6,22 @@ import { dateError } from './shared/formHelpers.js'
 import { MoneyInput } from './shared/MoneyInput.jsx'
 import { FilePicker } from './ResourceModals.jsx'
 import { ehArquivoKmz } from './shared/kmzGeo.js'
+import { FieldError } from './shared/FieldError.jsx'
+import { ErrorBoundary, lazyComAviso } from '../ErrorBoundary.jsx'
 
 // Carregado sob demanda: arrasta JSZip + togeojson (~90 KB) para ler o .kmz, e
 // só serve quando a aba "Tipo de obra" de um projeto já salvo é aberta — não
 // faz sentido pesar o modal de projeto, que carrega sempre, com isso.
-const KmzSegmentsEditor = React.lazy(() =>
+const KmzSegmentsEditor = lazyComAviso(() =>
   import('./KmzSegmentsEditor.jsx').then(m => ({ default: m.KmzSegmentsEditor }))
 )
+
+// Nome em pt-BR de cada cor de projeto: sem ele o leitor de tela anuncia a
+// chave crua do PROJECT_HEX ('teal', 'amber'), que não nomeia cor nenhuma aqui.
+const COLOR_LABEL = {
+  indigo: 'Índigo', blue: 'Azul', teal: 'Verde-azulado', green: 'Verde',
+  amber: 'Âmbar', coral: 'Coral', pink: 'Rosa', purple: 'Roxo',
+}
 
 // Equipe do projeto — lista única que resolve duas coisas de uma vez:
 //  • acesso: quem não estiver na lista NÃO enxerga o projeto no sistema
@@ -148,8 +157,11 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const [desc, setDesc] = React.useState(project?.desc || '')
   const [color, setColor] = React.useState(project?.color || 'indigo')
   const [folderId, setFolderId] = React.useState(project?.folderId || defaultFolderId || '')
-  const [start, setStart] = React.useState(project?.start || '2026-05-26')
-  const [end, setEnd] = React.useState(project?.end || '2026-07-01')
+  // Sem data padrão: input type=date não tem placeholder, então qualquer valor
+  // pré-preenchido seria gravado como se fosse o prazo real. Sem prazo, é o
+  // popup de pendências que avisa.
+  const [start, setStart] = React.useState(project?.start || '')
+  const [end, setEnd] = React.useState(project?.end || '')
   const [notes, setNotes] = React.useState(project?.notes || '')
   const [resources, setResources] = React.useState(project?.resources ? project.resources.map(r => ({ ...r })) : [])
   const [members, setMembers] = React.useState(project?.members ? project.members.map(m => ({ ...m })) : [])
@@ -197,6 +209,7 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   // atualizado, então é só substituir pelo id.
   const updateResource = (atualizado) => setResources(rs => rs.map(r => r.id === atualizado.id ? atualizado : r))
   const [avisado, setAvisado] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
 
   const dErr = dateError(start, end)
   const nameErr = touched && !name.trim() ? 'Informe um nome.' : null
@@ -210,9 +223,6 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
     convenioNumero, convenioValor: parseBRL(convenioValorText),
   }
   const pendencias = pendenciasDoProjeto(rascunho)
-  const badMoney = (t) => !!t.trim() && parseBRL(t) === null
-  const estimadoErr = touched && badMoney(estimadoText) ? 'Valor inválido. Ex.: 250000,00' : null
-  const orcadoErr = touched && badMoney(orcadoText) ? 'Valor inválido. Ex.: 250000,00' : null
 
   // O que falta é dito ANTES de gravar, num popup por cima do formulário, com o
   // caminho seguindo em frente ali mesmo. Gravar e avisar depois entregaria o
@@ -221,29 +231,34 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const save = () => {
     setTouched(true)
     if (!name.trim() || dErr) { setTab('geral'); return }
-    if (badMoney(estimadoText) || badMoney(orcadoText)) { setTab('geral'); return }
     if (pendencias.length) { setAvisado(true); return }
     gravar()
   }
 
-  const gravar = () => {
-    onSave({
-      ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start, end, notes: notes.trim(), resources, members,
-      prefeitura: prefeitura.trim(), secretaria: secretaria.trim(), responsibleIds,
-      origemRecurso, valorEstimado: parseBRL(estimadoText), valorOrcado: parseBRL(orcadoText), status: projStatus, tipo,
-      // Só vai o .kmz de um tipo de obra que tem traçado — se o usuário trocou
-      // o tipo depois de escolher o arquivo, ele é descartado.
-      kmzUpload: aceitaKmz && kmzFile ? { file: kmzFile, label: kmzLabel.trim() } : null,
-      ehConvenio, convenioNumero: ehConvenio ? convenioNumero.trim() : null,
-      convenioValor: ehConvenio ? parseBRL(convenioValorText) : null,
-    })
+  // A guarda contra o clique duplo fica aqui, e não em save(): o
+  // PopupPendencias chama gravar() direto.
+  const gravar = async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      await onSave({
+        ...(project || {}), name: name.trim(), desc: desc.trim(), color, folderId: folderId || null, start: start || null, end: end || null, notes: notes.trim(), resources, members,
+        prefeitura: prefeitura.trim(), secretaria: secretaria.trim(), responsibleIds,
+        origemRecurso, valorEstimado: parseBRL(estimadoText), valorOrcado: parseBRL(orcadoText), status: projStatus, tipo,
+        // Só vai o .kmz de um tipo de obra que tem traçado — se o usuário trocou
+        // o tipo depois de escolher o arquivo, ele é descartado.
+        kmzUpload: aceitaKmz && kmzFile ? { file: kmzFile, label: kmzLabel.trim() } : null,
+        ehConvenio, convenioNumero: ehConvenio ? convenioNumero.trim() : null,
+        convenioValor: ehConvenio ? parseBRL(convenioValorText) : null,
+      })
+    } finally { setSaving(false) }
   }
 
   return (
     <Modal className="project-modal" title={editing ? 'Editar projeto' : 'Novo projeto'} onClose={onClose}
       footer={<>
-        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-primary" onClick={save}>{editing ? 'Salvar alterações' : 'Criar projeto'}</button>
+        <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
+        <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Criar projeto'}</button>
       </>}>
       {avisado && (
         <PopupPendencias itens={pendencias} onCancelar={() => setAvisado(false)}
@@ -286,11 +301,15 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
                     </button>
                   </div>
                   {/* Só dá pra ler o arquivo depois de salvo (precisa do fileId
-                      já gravado no banco) — antes disso não há o que editar aqui. */}
+                      já gravado no banco) — antes disso não há o que editar aqui.
+                      A boundary cerca só o editor: se ele falhar, o resto do
+                      formulário continua preenchível e salvável. */}
                   {r.fileId && (
-                    <React.Suspense fallback={<p className="kmz-msg">Carregando trechos…</p>}>
-                      <KmzSegmentsEditor resource={r} onChange={updateResource} />
-                    </React.Suspense>
+                    <ErrorBoundary fallback={(erro) => <p className="kmz-msg kmz-msg-error">{erro.message || 'Não foi possível abrir o editor de trechos.'}</p>}>
+                      <React.Suspense fallback={<p className="kmz-msg">Carregando trechos…</p>}>
+                        <KmzSegmentsEditor resource={r} onChange={updateResource} />
+                      </React.Suspense>
+                    </ErrorBoundary>
                   )}
                 </div>
               ))}
@@ -314,7 +333,7 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
       <>
       <Field label="Nome do projeto">
         <input className="control" value={name?? ''} autoFocus placeholder="Ex.: Rebrand 2026" onChange={e => setName(e.target.value)} />
-        {nameErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{nameErr}</span>}
+        <FieldError>{nameErr}</FieldError>
       </Field>
       <Field label="Descrição">
         <textarea className="control" value={desc?? ''} placeholder="Sobre o que é este projeto?" onChange={e => setDesc(e.target.value)} />
@@ -356,7 +375,7 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
 
       <Field label="Convênio">
         <label className="marca">
-          <input type="checkbox" checked={ehConvenio} onChange={e => setEhConvenio(e.target.checked)} />
+          <input type="checkbox" className="ck-nativo" checked={ehConvenio} onChange={e => setEhConvenio(e.target.checked)} />
           O recurso vem de um convênio
         </label>
         {/* Os campos só existem quando a caixa está marcada. Deixá-los visíveis
@@ -385,11 +404,9 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
       <div className="field-row">
         <Field label="Valor estimado">
           <MoneyInput value={estimadoText?? ''} onChange={setEstimadoText} placeholder="0,00" />
-          {estimadoErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{estimadoErr}</span>}
         </Field>
         <Field label="Valor orçado">
           <MoneyInput value={orcadoText?? ''} onChange={setOrcadoText} placeholder="0,00" />
-          {orcadoErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{orcadoErr}</span>}
         </Field>
       </div>
 
@@ -413,7 +430,8 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
       <Field label="Cor">
         <div className="color-swatches">
           {Object.keys(PROJECT_HEX).map(k => (
-            <button key={k} className={color === k ? 'on' : ''} style={{ background: PROJECT_HEX[k] }} onClick={() => setColor(k)} aria-label={k} />
+            <button key={k} className={color === k ? 'on' : ''} style={{ background: PROJECT_HEX[k] }}
+              onClick={() => setColor(k)} aria-pressed={color === k} aria-label={'Cor ' + (COLOR_LABEL[k] || k)} />
           ))}
         </div>
       </Field>
@@ -421,7 +439,7 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
         <Field label="Data de início"><input type="date" className="control" value={start??''} onChange={e => setStart(e.target.value)} /></Field>
         <Field label="Data de término"><input type="date" className="control" value={end??''} onChange={e => setEnd(e.target.value)} /></Field>
       </div>
-      {dErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{dErr}</span>}
+      <FieldError>{dErr}</FieldError>
       </>
       )}
     </Modal>

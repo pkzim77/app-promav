@@ -1,7 +1,7 @@
 import React from 'react'
 import { Icon } from '../../../components/Icon.jsx'
-import { ProgressBar, AvisoPendencias } from '../../../components/primitives/primitives.jsx'
-import { PROJECT_COLORS, SEM_ATIVIDADES, projectProgress, tasksByProject, fmtShort, effectiveProjectRole, canEditProject, pendenciasDoProjeto } from '../../../data/store.js'
+import { ProgressBar, AvisoPendencias, useFecharFora } from '../../../components/primitives/primitives.jsx'
+import { PROJECT_COLORS, SEM_ATIVIDADES, projectProgress, tasksByProject, fmtShort, fmtPeriodo, effectiveProjectRole, canEditProject, pendenciasDoProjeto } from '../../../data/store.js'
 import { EmptyState } from '../shared/EmptyState.jsx'
 
 function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete, draggable, dragging, dropHint, onDragStart, onDragEnd, onDragOver, onDrop }) {
@@ -17,36 +17,38 @@ function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete, d
     <div className={'card proj-card' + (dragging ? ' dragging' : '') + (dropHint ? ` drop-${dropHint}` : '')} role="button" tabIndex={0} title={project.name}
       draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragOver={onDragOver} onDrop={onDrop}
       onClick={() => onOpen(project.id)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(project.id) } }}
-      style={{ padding: 22, display: 'flex', flexDirection: 'column', minHeight: 200 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
-        <span style={{ width: 34, height: 34, borderRadius: 'var(--r-md)', background: color, flexShrink: 0 }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ font: 'var(--text-h4)', color: 'var(--fg-1)', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden', overflowWrap: 'anywhere' }}>
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(project.id) } }}>
+      <div className="proj-card-head">
+        {/* A cor sai do cadastro do projeto, por isso só ela fica inline. */}
+        <span className="proj-card-cor" style={{ background: color }} />
+        <div className="proj-card-txt">
+          <div className="proj-card-nome">
             {project.name}
             {/* O projeto pode ser criado incompleto; o que falta fica dito aqui,
                 senão ninguém descobre sem abrir o cadastro um por um. */}
             {' '}<AvisoPendencias itens={pendenciasDoProjeto(project)} />
           </div>
-          <p style={{ fontSize: 13, color: 'var(--fg-3)', margin: '3px 0 0', lineHeight: 1.45, display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 3, overflow: 'hidden', overflowWrap: 'anywhere' }}>{project.desc}</p>
+          {/* description vazia volta do servidor como '', e um <p> em branco
+              ainda ocupa a linha dele no card. */}
+          {project.desc ? <p className="proj-card-desc">{project.desc}</p> : null}
         </div>
         {(canEdit || canDelete) && (
-          <div style={{ display: 'flex', gap: 2 }}>
+          <div className="proj-card-acoes">
             {canEdit && <button className="btn-icon" onClick={(e) => { e.stopPropagation(); onEdit(project) }} aria-label="Editar"><Icon name="pencil" size={16} /></button>}
             {canDelete && <button className="btn-icon" onClick={(e) => { e.stopPropagation(); onDelete(project) }} aria-label="Excluir"><Icon name="trash" size={16} /></button>}
           </div>
         )}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--fg-3)', marginBottom: 14 }}>
+      <div className="proj-card-datas">
         <Icon name="calendar" size={14} />
         {project.start || project.end
-          ? <>{fmtShort(project.start)} — {fmtShort(project.end)}</>
+          ? fmtPeriodo(project.start, project.end, fmtShort, ' — ')
           : 'Sem prazo definido'}
       </div>
-      <div style={{ marginTop: 'auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
-          <span style={{ fontSize: 12.5, color: 'var(--fg-3)' }}>{count} atividades</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 13, color: 'var(--fg-2)' }}>{pct}%</span>
+      <div className="proj-card-foot">
+        <div className="proj-card-foot-linha">
+          <span className="proj-card-conta">{count} atividades</span>
+          <span className="proj-card-pct">{pct}%</span>
         </div>
         <ProgressBar value={pct} color={color} />
       </div>
@@ -57,11 +59,7 @@ function ProjectGridCard({ project, tasks, authUser, onOpen, onEdit, onDelete, d
 function FolderGridMenu({ folder, onNewProject, onNewSubfolder, onDelete }) {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef(null)
-  React.useEffect(() => {
-    const handleOutside = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', handleOutside)
-    return () => document.removeEventListener('mousedown', handleOutside)
-  }, [])
+  useFecharFora(ref, () => setOpen(false), open)
   return (
     <div className="proj-folder-menu" ref={ref} onClick={(e) => e.stopPropagation()}>
       <button className="proj-folder-menu-btn" title="Opções da pasta" aria-label="Opções da pasta"
@@ -86,7 +84,7 @@ function FolderGridMenu({ folder, onNewProject, onNewSubfolder, onDelete }) {
 }
 
 // Card de uma pasta na tela de Projetos: entra na pasta ao clicar.
-function FolderGridCard({ folder, subCount, projCount, onEnter, onNewProject, onNewSubfolder, onDelete, draggable, dragging, dropHint, onDragStart, onDragEnd, onDragOver, onDrop }) {
+function FolderGridCard({ folder, subCount, projCount, onEnter, onNewProject, onNewSubfolder, onDelete, canManage = false, draggable, dragging, dropHint, onDragStart, onDragEnd, onDragOver, onDrop }) {
   const parts = []
   if (subCount) parts.push(`${subCount} ${subCount > 1 ? 'pastas' : 'pasta'}`)
   parts.push(`${projCount} ${projCount === 1 ? 'projeto' : 'projetos'}`)
@@ -101,7 +99,10 @@ function FolderGridCard({ folder, subCount, projCount, onEnter, onNewProject, on
         <div className="proj-folder-name">{folder.name}</div>
         <div className="proj-folder-meta">{parts.join(' · ')}</div>
       </div>
-      <FolderGridMenu folder={folder} onNewProject={onNewProject} onNewSubfolder={onNewSubfolder} onDelete={onDelete} />
+      {/* As três ações do menu são requireAdmin no servidor: oferecê-las a quem
+          não é admin só rende um 403 depois do prompt/confirm. A Sidebar já
+          esconde o menu da pasta pelo mesmo critério. */}
+      {canManage && <FolderGridMenu folder={folder} onNewProject={onNewProject} onNewSubfolder={onNewSubfolder} onDelete={onDelete} />}
     </div>
   )
 }
@@ -112,7 +113,6 @@ function FolderGridCard({ folder, subCount, projCount, onEnter, onNewProject, on
 // para chegar ao projeto vizinho.
 export function ProjectList({ projects, tasks, folders = [], authUser, canCreate = true, openId = null, onOpenFolder = () => {}, onOpen, onEdit, onDelete, onNew, onMoveProject, onMoveFolder, onNewSubfolder, onDeleteFolder }) {
   const [drag, setDrag] = React.useState(null)
-  const dragRef = React.useRef(null)
   const [dropHint, setDropHint] = React.useState(null)
 
   // Uma passada sobre as atividades em vez de dois filters por card.
@@ -139,13 +139,11 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
   const projs = projectsIn(currentId)
   const isEmpty = !subfolders.length && !projs.length
   const canMove = !!authUser?.isAdmin && typeof onMoveProject === 'function'
-  const clearDrag = () => { dragRef.current = null; setDrag(null); setDropHint(null) }
+  const clearDrag = () => { setDrag(null); setDropHint(null) }
   const startDrag = (id) => (e) => {
     if (!canMove) return
     const type = e.currentTarget.dataset.dragType || 'project'
-    const item = { id, type }
-    dragRef.current = item
-    setDrag(item)
+    setDrag({ id, type })
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', `${type}:${id}`)
   }
@@ -153,7 +151,11 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
     if (!canMove || !drag || drag.type !== 'project' || drag.id === p.id) return
     e.preventDefault(); e.stopPropagation()
     const rect = e.currentTarget.getBoundingClientRect()
-    setDropHint({ key: 'p:' + p.id, mode: e.clientY - rect.top < rect.height / 2 ? 'before' : 'after' })
+    // key e mode saem do evento ANTES do set: o React zera currentTarget ao
+    // fim do listener. Devolver o mesmo objeto quando nada mudou poupa a
+    // grade de re-renderizar nas dezenas de dragover por segundo.
+    const key = 'p:' + p.id, mode = e.clientY - rect.top < rect.height / 2 ? 'before' : 'after'
+    setDropHint(h => (h && h.key === key && h.mode === mode) ? h : { key, mode })
   }
   const dropProject = (p) => (e) => {
     if (!canMove || !drag || drag.type !== 'project' || drag.id === p.id) return
@@ -163,26 +165,24 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
     onMoveProject(drag.id, currentId, beforeId)
     clearDrag()
   }
+  // Só o arrasto que começou nesta tela pode acender uma pasta. Aceitar
+  // qualquer coisa com 'text/plain' deixava o realce aceso depois de um
+  // arquivo ou texto solto de fora, que nunca chega a onDragEnd.
   const overFolder = (f) => (e) => {
-    if (!canMove || (!drag && !e.dataTransfer.types.includes('text/plain'))) return
-    if (drag?.id === f.id) return
+    if (!canMove || !drag || drag.id === f.id) return
     e.preventDefault(); e.stopPropagation()
     const rect = e.currentTarget.getBoundingClientRect()
-    const mode = drag?.type === 'folder'
+    const mode = drag.type === 'folder'
       ? (e.clientY - rect.top < rect.height * 0.3 ? 'before' : e.clientY - rect.top > rect.height * 0.7 ? 'after' : 'into')
       : 'into'
-    setDropHint({ key: 'f:' + f.id, mode })
+    const key = 'f:' + f.id
+    setDropHint(h => (h && h.key === key && h.mode === mode) ? h : { key, mode })
   }
   const dropFolder = (f) => (e) => {
-    if (!canMove) return
-    const raw = drag?.id ? drag : e.dataTransfer.getData('text/plain').split(':')
-    const draggedType = drag?.type || raw[0]
-    const draggedId = drag?.id || raw[1]
-    if (!draggedId) return
-    if (draggedId === f.id) return
+    if (!canMove || !drag || drag.id === f.id) return
     e.preventDefault(); e.stopPropagation()
-    if (draggedType === 'folder') onMoveFolder(draggedId, f.id, null)
-    else onMoveProject(draggedId, f.id, null)
+    if (drag.type === 'folder') onMoveFolder(drag.id, f.id, null)
+    else onMoveProject(drag.id, f.id, null)
     clearDrag()
   }
   const dropFolderTarget = (f) => (e) => {
@@ -208,7 +208,7 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
   }
   const overRoot = (e) => {
     if (!canMove || !drag || !currentId) return
-    e.preventDefault(); e.stopPropagation(); setDropHint({ key: 'root', mode: 'into' })
+    e.preventDefault(); e.stopPropagation(); setDropHint(h => (h && h.key === 'root' && h.mode === 'into') ? h : { key: 'root', mode: 'into' })
   }
   const dropRoot = (e) => {
     if (!canMove || !drag || !currentId) return
@@ -220,7 +220,10 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
   const hintClass = (key) => dropHint?.key === key ? ' drop-' + dropHint.mode : ''
 
   return (
-    <div className="page">
+    // Todo alvo de drop para a propagação do dragover, então um dragover que
+    // chega até aqui veio de fora de qualquer alvo: hora de apagar o realce.
+    // onDragLeave nos alvos não serve — piscaria ao cruzar os filhos deles.
+    <div className="page" onDragOver={() => { if (dropHint) setDropHint(null) }}>
       <div className="sec-head">
         <div>
           <h2>Projetos</h2>
@@ -258,7 +261,7 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
           {subfolders.length > 0 && (
             <div className="proj-explorer-grid" style={{ marginBottom: projs.length ? 24 : 0 }}>
               {subfolders.map(f => (
-                <FolderGridCard key={f.id} folder={f} onNewProject={onNew} onNewSubfolder={onNewSubfolder} onDelete={onDeleteFolder}
+                <FolderGridCard key={f.id} folder={f} onNewProject={onNew} onNewSubfolder={onNewSubfolder} onDelete={onDeleteFolder} canManage={canCreate}
                   draggable={canMove} dragging={drag?.type === 'folder' && drag.id === f.id}
                   dropHint={dropHint?.key === 'f:' + f.id ? dropHint.mode : null}
                   onDragStart={startDrag(f.id)} onDragEnd={clearDrag} onDragOver={overFolder(f)} onDrop={dropFolderTarget(f)}
@@ -268,7 +271,7 @@ export function ProjectList({ projects, tasks, folders = [], authUser, canCreate
             </div>
           )}
           {projs.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 18 }}>
+            <div className="proj-explorer-grid">
               {projs.map(p => <ProjectGridCard key={p.id} project={p} tasks={porProjeto.get(p.id) || SEM_ATIVIDADES} authUser={authUser} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete}
                 draggable={canMove} dragging={drag?.id === p.id} dropHint={dropHint?.key === 'p:' + p.id ? dropHint.mode : null}
                 onDragStart={startDrag(p.id)} onDragEnd={clearDrag} onDragOver={overProject(p)} onDrop={dropProject(p)} />)}

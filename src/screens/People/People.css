@@ -50,11 +50,6 @@
   font-weight: 700;
 }
 
-.people-badge.admin {
-  background: rgba(59, 130, 246, 0.12);
-  color: #1d4ed8;
-}
-
 .people-badge.neutral {
   background: var(--bg-muted);
   color: var(--fg-3);

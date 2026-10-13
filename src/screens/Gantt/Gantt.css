@@ -2,9 +2,11 @@
 
 /* ---------- Gantt ---------- */
 
-.gantt { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-card); }
+/* Coluna flex de altura limitada: sem isso a régua `position: sticky` não tem
+   caixa de rolagem para grudar, porque quem rolava era .content. */
+.gantt { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-card); display: flex; flex-direction: column; min-height: 0; }
 
-.gantt-scroll { overflow-x: auto; }
+.gantt-scroll { overflow: auto; min-height: 0; }
 
 .gantt-grid { position: relative; }
 
@@ -12,11 +14,13 @@
 
 .gantt-label-col { width: 220px; flex-shrink: 0; border-right: 1px solid var(--border); }
 
-.gantt-month { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--fg-3); padding: 8px 10px 2px; }
+/* Segmento de ponta pode ter 2-3 dias: o rótulo 'DEZ 25' não pode quebrar
+   linha, senão a régua inteira cresce de altura. */
+.gantt-month { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--fg-3); padding: 8px 10px 2px; white-space: nowrap; overflow: hidden; }
 
 .gantt-days { display: flex; }
 
-.gantt-day { width: 26px; flex-shrink: 0; text-align: center; font-family: var(--font-mono); font-size: 10px; color: var(--fg-4); padding: 4px 0 6px; border-left: 1px solid var(--border); }
+.gantt-day { width: var(--gantt-day-w); flex-shrink: 0; text-align: center; font-family: var(--font-mono); font-size: 10px; color: var(--fg-4); padding: 4px 0 6px; border-left: 1px solid var(--border); }
 
 .gantt-day.weekend { background: var(--bg-subtle); }
 

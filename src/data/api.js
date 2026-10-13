@@ -1,9 +1,10 @@
 // Cliente da API do backend (Express + Neon). O Vite faz proxy de /api.
-// As respostas já vêm no mesmo formato dos seeds de store.js.
+// As respostas já vêm no formato que as telas consomem (ids/labels de store.js).
 
 // Em dev, VITE_API_URL é vazio → usa /api (proxy do Vite).
-// Em produção (build do Firebase), VITE_API_URL = URL do Cloud Run → ex.: https://promav-api-xxx.run.app
-const BASE = (import.meta.env.VITE_API_URL || '') + '/api'
+// Em produção, VITE_API_URL = URL do serviço promav-api no Render (ver .env.production e render.yaml).
+// A barra final da variável é descartada: "https://x/" + "/api" daria "//api" e 404 em tudo.
+const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '') + '/api'
 const TOKEN_KEY = 'promav-token'
 
 let token = null
@@ -17,28 +18,47 @@ function setToken(t) {
 // Chamado quando o token é rejeitado (401) — limpa a sessão e avisa o app.
 let onUnauthorized = () => {}
 
-async function req(method, path, body) {
-  const headers = {}
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
-  if (token) headers['Authorization'] = `Bearer ${token}`
+// Nestas rotas o 401 é credencial errada, não token vencido: derrubar a sessão
+// por uma senha atual digitada errado jogava a pessoa para a tela de login.
+const SEM_DERRUBAR = new Set(['/auth/login', '/auth/change-password'])
 
-  const res = await fetch(BASE + path, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
+// fetch só rejeita quando a requisição nem chegou (servidor dormindo no Render,
+// rede caída). O 'Failed to fetch' do navegador ia cru para o toast, em inglês.
+function erroDeRede(causa) {
+  const err = new Error('Não foi possível falar com o servidor. Ele pode estar reiniciando — confira a conexão e tente de novo em instantes.')
+  err.rede = true
+  err.cause = causa
+  return err
+}
 
-  if (res.status === 401 && path !== '/auth/login') {
+async function fetchOuSemRede(url, init) {
+  try { return await fetch(url, init) } catch (e) { throw erroDeRede(e) }
+}
+
+async function lerResposta(res, path) {
+  if (res.status === 401 && !SEM_DERRUBAR.has(path)) {
     setToken(null)
     onUnauthorized()
   }
   if (!res.ok) {
-    let msg = `${res.status}`
+    // 'Erro 404' e não '404': sem corpo JSON o número cru aparecia sozinho no
+    // toast, como se fosse a mensagem.
+    let msg = `Erro ${res.status}`
     try { msg = (await res.json()).error || msg } catch { /* corpo não-JSON */ }
     throw new Error(msg)
   }
-  if (res.status === 204) return null
-  return res.json()
+  return res.status === 204 ? null : res.json()
+}
+
+async function req(method, path, body) {
+  const headers = {}
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  // Serializa ANTES do fetch: corpo que não vira JSON é erro de programação, e
+  // não pode se disfarçar de falha de rede.
+  const payload = body !== undefined ? JSON.stringify(body) : undefined
+  const res = await fetchOuSemRede(BASE + path, { method, headers, body: payload })
+  return lerResposta(res, path)
 }
 
 export const api = {
@@ -84,25 +104,38 @@ export const api = {
     // arquivos .json; o mime real vai na query string.
     const headers = { 'Content-Type': 'application/octet-stream' }
     if (token) headers['Authorization'] = `Bearer ${token}`
-    const res = await fetch(`${BASE}/projects/${projectId}/files?${qs}`, { method: 'POST', headers, body: file })
-    if (res.status === 401) { setToken(null); onUnauthorized() }
-    if (!res.ok) {
-      let msg = `${res.status}`
-      try { msg = (await res.json()).error || msg } catch { /* corpo não-JSON */ }
-      throw new Error(msg)
-    }
-    return res.json()
+    const res = await fetchOuSemRede(`${BASE}/projects/${projectId}/files?${qs}`, { method: 'POST', headers, body: file })
+    return lerResposta(res, `/projects/${projectId}/files`)
   },
-  // URL para exibir/baixar um arquivo (token na query, pois <img>/<a> não enviam header).
-  fileUrl: (fileId) => `${BASE}/files/${fileId}?token=${encodeURIComponent(token || '')}`,
+  // Tokens de link dos arquivos, em lote: { [fileId]: token }. Cada token abre
+  // só o arquivo dele. O token de SESSÃO não vai mais para a URL — bastava
+  // receber um link copiado para entrar na conta de quem copiou, por 7 dias e
+  // em qualquer rota. Arquivo que a pessoa não enxerga não vem na resposta.
+  fileTokens: (ids) => req('POST', '/files/tokens', { ids }),
+  // Monta a URL a partir de um token já em mãos. Separado de fileTokens para a
+  // tela pedir todos de uma vez e montar as URLs sem voltar à rede.
+  linkDeArquivo: (fileId, t) => `${BASE}/files/${fileId}?t=${encodeURIComponent(t)}`,
+  // Link de um arquivo só, para quando não há lote (o "Baixar .kmz" do modal).
+  fileLink: async (fileId) => {
+    const ts = await api.fileTokens([fileId])
+    if (!ts[fileId]) throw new Error('Não foi possível gerar o link deste arquivo.')
+    return api.linkDeArquivo(fileId, ts[fileId])
+  },
+  // Baixa o arquivo para ler no navegador (o .kmz do mapa). Vai com o header
+  // Authorization: aqui quem busca é o próprio app, não uma tag <img>/<a>,
+  // então não há motivo para token nenhum aparecer na URL.
+  fetchFile: async (fileId) => {
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const res = await fetchOuSemRede(`${BASE}/files/${fileId}`, { headers })
+    if (!res.ok) throw new Error('Não foi possível baixar o arquivo do servidor.')
+    return res
+  },
 
   // Adiciona um material (link) — permitido também para 'Só exibição'.
   addResource: (projectId, resource) => req('POST', `/projects/${projectId}/resources`, resource),
   // Remove um material — exige Edição total.
   deleteResource: (projectId, resourceId) => req('DELETE', `/projects/${projectId}/resources/${resourceId}`),
-  // Marca/desmarca itens de checklist — permitido para 'Só exibição'.
-  toggleChecklist: (taskId, checklist) => req('PATCH', `/tasks/${taskId}/checklist`, { checklist }),
-
   // Mexe num item só, mandando apenas os campos que mudaram: o servidor toca
   // no que vier e ignora o resto. Mandar o item inteiro faria o backend achar
   // que o texto está sendo editado e cobrar Edição total de quem só marcou.
@@ -147,6 +180,6 @@ export const api = {
   setUserSector: (id, sector) => req('PUT', `/users/${id}/sector`, { sector }),
   setMySector: (sector) => req('POST', '/auth/sector', { sector }),
 
-  startTimer: (userId, taskId) => req('POST', '/sessions/start', { userId, taskId }),
-  stopTimer: (userId) => req('POST', '/sessions/stop', { userId }),
+  startTimer: (taskId) => req('POST', '/sessions/start', { taskId }),
+  stopTimer: () => req('POST', '/sessions/stop'),
 }

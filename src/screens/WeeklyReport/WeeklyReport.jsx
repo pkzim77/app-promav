@@ -3,8 +3,9 @@ import React from 'react'
 import { Icon } from '../../components/Icon.jsx'
 import { Avatar, Field, SelecaoMultipla } from '../../components/primitives/primitives.jsx'
 import { EmptyState } from '../Projects/shared/EmptyState.jsx'
+import { ConfirmDialog } from '../../components/Modals/ConfirmDialog.jsx'
 import { api } from '../../data/api.js'
-import { fmtFull, parseDate, todayISO, addDays, PROJECT_STATUSES, PROJECT_STATUS_MAP } from '../../data/store.js'
+import { fmtFull, parseDate, todayISO, addDays, MESES_EXTENSO, PROJECT_STATUSES, PROJECT_STATUS_MAP } from '../../data/store.js'
 
 // Relatório semanal: a tela de quem escreve ("Meu relatório") e a de quem
 // recebe ("Relatórios individuais"), mais o documento impresso que as duas
@@ -14,15 +15,13 @@ import { fmtFull, parseDate, todayISO, addDays, PROJECT_STATUSES, PROJECT_STATUS
 // partir do texto toda vez que alguém imprime. Guardar o arquivo custaria uns
 // 40 MB por ano para armazenar o que já está no banco em 1,5 MB.
 
-// O papel escreve a data por extenso; MONTHS_PT do store é abreviado e serve
-// para as telas, não para o documento que vai ao cliente.
-const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
-  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
+// O papel escreve o dia da semana com o sufixo ('Segunda-feira'); as telas
+// usam a forma curta, então esta lista é só do documento.
 const DIAS = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado']
 
 function porExtenso(iso) {
   const d = parseDate(iso)
-  return `${DIAS[d.getDay()]}, ${d.getDate()} de ${MESES[d.getMonth()]} de ${d.getFullYear()}`
+  return `${DIAS[d.getDay()]}, ${d.getDate()} de ${MESES_EXTENSO[d.getMonth()]} de ${d.getFullYear()}`
 }
 
 // A sexta que encerra a semana de uma data. Repete a regra do servidor de
@@ -35,6 +34,10 @@ function sextaDe(iso) {
 }
 
 const temTexto = (html) => !!String(html || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
+
+// O título da atividade entra no HTML do editor; escapar mantém "&", "<" e
+// ">" visíveis no documento em vez de sumirem ou virarem tag.
+const escHtml = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 // ---------------------------------------------------------------- editor ----
 
@@ -259,11 +262,21 @@ export function MyWeeklyReport({ authUser, projects, onFlash, onFail }) {
   const [statuses, setStatuses] = React.useState({})
   const [sentAt, setSentAt] = React.useState(null)
   const [sugestao, setSugestao] = React.useState({ projectIds: [], disponiveis: [], atividades: [] })
+  const [erro, setErro] = React.useState(null)
+  const [tentativa, setTentativa] = React.useState(0)
+  const [trocaPendente, setTrocaPendente] = React.useState(null)
   const [fila, imprimir] = useImpressao()
+
+  // Assinatura do que o servidor devolveu (ou do último salvamento).
+  // Comparar o conteúdo com ela é mais confiável que uma marca de "mexeu": o
+  // blur do EditorMini reemite o mesmo HTML sem nada ter mudado.
+  const base = React.useRef('')
+  const serializar = () => JSON.stringify({ projectIds, works, statuses })
 
   React.useEffect(() => {
     let vivo = true
     setCarregando(true)
+    setErro(null)
     api.weeklyReportMine(semana)
       .then(r => {
         if (!vivo) return
@@ -272,15 +285,19 @@ export function MyWeeklyReport({ authUser, projects, onFlash, onFail }) {
         // Sem relatório salvo, já vêm marcados os projetos em que a pessoa mexeu
         // nesta semana — não todos os que ela tem. Quem está em 26 projetos não
         // entrega um relatório que fala de 26.
-        setProjectIds(r.report ? r.report.projectIds : (s.projectIds || []))
-        setWorks(r.report?.works || {})
-        setStatuses(r.report?.statuses || {})
+        const ids = r.report ? r.report.projectIds : (s.projectIds || [])
+        const w = r.report?.works || {}
+        const st = r.report?.statuses || {}
+        setProjectIds(ids)
+        setWorks(w)
+        setStatuses(st)
         setSentAt(r.report?.sentAt || null)
+        base.current = JSON.stringify({ projectIds: ids, works: w, statuses: st })
       })
-      .catch(e => onFail(e.message || 'Erro ao carregar o relatório.'))
+      .catch(e => { if (vivo) setErro(e.message || 'Erro ao carregar o relatório.') })
       .finally(() => vivo && setCarregando(false))
     return () => { vivo = false }
-  }, [semana])
+  }, [semana, tentativa])
 
   const daSemana = React.useMemo(() => new Set(sugestao.projectIds), [sugestao])
 
@@ -303,7 +320,7 @@ export function MyWeeklyReport({ authUser, projects, onFlash, onFail }) {
 
   const usarSugestao = (id) => {
     const itens = sugestao.atividades.filter(a => a.projectId === id)
-      .map(a => `<li>${a.title.replace(/[<>&]/g, '')}</li>`).join('')
+      .map(a => `<li>${escHtml(a.title)}</li>`).join('')
     setWorks(w => ({ ...w, [id]: `${w[id] || ''}<ul>${itens}</ul>` }))
   }
 
@@ -312,6 +329,7 @@ export function MyWeeklyReport({ authUser, projects, onFlash, onFail }) {
     try {
       const r = await api.saveWeeklyReport({ week: semana, projectIds, works, statuses, send: enviar })
       setSentAt(r.sentAt || null)
+      base.current = JSON.stringify({ projectIds, works, statuses })
       onFlash(enviar ? 'Relatório enviado.' : 'Rascunho salvo.')
     } catch (e) {
       onFail(e.message || 'Erro ao salvar o relatório.')
@@ -324,8 +342,24 @@ export function MyWeeklyReport({ authUser, projects, onFlash, onFail }) {
     return <div className="page"><div className="rel-carregando"><span className="spin" />Carregando o relatório…</div></div>
   }
 
+  // Sem a resposta da semana pedida, o formulário renderizaria o texto da
+  // semana anterior — e "Salvar rascunho" gravaria esse texto na semana nova.
+  if (erro) {
+    return (
+      <div className="page rel-tela">
+        <div className="sec-head">
+          <div><h2>Meu relatório</h2></div>
+          <SeletorSemana semana={semana} onChange={setSemana} ocupado={false} />
+        </div>
+        <EmptyState icon="file" title="Não foi possível carregar o relatório" text={erro}
+          action={<button className="btn btn-secondary" onClick={() => setTentativa(t => t + 1)}>Tentar de novo</button>} />
+      </div>
+    )
+  }
+
   const relatorio = { week: semana, projectIds: marcados.map(p => p.id), works, statuses }
   const podeEnviar = marcados.some(p => temTexto(works[p.id]))
+  const sujo = serializar() !== base.current
 
   return (
     <>
@@ -339,7 +373,8 @@ export function MyWeeklyReport({ authUser, projects, onFlash, onFail }) {
                 : 'Ainda não enviado. Salve quantas vezes quiser antes.'}
             </div>
           </div>
-          <SeletorSemana semana={semana} onChange={setSemana} ocupado={!!salvando} />
+          <SeletorSemana semana={semana} ocupado={!!salvando}
+            onChange={(nova) => sujo ? setTrocaPendente(nova) : setSemana(nova)} />
         </div>
 
         <div className="card rel-form">
@@ -386,7 +421,7 @@ export function MyWeeklyReport({ authUser, projects, onFlash, onFail }) {
                 : <><Icon name="check" size={16} stroke={2.4} />{sentAt ? 'Reenviar com correções' : 'Enviar relatório'}</>}
             </button>
             <button className="btn btn-ghost" onClick={() => imprimir(nomeArquivo(semana), [relatorio])} disabled={!!salvando}>
-              <Icon name="file" size={16} />Baixar o meu
+              <Icon name="printer" size={16} />Baixar o meu
             </button>
           </div>
 
@@ -406,19 +441,29 @@ export function MyWeeklyReport({ authUser, projects, onFlash, onFail }) {
       </div>
 
       <div className="rel-impressao">
-        {(fila?.itens || []).map((r, i) => (
+        {(fila?.itens || [relatorio]).map((r, i) => (
           <RelatorioDoc key={i} report={r} user={authUser} projects={projects} />
         ))}
       </div>
+
+      {trocaPendente && (
+        <ConfirmDialog title="Alterações não salvas"
+          message="O que você escreveu nesta semana ainda não foi salvo. Trocar de semana descarta essas alterações."
+          confirmLabel="Trocar mesmo assim"
+          onConfirm={() => { setSemana(trocaPendente); setTrocaPendente(null) }}
+          onClose={() => setTrocaPendente(null)} />
+      )}
     </>
   )
 }
 
 // ---------------------------------------------------------- tela do admin ----
 
-export function AdminWeeklyReports({ users, projects, onFail }) {
+export function AdminWeeklyReports({ users, projects }) {
   const [semana, setSemana] = React.useState(() => sextaDe(todayISO()))
   const [carregando, setCarregando] = React.useState(true)
+  const [erro, setErro] = React.useState(null)
+  const [tentativa, setTentativa] = React.useState(0)
   const [dados, setDados] = React.useState({ reports: [], faltando: [] })
   const [marcados, setMarcados] = React.useState([])
   const [fila, imprimir] = useImpressao()
@@ -426,13 +471,14 @@ export function AdminWeeklyReports({ users, projects, onFail }) {
   React.useEffect(() => {
     let vivo = true
     setCarregando(true)
+    setErro(null)
     setMarcados([])
     api.weeklyReports(semana)
       .then(d => vivo && setDados({ reports: d.reports || [], faltando: d.faltando || [] }))
-      .catch(e => onFail(e.message || 'Erro ao carregar os relatórios.'))
+      .catch(e => { if (vivo) setErro(e.message || 'Erro ao carregar os relatórios.') })
       .finally(() => vivo && setCarregando(false))
     return () => { vivo = false }
-  }, [semana])
+  }, [semana, tentativa])
 
   const userOf = (id) => users.find(u => u.id === id)
   const { reports, faltando } = dados
@@ -454,16 +500,21 @@ export function AdminWeeklyReports({ users, projects, onFail }) {
         <div className="sec-head">
           <div>
             <h2>Relatórios individuais</h2>
-            <div className="sub">
-              {carregando ? 'Carregando…' : `${reports.length} enviado${reports.length === 1 ? '' : 's'}`}
-              {!carregando && faltando.length ? ` · ${faltando.length} pendente${faltando.length === 1 ? '' : 's'}` : ''}
-            </div>
+            {!erro && (
+              <div className="sub">
+                {carregando ? 'Carregando…' : `${reports.length} enviado${reports.length === 1 ? '' : 's'}`}
+                {!carregando && faltando.length ? ` · ${faltando.length} pendente${faltando.length === 1 ? '' : 's'}` : ''}
+              </div>
+            )}
           </div>
           <SeletorSemana semana={semana} onChange={setSemana} ocupado={carregando} />
         </div>
 
         {carregando ? (
           <div className="rel-carregando"><span className="spin" />Carregando os relatórios…</div>
+        ) : erro ? (
+          <EmptyState icon="file" title="Não foi possível carregar os relatórios" text={erro}
+            action={<button className="btn btn-secondary" onClick={() => setTentativa(t => t + 1)}>Tentar de novo</button>} />
         ) : !reports.length ? (
           <EmptyState icon="file" title="Nenhum relatório enviado nesta semana"
             text={faltando.length
@@ -510,7 +561,7 @@ export function AdminWeeklyReports({ users, projects, onFail }) {
           </div>
         )}
 
-        {!carregando && !!faltando.length && (
+        {!carregando && !erro && !!faltando.length && (
           <div className="card rel-faltando">
             <h3>Ainda não enviaram</h3>
             <div className="rel-faltando-lista">
@@ -529,9 +580,11 @@ export function AdminWeeklyReports({ users, projects, onFail }) {
       </div>
 
       <div className="rel-impressao">
-        {(fila?.itens || []).map(r => (
-          <RelatorioDoc key={r.id} report={r} user={userOf(r.userId)} projects={projects} />
-        ))}
+        {fila
+          ? fila.itens.map(r => (
+              <RelatorioDoc key={r.id} report={r} user={userOf(r.userId)} projects={projects} />
+            ))
+          : <p className="rel-sem-fila">Este PDF é gerado pelo botão "Baixar" da tela Relatórios individuais. Marque os relatórios desejados e use o botão.</p>}
       </div>
     </>
   )

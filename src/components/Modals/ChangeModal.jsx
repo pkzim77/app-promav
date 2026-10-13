@@ -1,7 +1,8 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field, SegControl } from '../primitives/primitives.jsx'
-import { SECTORS, CHANGE_KINDS, URGENCIES, paraAtribuir, etapasDoProjeto } from '../../data/store.js'
+import { SECTORS, CHANGE_KINDS, URGENCIES, paraAtribuir, etapasDoProjeto, todayISO } from '../../data/store.js'
+import { FieldError } from './shared/FieldError.jsx'
 
 // Emissor e destinatário são polimórficos: pessoa OU setor. O <select> codifica
 // como "u:<id>" ou "s:<setor>" e o valor é desmontado ao salvar.
@@ -33,7 +34,7 @@ function LadoSelect({ value, onChange, equipe, incluirVazio, rotuloVazio }) {
 export function ChangeModal({ change, projectId, users = [], members = [], tasks = [], onSave, onClose }) {
   const editing = !!change
   const [title, setTitle] = React.useState(change?.title || '')
-  const [changeDate, setChangeDate] = React.useState(change?.changeDate || new Date().toISOString().slice(0, 10))
+  const [changeDate, setChangeDate] = React.useState(change?.changeDate || todayISO())
   const [description, setDescription] = React.useState(change?.description || '')
   const [requester, setRequester] = React.useState(change?.requester || '')
   const [kind, setKind] = React.useState(change?.kind || 'requisicao')
@@ -49,9 +50,8 @@ export function ChangeModal({ change, projectId, users = [], members = [], tasks
   // Só quem participa do projeto entra nas listas de pessoa — e contas de
   // manutenção ficam de fora, salvo se já forem o emissor ou o destinatário
   // de uma mudança gravada antes desta regra.
-  const equipe = paraAtribuir(users, change?.emitterUserId, change?.targetUserIds, change?.responsibleId)
-    .filter(u => u.isAdmin || members.some(m => m.userId === u.id))
-  const equipeDestinatarios = equipe.filter(u => members.some(m => m.userId === u.id))
+  const equipeDestinatarios = paraAtribuir(users, change?.emitterUserId, change?.targetUserIds, change?.responsibleId)
+    .filter(u => members.some(m => m.userId === u.id))
 
   // O emissor não é mais escolhido no formulário: é sempre quem publica, e o
   // servidor é quem carimba (o cliente nem envia). Editar não troca o emissor.
@@ -66,10 +66,13 @@ export function ChangeModal({ change, projectId, users = [], members = [], tasks
       : change?.responsibleId ? [change.responsibleId] : []
   )
   // Escolher no seletor vazio acrescenta; escolher num preenchido troca.
+  // Pessoa e setor vivem em listas separadas, então trocar um pelo outro na
+  // mesma linha tira de uma lista e põe na outra — a linha "pula" de bloco.
   const definirDestino = (indice, valor) => {
     const { userId, sector } = lerLado(valor)
     if (sector) {
       setDestSetores(atual => atual.includes(sector) ? atual : [...atual, sector])
+      setDestPessoas(atual => atual.filter((_, i) => i !== indice))
       return
     }
     setDestPessoas(atual => {
@@ -87,14 +90,19 @@ export function ChangeModal({ change, projectId, users = [], members = [], tasks
     setDestPessoas(atual => atual.includes(userId) ? atual : [userId, ...atual])
   }
   const alterarSetor = (indice, valor) => {
-    const { sector } = lerLado(valor)
-    if (sector) setDestSetores(atual => atual.map((item, i) => i === indice ? sector : item).filter((item, i, lista) => lista.indexOf(item) === i))
+    const { userId, sector } = lerLado(valor)
+    if (sector) { setDestSetores(atual => atual.map((item, i) => i === indice ? sector : item).filter((item, i, lista) => lista.indexOf(item) === i)); return }
+    if (userId) {
+      setDestSetores(atual => atual.filter((_, i) => i !== indice))
+      setDestPessoas(atual => atual.includes(userId) ? atual : [...atual, userId])
+    }
   }
   const removerSetor = (indice) => setDestSetores(atual => atual.filter((_, i) => i !== indice))
   const removerDestino = (i) => setDestPessoas(a => a.filter((_, k) => k !== i))
 
   const titleErr = touched && !title.trim() ? 'Diga o que mudou, em uma linha.' : null
   const descErr = touched && !description.trim() ? 'Descreva a mudança para quem vai fazer.' : null
+  const dateErr = touched && !changeDate ? 'Informe a data da mudança.' : null
   const temDestino = destSetores.length > 0 || destPessoas.length > 0
   const destErr = touched && !temDestino ? 'Escolha para quem vai a mudança.' : null
 
@@ -112,17 +120,18 @@ export function ChangeModal({ change, projectId, users = [], members = [], tasks
     setSaving(true)
     try {
       await onSave({
-        ...(change ? { id: change.id } : {}), projectId,
+        ...(change ? { id: change.id } : {}),
+        ...(editing ? {} : { projectId }),
         title: title.trim(), description: description.trim(), requester: requester.trim(),
         changeDate, urgency,
-        targetUserIds: destPessoas, targetSectors: destSetores, targetSector: destSetores[0] || null,
+        targetUserIds: destPessoas, targetSectors: destSetores,
         ...(editing ? {} : { kind, affectsBudget, stageTaskId: etapa || null }),
       })
     } finally { setSaving(false) }
   }
 
   return (
-    <Modal className="project-modal" title={editing ? 'Editar mudança' : 'Publicar mudança'} onClose={onClose}
+    <Modal className="project-modal" title={editing ? 'Editar mudança' : 'Publicar mudança'} onClose={onClose} travado={saving}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
         <button className="btn btn-primary" onClick={save} disabled={saving}>
@@ -138,7 +147,7 @@ export function ChangeModal({ change, projectId, users = [], members = [], tasks
       {!editing && (
         <Field label="Tipo da mudança">
           <SegControl options={CHANGE_KINDS} value={kind} onChange={setKind} />
-          <span className="peso-hint">
+          <span className="marca-nota">
             {kind === 'requisicao'
               ? 'Requisição obriga: a atividade já nasce no quadro.'
               : 'Sugestão é proposta: vira atividade só depois de alguém aceitar.'}
@@ -149,12 +158,13 @@ export function ChangeModal({ change, projectId, users = [], members = [], tasks
       <Field label="O que mudou">
         <input className="control" value={title} autoFocus placeholder="Ex.: Mudou a estrutura da cobertura"
           onChange={e => setTitle(e.target.value)} />
-        {titleErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{titleErr}</span>}
+        <FieldError>{titleErr}</FieldError>
       </Field>
 
       <div className="field-row">
         <Field label="Data da mudança">
           <input type="date" className="control" value={changeDate} onChange={e => setChangeDate(e.target.value)} />
+          <FieldError>{dateErr}</FieldError>
         </Field>
         <Field label="Urgência">
           <SegControl options={URGENCIES} value={urgency} onChange={setUrgency} />
@@ -167,7 +177,7 @@ export function ChangeModal({ change, projectId, users = [], members = [], tasks
             <option value="">Sem etapa</option>
             {etapas.map(e => <option key={e.id} value={e.id}>{e.label}</option>)}
           </select>
-          <span className="peso-hint">
+          <span className="marca-nota">
             {etapa
               ? 'Entra como item do checklist desta etapa.'
               : 'Sem etapa, entra em "Outras atividades" — na aba Etapas do projeto.'}
@@ -192,7 +202,7 @@ export function ChangeModal({ change, projectId, users = [], members = [], tasks
           <LadoSelect value="" onChange={definirSetorOuPessoa} equipe={equipeDestinatarios}
             incluirVazio rotuloVazio={temDestino ? '+ incluir outra pessoa ou setor' : 'Escolha pessoa ou setor'} />
         </div>
-        {destErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{destErr}</span>}
+        <FieldError>{destErr}</FieldError>
       </Field>
 
       {semNinguemNoSetor && (
@@ -216,7 +226,7 @@ export function ChangeModal({ change, projectId, users = [], members = [], tasks
         <textarea className="control" value={description} style={{ minHeight: 110 }}
           placeholder="Escreva para quem vai executar: o que muda na prática, o que precisa ser refeito."
           onChange={e => setDescription(e.target.value)} />
-        {descErr && <span className="field-error"><Icon name="x" size={13} stroke={2.5} />{descErr}</span>}
+        <FieldError>{descErr}</FieldError>
       </Field>
 
       <Field label="Solicitante">
@@ -232,7 +242,7 @@ export function ChangeModal({ change, projectId, users = [], members = [], tasks
             <span className="change-check-box">{affectsBudget && <Icon name="check" size={13} stroke={3} />}</span>
             Esta mudança altera orçamento ou prazo
           </button>
-          <span className="peso-hint">
+          <span className="marca-nota">
             Fica marcado na mudança para a coordenação enxergar. Não trava o trabalho —
             e não pode ser alterado depois de publicar.
           </span>
