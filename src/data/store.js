@@ -11,16 +11,25 @@ export const PROJECT_COLORS = {
   green: 'var(--proj-green)', amber: 'var(--proj-amber)', coral: 'var(--proj-coral)',
   pink: 'var(--proj-pink)', purple: 'var(--proj-purple)',
 }
-// Espelha os tokens --proj-* (tons terrosos da paleta "Taupe & Ink").
+// Espelha os tokens --proj-* (cores vivas para identificar os projetos).
 export const PROJECT_HEX = {
-  indigo: '#6E6A9B', blue: '#5A7695', teal: '#4C7F78', green: '#7E8A4C',
-  amber: '#C0912E', coral: '#B0603F', pink: '#B0757F', purple: '#8A6690',
+  indigo: '#6366F1', blue: '#2563EB', teal: '#0D9488', green: '#16A34A',
+  amber: '#D97706', coral: '#EA580C', pink: '#DB2777', purple: '#9333EA',
 }
 
-// Paleta de cores do avatar das pessoas: mais ampla que a de projetos e sem
+// Cada tipo recebe uma cor padrão viva ao ser escolhido no cadastro.
+export const PROJECT_TYPE_COLORS = {
+  picarramento: 'coral',
+  pavimentacao: 'blue',
+  construcao: 'purple',
+  reforma: 'green',
+}
+
+// Paleta de avatares das pessoas: independente das cores dos projetos e sem
 // chave — o que se salva é o hex puro (ver PeopleModal), não um id de mapa.
 export const AVATAR_COLORS = [
-  ...Object.values(PROJECT_HEX),
+  '#6E6A9B', '#5A7695', '#4C7F78', '#7E8A4C',
+  '#C0912E', '#B0603F', '#B0757F', '#8A6690',
   '#A98B3E', // mostarda
 ]
 
