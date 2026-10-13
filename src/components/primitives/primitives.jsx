@@ -265,10 +265,10 @@ export function SelecaoMultipla({ itens, onAlternar, rotulo, buscaAcima = 8, ari
     if (!aberto) return
     const fora = (e) => { if (!caixa.current?.contains(e.target)) setAberto(false) }
     const tecla = (e) => { if (e.key === 'Escape') setAberto(false) }
-    document.addEventListener('mousedown', fora)
+    document.addEventListener('pointerdown', fora, true)
     document.addEventListener('keydown', tecla)
     return () => {
-      document.removeEventListener('mousedown', fora)
+      document.removeEventListener('pointerdown', fora, true)
       document.removeEventListener('keydown', tecla)
     }
   }, [aberto])
