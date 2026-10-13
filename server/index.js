@@ -13,7 +13,7 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 // A versão 3 do pacote é ESM e expõe `create` em vez de uma função default.
 import { create as contentDisposition } from 'content-disposition'
 import { q, tx, pool } from './db.js'
-import { requireAuth, signToken, verifyPassword, hashPassword, DUMMY_HASH } from './auth.js'
+import { requireAuth, signToken, signFileToken, verifyPassword, hashPassword, DUMMY_HASH } from './auth.js'
 // Módulo puro (sem DOM/React) compartilhado com o frontend — só assim o
 // backend concorda com a tela sobre o que conta como arquivo de mapa.
 import { ehArquivoKmz } from '../src/components/Modals/shared/kmzGeo.js'
@@ -530,7 +530,7 @@ app.post('/api/auth/login', loginLimiter, wrap(async (req, res) => {
   }
   // A MESMA forma das outras rotas: o front usa este objeto como authUser até
   // o próximo F5, e sem `sector` os avisos endereçados ao setor não apareciam.
-  const [row] = await q(`SELECT ${LIST_USER}, password_hash FROM users WHERE lower(email) = lower($1)`, [email])
+  const [row] = await q(`SELECT ${LIST_USER}, must_change_password AS "mustChangePassword", password_hash FROM users WHERE lower(email) = lower($1)`, [email])
   // Terceirizado não acessa, e a regra é dita AQUI em vez de depender de ele
   // não ter senha. Ausência de senha é uma ausência: bastaria uma importação
   // ou um formulário mal preenchido gravar um hash para o acesso reabrir em
@@ -612,7 +612,7 @@ app.get('/api/pulse', wrap(async (_req, res) => {
 
 // Quem sou eu (valida o token e restaura a sessão no front).
 app.get('/api/auth/me', wrap(async (req, res) => {
-  const [user] = await q(`SELECT ${LIST_USER} FROM users WHERE id = $1`, [req.userId])
+  const [user] = await q(`SELECT ${LIST_USER}, must_change_password AS "mustChangePassword" FROM users WHERE id = $1`, [req.userId])
   if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' })
   res.json(user)
 }))
@@ -627,7 +627,9 @@ app.post('/api/auth/change-password', wrap(async (req, res) => {
   if (!row || !row.password_hash || !(await verifyPassword(currentPassword || '', row.password_hash))) {
     return res.status(400).json({ error: 'Senha atual incorreta.' })
   }
-  await q('UPDATE users SET password_hash = $2 WHERE id = $1', [req.userId, await hashPassword(newPassword)])
+  // Trocar a própria senha é o que encerra a provisoriedade: a senha deixa de
+  // ser a que o administrador escolheu.
+  await q('UPDATE users SET password_hash = $2, must_change_password = false WHERE id = $1', [req.userId, await hashPassword(newPassword)])
   res.json({ ok: true })
 }))
 
@@ -735,8 +737,8 @@ app.post('/api/users', requireAdmin, wrap(async (req, res) => {
 
   const id = genId('u')
   await q(`
-    INSERT INTO users (id, name, initials, color, email, phone, short_name, sector, job_title, formation, professional_register, is_admin, is_active, is_outsourced, password_hash, is_dev)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, false)
+    INSERT INTO users (id, name, initials, color, email, phone, short_name, sector, job_title, formation, professional_register, is_admin, is_active, is_outsourced, password_hash, is_dev, must_change_password)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, false, $15::text IS NOT NULL)
   `, [id, ...v.campos, v.passwordHash])
 
   const [row] = await q(`SELECT ${LIST_USER} FROM users WHERE id = $1`, [id])
@@ -803,6 +805,9 @@ app.put('/api/users/:id', requireAdmin, wrap(async (req, res) => {
         -- antigo ficaria guardado, esperando o dia em que a marca fosse
         -- removida por engano. Sem senha nova no corpo, o hash atual fica.
         password_hash = CASE WHEN $14 THEN NULL ELSE COALESCE($15, password_hash) END,
+        -- Senha nova vinda do admin entra como provisória. Terceirizado não tem
+        -- login, então a marca sai junto com o hash. Sem senha no corpo, nada muda.
+        must_change_password = CASE WHEN $14 THEN false WHEN $15::text IS NOT NULL THEN true ELSE must_change_password END,
         updated_at = now()
     WHERE id = $1
   `, [req.params.id, ...v.campos, v.passwordHash])
@@ -1110,6 +1115,23 @@ app.post('/api/projects/:id/files',
 
 // Baixa/serve um arquivo pelo id. Aceita ?token= (para <img>/<a>). Passa pelo
 // mesmo gate das outras rotas do projeto: quem saiu dele não baixa mais nada.
+// Tokens de link dos arquivos: um por id, cada um abrindo só aquele arquivo.
+// Em lote porque a aba Arquivos precisa da URL de todo documento e de toda
+// imagem de uma vez — um POST por imagem seria uma rajada a cada abertura.
+// Arquivo de projeto que a pessoa não enxerga simplesmente não vem na
+// resposta: o lote continua valendo para o resto.
+app.post('/api/files/tokens', wrap(async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(x => typeof x === 'string').slice(0, 300) : []
+  if (!ids.length) return res.json({})
+  const arquivos = await q('SELECT id, project_id FROM files WHERE id = ANY($1)', [ids])
+  const visiveis = await visibleProjectIds(req)   // null = admin, enxerga tudo
+  const out = {}
+  for (const f of arquivos) {
+    if (visiveis === null || visiveis.includes(f.project_id)) out[f.id] = signFileToken(req.userId, f.id)
+  }
+  res.json(out)
+}))
+
 app.get('/api/files/:id',
   gate(async (req) => (await q('SELECT project_id FROM files WHERE id = $1', [req.params.id]))[0]?.project_id, CAN.light),
   wrap(async (req, res) => {
@@ -2382,6 +2404,11 @@ async function ensureSchema() {
   await passo('ALTER TABLE users ADD COLUMN IF NOT EXISTS formation text')
   await passo('ALTER TABLE users ADD COLUMN IF NOT EXISTS phone text')
   await passo('ALTER TABLE users ADD COLUMN IF NOT EXISTS short_name text')
+  // Senha que um administrador definiu é provisória: quem entra com ela troca
+  // antes de usar o sistema. Nasce `false` para as contas que já existem — a
+  // marca é posta por quem define a senha daqui para a frente, não por este
+  // backfill, que não tem como saber quais senhas foram escolhidas pelo dono.
+  await passo('ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false')
   // Número do registro profissional (CREA ou CAU, conforme a formação — ver
   // FORMACAO_CONSELHO em data/store.js). Só o número; a sigla não é gravada
   // porque é sempre derivada da formação, nunca escolhida à parte.

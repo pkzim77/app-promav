@@ -29,7 +29,10 @@ export function MySectorModal({ current, onSubmit, onClose }) {
   )
 }
 
-export function ChangePasswordModal({ onSubmit, onClose }) {
+// `obrigatorio`: a senha atual foi definida por um administrador e vale como
+// provisória. O modal não fecha e não tem Cancelar — sair dele sem trocar
+// deixaria a conta com a senha que outra pessoa escolheu.
+export function ChangePasswordModal({ onSubmit, onClose, obrigatorio = false }) {
   const [current, setCurrent] = React.useState('')
   const [next, setNext] = React.useState('')
   const [confirm, setConfirm] = React.useState('')
@@ -47,11 +50,16 @@ export function ChangePasswordModal({ onSubmit, onClose }) {
   }
 
   return (
-    <Modal title="Trocar senha" onClose={onClose}
+    <Modal title={obrigatorio ? 'Defina sua senha' : 'Trocar senha'} onClose={onClose} semSaida={obrigatorio}
       footer={<>
-        <button className="btn btn-secondary" onClick={onClose} disabled={busy}>Cancelar</button>
+        {!obrigatorio && <button className="btn btn-secondary" onClick={onClose} disabled={busy}>Cancelar</button>}
         <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'Salvando…' : 'Salvar senha'}</button>
       </>}>
+      {obrigatorio && (
+        <p className="sub" style={{ margin: 0 }}>
+          A senha desta conta foi definida por um administrador. Escolha uma só sua para continuar.
+        </p>
+      )}
       <Field label="Senha atual">
         <input className="control" type="password" autoFocus value={current}
           onChange={e => setCurrent(e.target.value)}

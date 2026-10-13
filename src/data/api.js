@@ -107,12 +107,27 @@ export const api = {
     const res = await fetchOuSemRede(`${BASE}/projects/${projectId}/files?${qs}`, { method: 'POST', headers, body: file })
     return lerResposta(res, `/projects/${projectId}/files`)
   },
-  // URL para exibir/baixar um arquivo (token na query, pois <img>/<a> não enviam header).
-  fileUrl: (fileId) => `${BASE}/files/${fileId}?token=${encodeURIComponent(token || '')}`,
-  // Baixa o arquivo para ler no navegador (o .kmz do mapa). Passa pelo mesmo
-  // tratamento de rede do resto da API, em vez de um fetch solto por tela.
+  // Tokens de link dos arquivos, em lote: { [fileId]: token }. Cada token abre
+  // só o arquivo dele. O token de SESSÃO não vai mais para a URL — bastava
+  // receber um link copiado para entrar na conta de quem copiou, por 7 dias e
+  // em qualquer rota. Arquivo que a pessoa não enxerga não vem na resposta.
+  fileTokens: (ids) => req('POST', '/files/tokens', { ids }),
+  // Monta a URL a partir de um token já em mãos. Separado de fileTokens para a
+  // tela pedir todos de uma vez e montar as URLs sem voltar à rede.
+  linkDeArquivo: (fileId, t) => `${BASE}/files/${fileId}?t=${encodeURIComponent(t)}`,
+  // Link de um arquivo só, para quando não há lote (o "Baixar .kmz" do modal).
+  fileLink: async (fileId) => {
+    const ts = await api.fileTokens([fileId])
+    if (!ts[fileId]) throw new Error('Não foi possível gerar o link deste arquivo.')
+    return api.linkDeArquivo(fileId, ts[fileId])
+  },
+  // Baixa o arquivo para ler no navegador (o .kmz do mapa). Vai com o header
+  // Authorization: aqui quem busca é o próprio app, não uma tag <img>/<a>,
+  // então não há motivo para token nenhum aparecer na URL.
   fetchFile: async (fileId) => {
-    const res = await fetchOuSemRede(api.fileUrl(fileId))
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const res = await fetchOuSemRede(`${BASE}/files/${fileId}`, { headers })
     if (!res.ok) throw new Error('Não foi possível baixar o arquivo do servidor.')
     return res
   },

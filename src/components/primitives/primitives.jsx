@@ -106,7 +106,7 @@ const FOCAVEIS = 'a[href], button:not([disabled]), input:not([disabled]), select
 // volta para o formulário enquanto o aviso está na frente.
 const pilhaDeModais = []
 
-export function Modal({ title, onClose, children, footer, className = '', travado = false }) {
+export function Modal({ title, onClose, children, footer, className = '', travado = false, semSaida = false }) {
   const caixa = React.useRef(null)
   const tituloId = React.useId()
 
@@ -120,8 +120,13 @@ export function Modal({ title, onClose, children, footer, className = '', travad
   // mas Esc, o clique fora e o X continuavam fechando, e a conclusão tardia
   // derrubava o modal que estivesse aberto naquele momento. Vai por ref
   // porque o efeito de teclado monta uma vez só, com dependências vazias.
-  const travadoRef = React.useRef(travado)
-  travadoRef.current = travado
+  //
+  // `semSaida` é outro motivo para não fechar: modal que não pode ser
+  // dispensado (a troca de senha obrigatória). Bloqueia as mesmas três saídas,
+  // mas não é "ocupado" — por isso o aria-busy continua só no `travado`.
+  const semFechar = travado || semSaida
+  const travadoRef = React.useRef(semFechar)
+  travadoRef.current = semFechar
 
   // Quem abriu o modal, para o foco voltar para lá no fim. Precisa ser lido
   // AQUI, durante o render: o autoFocus de um campo é aplicado no commit, que
@@ -178,13 +183,13 @@ export function Modal({ title, onClose, children, footer, className = '', travad
   return (
     // Só o botão principal fecha: botão direito abre o menu de contexto, e
     // o do meio não é gesto de 'cancelar'.
-    <div className="scrim" onMouseDown={(e) => { if (e.button === 0 && !travado) onClose() }}>
+    <div className="scrim" onMouseDown={(e) => { if (e.button === 0 && !semFechar) onClose() }}>
       <div ref={caixa} className={'modal ' + className} tabIndex={-1}
         role="dialog" aria-modal="true" aria-labelledby={tituloId} aria-busy={travado}
         onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h3 id={tituloId}>{title}</h3>
-          <button className="btn-icon" onClick={onClose} aria-label="Fechar" disabled={travado}><Icon name="x" size={20} /></button>
+          <button className="btn-icon" onClick={onClose} aria-label="Fechar" disabled={semFechar}><Icon name="x" size={20} /></button>
         </div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}

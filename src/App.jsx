@@ -278,6 +278,9 @@ export default function App() {
 
   const changePassword = async (currentPassword, newPassword) => {
     await api.changePassword(currentPassword, newPassword)
+    // Trocar a senha encerra a provisoriedade: sem isto o modal obrigatório
+    // continuaria na tela até o próximo F5, já sem ter o que resolver.
+    setAuthUser(u => (u ? { ...u, mustChangePassword: false } : u))
     setModal(null); flash('Senha atualizada.')
   }
 
@@ -500,10 +503,17 @@ export default function App() {
     } catch (e) { falhou(e.message || 'Erro ao adicionar material.') }
   }
 
-  // Copia o link de um recurso (documento/link) para a área de transferência.
-  const copyResourceLink = async (resource) => {
-    const url = resource.fileId ? api.fileUrl(resource.fileId) : resource.url
-    try { await navigator.clipboard.writeText(url); flash('Link copiado.') }
+  // Copia o link de um recurso para a área de transferência. Para arquivo a URL
+  // chega pronta da ficha, que pediu os tokens em lote ao abrir a aba: buscá-la
+  // aqui tornaria a escrita assíncrona, e o Safari recusa a área de transferência
+  // quando a escrita não acontece dentro do próprio clique.
+  const copyResourceLink = async (resource, urlDoArquivo) => {
+    const url = resource.fileId ? urlDoArquivo : resource.url
+    if (!url) return falhou('O link deste arquivo ainda está sendo preparado. Tente de novo em um instante.')
+    try {
+      await navigator.clipboard.writeText(url)
+      flash(resource.fileId ? 'Link copiado — abre só este arquivo, por 7 dias.' : 'Link copiado.')
+    }
     catch (e) { falhou('Não foi possível copiar o link.') }
   }
   // Remove um documento/link do projeto (endpoint dedicado; exige Edição total).
@@ -1311,6 +1321,13 @@ export default function App() {
         )}
         {modal?.type === 'password' && (
           <ChangePasswordModal onSubmit={changePassword} onClose={() => setModal(null)} />
+        )}
+        {/* Senha definida por um administrador: trocar é obrigatório e este modal
+            não fecha. Fica fora do slot de `modal` para não ser trocado por
+            outro que alguém abra por baixo, e para não depender de ninguém
+            lembrar de reabri-lo. */}
+        {authUser?.mustChangePassword && (
+          <ChangePasswordModal obrigatorio onSubmit={changePassword} onClose={() => {}} />
         )}
       </ErrorBoundary>
       <Toast aviso={toast} onClose={() => setToast(null)} />
