@@ -1,7 +1,7 @@
 import React from 'react'
 import { Icon } from '../Icon.jsx'
 import { Modal, Field, SelecaoMultipla, PopupPendencias, SegControl } from '../primitives/primitives.jsx'
-import { PROJECT_HEX, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, PROJECT_TYPES, TIPOS_COM_KMZ, PREFEITURAS, SECRETARIAS, canonizar, parseBRL, pendenciasDoProjeto, formatBytes } from '../../data/store.js'
+import { PROJECT_HEX, PROJECT_TYPE_COLORS, PROJECT_ROLES, ROLE_LABEL, RESOURCE_ORIGINS, PROJECT_STATUSES, PROJECT_TYPES, TIPOS_COM_KMZ, PREFEITURAS, SECRETARIAS, canonizar, parseBRL, pendenciasDoProjeto, formatBytes } from '../../data/store.js'
 import { dateError } from './shared/formHelpers.js'
 import { MoneyInput } from './shared/MoneyInput.jsx'
 import { FilePicker } from './ResourceModals.jsx'
@@ -155,7 +155,8 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const editing = !!project
   const [name, setName] = React.useState(project?.name || '')
   const [desc, setDesc] = React.useState(project?.desc || '')
-  const [color, setColor] = React.useState(project?.color || 'indigo')
+  const [tipo, setTipo] = React.useState(project?.tipo || 'construcao')
+  const color = PROJECT_TYPE_COLORS[tipo] || 'indigo'
   const [folderId, setFolderId] = React.useState(project?.folderId || defaultFolderId || '')
   // Sem data padrão: input type=date não tem placeholder, então qualquer valor
   // pré-preenchido seria gravado como se fosse o prazo real. Sem prazo, é o
@@ -182,7 +183,6 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
   const [convenioNumero, setConvenioNumero] = React.useState(project?.convenioNumero || '')
   const [convenioValorText, setConvenioValorText] = React.useState(moneyText(project?.convenioValor))
   const [projStatus, setProjStatus] = React.useState(project?.status || 'planejamento')
-  const [tipo, setTipo] = React.useState(project?.tipo || 'construcao')
   const [touched, setTouched] = React.useState(false)
   const [tab, setTab] = React.useState(initialTab || 'geral') // 'geral' | 'tipo'
   // .kmz escolhido agora, ainda no computador do usuário: o arquivo não cabe no
@@ -280,6 +280,10 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
           <Field label="Tipo de projeto">
             <SegControl options={PROJECT_TYPES} value={tipo} onChange={setTipo} />
           </Field>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: -8, marginBottom: 16, color: 'var(--fg-3)', fontSize: 12.5 }}>
+            <span style={{ width: 12, height: 12, borderRadius: '50%', background: PROJECT_HEX[color], flexShrink: 0 }} />
+            Cor padrão: {COLOR_LABEL[color] || color}.
+          </div>
           {aceitaKmz && (
             <div className="field">
               <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -426,14 +430,6 @@ export function ProjectModal({ project, users = [], folders = [], defaultFolderI
         <textarea className="control" value={notes?? ''} style={{ minHeight: 110 }}
           placeholder="Contexto, objetivos, observações… O que ajuda a entender o projeto. Links colados aqui viram clicáveis."
           onChange={e => setNotes(e.target.value)} />
-      </Field>
-      <Field label="Cor">
-        <div className="color-swatches">
-          {Object.keys(PROJECT_HEX).map(k => (
-            <button key={k} className={color === k ? 'on' : ''} style={{ background: PROJECT_HEX[k] }}
-              onClick={() => setColor(k)} aria-pressed={color === k} aria-label={'Cor ' + (COLOR_LABEL[k] || k)} />
-          ))}
-        </div>
       </Field>
       <div className="field-row">
         <Field label="Data de início"><input type="date" className="control" value={start??''} onChange={e => setStart(e.target.value)} /></Field>
