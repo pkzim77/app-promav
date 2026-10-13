@@ -67,17 +67,15 @@
   --prio-high:   #E5484D;  --prio-high-soft:   #FCE7E8;
 
   /* ---------- Project palette (tags + barras do Gantt) ----------
-     Tons terrosos e dessaturados, em harmonia com o bege e a tinta.
-     As CHAVES (indigo, blue, ...) estão gravadas no banco: mantemos os
-     nomes e a família de cor, só trocamos o valor por uma versão sóbria. */
-  --proj-coral:  #B0603F;  /* terracota */
-  --proj-amber:  #C0912E;  /* ocre      */
-  --proj-green:  #7E8A4C;  /* oliva     */
-  --proj-teal:   #4C7F78;  /* verde-azulado profundo */
-  --proj-blue:   #5A7695;  /* azul-ardósia */
-  --proj-indigo: #6E6A9B;  /* índigo empoeirado */
-  --proj-purple: #8A6690;  /* ameixa    */
-  --proj-pink:   #B0757F;  /* rosa-velho */
+     Cores vivas para identificar projetos sem mudar as chaves gravadas no banco. */
+  --proj-coral:  #EA580C;
+  --proj-amber:  #D97706;
+  --proj-green:  #16A34A;
+  --proj-teal:   #0D9488;
+  --proj-blue:   #2563EB;
+  --proj-indigo: #6366F1;
+  --proj-purple: #9333EA;
+  --proj-pink:   #DB2777;
 
   /* ---------- Tipo da mudança ----------
      A MESMA cor identifica o tipo no selo do cartão e no chip de notificação.
