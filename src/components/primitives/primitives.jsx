@@ -252,10 +252,10 @@ export function useFecharFora(ref, fechar, ativo) {
     if (!ativo) return
     const fora = (e) => { if (!ref.current?.contains(e.target)) fecharRef.current() }
     const tecla = (e) => { if (e.key === 'Escape') { e.stopPropagation(); fecharRef.current() } }
-    document.addEventListener('mousedown', fora)
+    document.addEventListener('pointerdown', fora, true)
     document.addEventListener('keydown', tecla)
     return () => {
-      document.removeEventListener('mousedown', fora)
+      document.removeEventListener('pointerdown', fora, true)
       document.removeEventListener('keydown', tecla)
     }
   }, [ativo, ref])
@@ -285,17 +285,7 @@ export function SelecaoMultipla({ itens, onAlternar, rotulo, buscaAcima = 8, ari
   const [filtro, setFiltro] = React.useState('')
   const caixa = React.useRef(null)
 
-  React.useEffect(() => {
-    if (!aberto) return
-    const fora = (e) => { if (!caixa.current?.contains(e.target)) setAberto(false) }
-    const tecla = (e) => { if (e.key === 'Escape') setAberto(false) }
-    document.addEventListener('pointerdown', fora, true)
-    document.addEventListener('keydown', tecla)
-    return () => {
-      document.removeEventListener('pointerdown', fora, true)
-      document.removeEventListener('keydown', tecla)
-    }
-  }, [aberto])
+  useFecharFora(caixa, () => setAberto(false), aberto)
 
   const busca = filtro.trim().toLocaleLowerCase('pt-BR')
   // O que já está marcado nunca some do filtro: desmarcar exige enxergar.
